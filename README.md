@@ -135,9 +135,9 @@ c() {
 }
 
 # Common Command Aliases
-alias i='toast am'      # Show AWS identity
+alias m='toast am'      # Show AWS identity
 alias x='toast ctx'     # Manage Kubernetes contexts
-alias l='toast dot'     # Manage .env.local files
+alias d='toast dot'     # Manage .env.local files
 alias e='toast env'     # Manage AWS profiles
 alias g='toast git'     # Manage Git repositories
 alias r='toast region'  # Manage AWS region
