@@ -1,5 +1,9 @@
 # Toast CLI Development Guide
 
+## Basic Guidelines
+- Focus on the problem. Don't take detours in problem solving.
+- Always refer to the documentation, check for and utilize common modules.
+
 ## Build and Development Commands
 ```bash
 # Installation

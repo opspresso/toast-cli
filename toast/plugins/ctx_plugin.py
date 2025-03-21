@@ -26,7 +26,14 @@ class CtxPlugin(BasePlugin):
         selected_ctx = select_from_list(contexts, "Select a Kubernetes context")
 
         if selected_ctx == "[New...]":
-            result = subprocess.run(["aws", "eks", "list-clusters", "--query", "clusters", "--output", "text"], capture_output=True, text=True)
+            region = subprocess.run(["aws", "configure", "get", "region"], capture_output=True, text=True)
+            if result.returncode != 0:
+                click.echo("Error fetching AWS region.")
+                return
+
+            region = region.stdout.strip()
+
+            result = subprocess.run(["aws", "eks", "list-clusters", "--query", "clusters", "--region", region, "--output", "text"], capture_output=True, text=True)
             if result.returncode != 0:
                 click.echo("Error fetching EKS clusters.")
                 return
@@ -39,7 +46,7 @@ class CtxPlugin(BasePlugin):
             selected_cluster = select_from_list(clusters, "Select an EKS cluster")
 
             if selected_cluster:
-                subprocess.run(["aws", "eks", "update-kubeconfig", "--name", selected_cluster, "--alias", selected_cluster])
+                subprocess.run(["aws", "eks", "update-kubeconfig", "--name", selected_cluster, "--alias", selected_cluster, "--region", region])
                 click.echo(f"Updated kubeconfig for {selected_cluster}")
             else:
                 click.echo("No cluster selected.")
