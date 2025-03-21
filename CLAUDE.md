@@ -1,8 +1,11 @@
 # Toast CLI Development Guide
 
 ## Basic Guidelines
-- Focus on the problem. Don't take detours in problem solving.
-- Always refer to the documentation, check for and utilize common modules.
+- Focus on solving the specific problem - avoid unnecessary complexity or scope creep.
+- Use standard libraries and documented patterns first before creating custom solutions.
+- Write clean, well-structured code with meaningful names and clear organization.
+- Handle errors and edge cases properly to ensure code robustness.
+- Include helpful comments for complex logic while keeping code self-documenting.
 
 ## Build and Development Commands
 ```bash
