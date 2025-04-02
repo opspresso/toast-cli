@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Toast-cli - Toast.sh AWS & Kubernetes Management CLI Tool</title>
+    <title>Toast-cli - Toast.sh AWS, Kubernetes & Git Management CLI Tool</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -37,8 +37,8 @@
     <section class="hero">
         <div class="container">
             <div class="hero-content">
-                <h1>Simplify your AWS & Kubernetes workflow</h1>
-                <p>A powerful, plugin-based CLI tool designed for cloud engineers.</p>
+                <h1>Simplify your AWS, Kubernetes & Git workflow</h1>
+                <p>A powerful, plugin-based CLI tool designed for DevOps engineers and cloud practitioners.</p>
                 <div class="cta-buttons">
                     <a href="#installation" class="btn primary">Get Started</a>
                     <a href="https://github.com/opspresso/toast-cli" target="_blank" class="btn secondary">View on GitHub</a>
@@ -53,12 +53,14 @@
                 <div class="terminal-content">
                     <pre><code>$ pip install toast-cli
 $ toast --help
+$ toast am      # Show AWS identity
 $ toast cdw     # Navigate workspace directories
 $ toast ctx     # Manage Kubernetes contexts
-$ toast dot     # Manage .env.local files
+$ toast dot     # Manage .env.local files with AWS SSM
 $ toast env     # Manage AWS profiles
 $ toast git     # Manage Git repositories
-$ toast region  # Set AWS region</code></pre>
+$ toast region  # Set AWS region
+$ toast version # Display current version</code></pre>
                 </div>
             </div>
         </div>
@@ -67,7 +69,7 @@ $ toast region  # Set AWS region</code></pre>
     <section id="overview" class="overview">
         <div class="container">
             <h2>Overview</h2>
-            <p>Toast-cli is a Python-based CLI tool that provides various utility commands for AWS and Kubernetes management. The architecture follows a plugin-based design pattern, allowing for easy extension of functionality through the addition of new plugins.</p>
+            <p>Toast-cli is a Python-based CLI tool that provides various utility commands for AWS, Kubernetes, and Git operations. The architecture follows a plugin-based design pattern, allowing for easy extension of functionality through the addition of new plugins. It provides a unified interface for common DevOps tasks and enhances productivity through interactive selection and streamlined workflows.</p>
             <div class="features">
                 <div class="feature">
                     <div class="feature-icon">🔌</div>
@@ -77,7 +79,7 @@ $ toast region  # Set AWS region</code></pre>
                 <div class="feature">
                     <div class="feature-icon">☁️</div>
                     <h3>AWS Integration</h3>
-                    <p>Seamlessly manage AWS regions and identity.</p>
+                    <p>Seamlessly manage AWS profiles, regions, identity, and securely store environment variables in SSM.</p>
                 </div>
                 <div class="feature">
                     <div class="feature-icon">⎈</div>
@@ -87,7 +89,7 @@ $ toast region  # Set AWS region</code></pre>
                 <div class="feature">
                     <div class="feature-icon">🔄</div>
                     <h3>Git Workflow</h3>
-                    <p>Simplify Git operations within your workspace structure.</p>
+                    <p>Simplify Git operations with repository cloning, branch creation, and pull operations with rebase support.</p>
                 </div>
             </div>
         </div>
@@ -124,7 +126,7 @@ pip install -e .">Copy</button>
                     </div>
                 </div>
             </div>
-            <div class="requirements">
+                <div class="requirements">
                 <h3>Dependencies</h3>
                 <ul>
                     <li>Python 3.6+</li>
@@ -137,6 +139,38 @@ pip install -e .">Copy</button>
                         <li>kubectl - Kubernetes command line tool</li>
                     </ul>
                 </ul>
+                <h3>Recommended Aliases</h3>
+                <div class="code-block">
+                    <pre><code># Main alias
+alias t='toast'
+
+# Navigate workspace directories
+c() {
+  cd "$(toast cdw)"
+}
+
+# Common Command Aliases
+alias m='toast am'      # Show AWS identity
+alias x='toast ctx'     # Manage Kubernetes contexts
+alias d='toast dot'     # Manage .env.local files
+alias e='toast env'     # Manage AWS profiles
+alias g='toast git'     # Manage Git repositories
+alias r='toast region'  # Manage AWS region</code></pre>
+                    <button class="copy-btn" data-clipboard-text="alias t='toast'
+
+# Navigate workspace directories
+c() {
+  cd \"$(toast cdw)\"
+}
+
+# Common Command Aliases
+alias m='toast am'      # Show AWS identity
+alias x='toast ctx'     # Manage Kubernetes contexts
+alias d='toast dot'     # Manage .env.local files
+alias e='toast env'     # Manage AWS profiles
+alias g='toast git'     # Manage Git repositories
+alias r='toast region'  # Manage AWS region">Copy</button>
+                </div>
             </div>
         </div>
     </section>
@@ -224,6 +258,9 @@ pip install -e .">Copy</button>
                         <div class="plugin-usage">
                             <code>toast git repo_name clone</code>
                             <code>toast git repo_name rm</code>
+                            <code>toast git repo_name branch -b branch_name</code>
+                            <code>toast git repo_name pull</code>
+                            <code>toast git repo_name pull -r</code>
                         </div>
                     </div>
                 </div>
@@ -262,10 +299,17 @@ pip install -e .">Copy</button>
   ├── setup.cfg           # Package configuration
   ├── pyproject.toml      # Build system requirements
   ├── MANIFEST.in         # Additional files to include
-  ├── VERSION             # Version information
+  ├── VERSION             # Version information (v3.1.0.dev0)
   ├── README.md           # Project documentation
   ├── ARCHITECTURE.md     # Architecture documentation
   ├── LICENSE             # License information
+  ├── docs/               # Documentation website files
+  │   ├── CNAME           # Custom domain configuration
+  │   ├── favicon.ico     # Website favicon
+  │   ├── index.html      # Main documentation page
+  │   ├── css/            # Stylesheet files
+  │   ├── images/         # Documentation images
+  │   └── js/             # JavaScript files
   └── toast/              # Main package
       ├── __init__.py     # Package initialization and CLI entry point
       ├── __main__.py     # Entry point for running as a module
@@ -287,12 +331,57 @@ pip install -e .">Copy</button>
                 <h3>Adding New Plugins</h3>
                 <p>To add a new plugin:</p>
                 <ol>
-                    <li>Create a new Python file in the <code>plugins</code> directory</li>
+                    <li>Create a new Python file in the <code>toast/plugins</code> directory</li>
                     <li>Define a class that extends <code>BasePlugin</code></li>
                     <li>Implement the required methods (<code>execute</code> and optionally <code>get_arguments</code>)</li>
                     <li>Set the <code>name</code> and <code>help</code> class variables</li>
                 </ol>
                 <p>The plugin will be automatically discovered and loaded when the application starts.</p>
+
+                <div class="code-block">
+                    <pre><code>from toast.plugins.base_plugin import BasePlugin
+import click
+
+class MyPlugin(BasePlugin):
+    name = "mycommand"
+    help = "Description of my command"
+
+    @classmethod
+    def get_arguments(cls, func):
+        # Optional: Define command arguments
+        func = click.option("--option", "-o", help="An option for my command")(func)
+        return func
+
+    @classmethod
+    def execute(cls, **kwargs):
+        # Command implementation
+        option = kwargs.get("option")
+        if option:
+            click.echo(f"Executing with option: {option}")
+        else:
+            click.echo("My custom command execution")</code></pre>
+                    <button class="copy-btn" data-clipboard-text="from toast.plugins.base_plugin import BasePlugin
+import click
+
+class MyPlugin(BasePlugin):
+    name = &quot;mycommand&quot;
+    help = &quot;Description of my command&quot;
+
+    @classmethod
+    def get_arguments(cls, func):
+        # Optional: Define command arguments
+        func = click.option(&quot;--option&quot;, &quot;-o&quot;, help=&quot;An option for my command&quot;)(func)
+        return func
+
+    @classmethod
+    def execute(cls, **kwargs):
+        # Command implementation
+        option = kwargs.get(&quot;option&quot;)
+        if option:
+            click.echo(f&quot;Executing with option: {option}&quot;)
+        else:
+            click.echo(&quot;My custom command execution&quot;)">Copy</button>
+                </div>
             </div>
 
             <div class="architecture-benefits">
@@ -302,6 +391,8 @@ pip install -e .">Copy</button>
                     <li><strong>Extensibility:</strong> New commands can be added without modifying existing code</li>
                     <li><strong>Maintainability:</strong> Code is organized into logical components</li>
                     <li><strong>Testability:</strong> Plugins can be tested independently</li>
+                    <li><strong>Consistency:</strong> Common patterns are enforced through the base class</li>
+                    <li><strong>Discoverability:</strong> Commands are automatically found and registered</li>
                 </ul>
             </div>
 
@@ -316,7 +407,7 @@ pip install -e .">Copy</button>
             <div class="footer-content">
                 <div class="footer-logo">
                     <h2>Toast-cli</h2>
-                    <p>A Python-based CLI tool for AWS & Kubernetes management</p>
+                    <p>A Python-based CLI tool for AWS, Kubernetes & Git management</p>
                 </div>
                 <div class="footer-links">
                     <div class="link-column">
