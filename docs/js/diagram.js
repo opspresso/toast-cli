@@ -3,6 +3,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Architecture diagram drag functionality
     const interactiveDiagram = document.querySelector('.interactive-diagram');
     if (interactiveDiagram) {
+        // 설정 변수
+        const DEFAULT_OPACITY = 0.4;       // 기본 연결선 투명도
+        const DRAG_OPACITY = 0.5;          // 드래그 중인 요소의 연결선 투명도
+        const POINT_SCALE_FACTOR = 1.5;    // 드래그 중인 요소의 연결점 크기 확대 비율
+
         // 초기 SVG 요소 위치 저장을 위한 객체
         const initialPositions = {};
         // 현재 드래그 중인 요소
@@ -93,6 +98,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 path.setAttribute('stroke', connector.stroke);
                 path.setAttribute('stroke-width', connector.strokeWidth);
                 path.setAttribute('fill', connector.fill);
+                path.setAttribute('opacity', DEFAULT_OPACITY.toString()); // 기본 투명도 설정
                 if (connector.strokeDasharray) {
                     path.setAttribute('stroke-dasharray', connector.strokeDasharray);
                 }
@@ -232,7 +238,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     if (point) {
                         const originalR = parseFloat(point.getAttribute('data-original-r'));
-                        point.setAttribute('r', originalR * 1.5); // 원래 크기의 1.5배로 설정
+                        point.setAttribute('r', (originalR * POINT_SCALE_FACTOR).toString()); // 원래 크기의 확대 비율로 설정
+                    }
+
+                    // 드래그 중인 요소와 연결된 연결선의 투명도 변경
+                    const path = connector.querySelector('path');
+                    if (path) {
+                        path.setAttribute('opacity', DRAG_OPACITY.toString()); // 드래그 중인 요소의 연결선 투명도 설정
                     }
 
                     // 연결선을 맨 앞으로 가져오기 (드래그 중에도 계속 맨 앞에 표시)
@@ -254,7 +266,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const id = selectedElement.getAttribute('data-element-id');
             if (id && connections[id]) {
-                // 모든 연결된 점의 크기를 원래대로 복원
+                // 모든 연결된 점의 크기를 원래대로 복원하고 투명도 복원
                 connections[id].forEach(connection => {
                     const { connector } = connection;
 
@@ -265,6 +277,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         const originalR = parseFloat(point.getAttribute('data-original-r'));
                         point.setAttribute('r', originalR); // 원래 크기로 복원
                     });
+
+                    // 연결선 투명도를 기본값(0.6)으로 복원
+                    const path = connector.querySelector('path');
+                    if (path) {
+                        path.setAttribute('opacity', DEFAULT_OPACITY.toString()); // 기본 투명도로 복원
+                    }
                 });
             }
 
