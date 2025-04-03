@@ -236,12 +236,29 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         }
 
-        // 두 요소 사이의 연결점 계산 함수 - 가중치 기반 연결점 선택
+        // 두 요소 사이의 연결점 계산 함수 - 개선된 가중치 기반 연결점 선택
         function calculateConnectionPoints(sourceElement, targetElement) {
             const sourceBounds = getElementBounds(sourceElement);
             const targetBounds = getElementBounds(targetElement);
 
             if (!sourceBounds || !targetBounds) return null;
+
+            // 두 요소의 상대적 위치 관계 분석
+            const sourceCenter = {
+                x: sourceBounds.centerX,
+                y: sourceBounds.centerY
+            };
+            const targetCenter = {
+                x: targetBounds.centerX,
+                y: targetBounds.centerY
+            };
+
+            // 방향 벡터 계산
+            const dx = targetCenter.x - sourceCenter.x;
+            const dy = targetCenter.y - sourceCenter.y;
+
+            // 두 요소 사이의 주요 방향 결정 (수평/수직)
+            const isHorizontalDominant = Math.abs(dx) > Math.abs(dy);
 
             // 소스 요소의 좌우상하 연결점
             const sourcePoints = [
@@ -249,25 +266,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 {
                     x: sourceBounds.left + sourceBounds.width / 2,
                     y: sourceBounds.top,
-                    direction: 'top'
+                    direction: 'top',
+                    // 위쪽 방향이 적합한 경우 (타겟이 위에 있을 때)
+                    directionFitness: dy < 0 ? 1 : 0
                 },
                 // 오른쪽 중앙
                 {
                     x: sourceBounds.right,
                     y: sourceBounds.top + sourceBounds.height / 2,
-                    direction: 'right'
+                    direction: 'right',
+                    // 오른쪽 방향이 적합한 경우 (타겟이 오른쪽에 있을 때)
+                    directionFitness: dx > 0 ? 1 : 0
                 },
                 // 아래쪽 중앙
                 {
                     x: sourceBounds.left + sourceBounds.width / 2,
                     y: sourceBounds.bottom,
-                    direction: 'bottom'
+                    direction: 'bottom',
+                    // 아래쪽 방향이 적합한 경우 (타겟이 아래에 있을 때)
+                    directionFitness: dy > 0 ? 1 : 0
                 },
                 // 왼쪽 중앙
                 {
                     x: sourceBounds.left,
                     y: sourceBounds.top + sourceBounds.height / 2,
-                    direction: 'left'
+                    direction: 'left',
+                    // 왼쪽 방향이 적합한 경우 (타겟이 왼쪽에 있을 때)
+                    directionFitness: dx < 0 ? 1 : 0
                 }
             ];
 
@@ -277,38 +302,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 {
                     x: targetBounds.left + targetBounds.width / 2,
                     y: targetBounds.top,
-                    direction: 'top'
+                    direction: 'top',
+                    // 위쪽 방향이 적합한 경우 (소스가 위에 있을 때)
+                    directionFitness: dy > 0 ? 1 : 0
                 },
                 // 오른쪽 중앙
                 {
                     x: targetBounds.right,
                     y: targetBounds.top + targetBounds.height / 2,
-                    direction: 'right'
+                    direction: 'right',
+                    // 오른쪽 방향이 적합한 경우 (소스가 오른쪽에 있을 때)
+                    directionFitness: dx < 0 ? 1 : 0
                 },
                 // 아래쪽 중앙
                 {
                     x: targetBounds.left + targetBounds.width / 2,
                     y: targetBounds.bottom,
-                    direction: 'bottom'
+                    direction: 'bottom',
+                    // 아래쪽 방향이 적합한 경우 (소스가 아래에 있을 때)
+                    directionFitness: dy < 0 ? 1 : 0
                 },
                 // 왼쪽 중앙
                 {
                     x: targetBounds.left,
                     y: targetBounds.top + targetBounds.height / 2,
-                    direction: 'left'
+                    direction: 'left',
+                    // 왼쪽 방향이 적합한 경우 (소스가 왼쪽에 있을 때)
+                    directionFitness: dx > 0 ? 1 : 0
                 }
             ];
-
-            // 다른 모든 요소의 경계 가져오기 (충돌 검사용)
-            const otherElements = [];
-            document.querySelectorAll('.diagram-element').forEach(element => {
-                if (element !== sourceElement && element !== targetElement) {
-                    const bounds = getElementBounds(element);
-                    if (bounds) {
-                        otherElements.push(bounds);
-                    }
-                }
-            });
 
             // 가중치 기반 최적 연결점 찾기
             let maxScore = -Infinity;
@@ -319,45 +341,132 @@ document.addEventListener('DOMContentLoaded', function() {
             for (const sourcePoint of sourcePoints) {
                 for (const targetPoint of targetPoints) {
                     // 1. 거리 계산 (가까울수록 점수 높음)
-                    const dx = targetPoint.x - sourcePoint.x;
-                    const dy = targetPoint.y - sourcePoint.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const connDx = targetPoint.x - sourcePoint.x;
+                    const connDy = targetPoint.y - sourcePoint.y;
+                    const distance = Math.sqrt(connDx * connDx + connDy * connDy);
 
                     // 거리에 따른 기본 점수 (거리가 가까울수록 높은 점수)
                     // 최대 거리를 1000으로 가정하고 정규화
                     const maxDistance = 1000;
                     const distanceScore = 1 - Math.min(distance, maxDistance) / maxDistance;
 
-                    // 2. 방향 호환성 점수 (반대 방향일수록 높은 점수)
-                    // 예: 소스의 '오른쪽'과 타겟의 '왼쪽'은 호환성 높음
-                    let directionScore = 0;
+                    // 2. 방향 적합성 점수 (요소의 상대적 위치에 맞는 방향일수록 높은 점수)
+                    const directionFitnessScore = (sourcePoint.directionFitness + targetPoint.directionFitness) * 0.5;
+
+                    // 3. 자기 요소 가림 검사 (연결선이 소스나 타겟 요소 자체를 가로지르는지 확인)
+                    let selfIntersectionPenalty = 0;
+
+                    // 소스 요소 가림 검사 - 개선된 방식
+                    // 연결점에서 시작하는 선이 요소를 가로지르는지 정확히 확인
+                    if (doesLineIntersectElement(
+                        sourcePoint.x, sourcePoint.y,
+                        targetPoint.x, targetPoint.y,
+                        sourceBounds,
+                        sourcePoint.direction
+                    )) {
+                        // 요소를 가로지르는 경우 매우 큰 패널티 부여
+                        selfIntersectionPenalty += 5.0;
+                    }
+
+                    // 타겟 요소 가림 검사 - 개선된 방식
+                    if (doesLineIntersectElement(
+                        targetPoint.x, targetPoint.y,
+                        sourcePoint.x, sourcePoint.y,
+                        targetBounds,
+                        targetPoint.direction
+                    )) {
+                        selfIntersectionPenalty += 5.0;
+                    }
+
+                    // 4. 다른 요소 가림 검사
+                    let otherIntersectionPenalty = 0;
+
+                    // 다른 모든 요소와의 교차 검사
+                    document.querySelectorAll('.diagram-element').forEach(element => {
+                        if (element !== sourceElement && element !== targetElement) {
+                            const bounds = getElementBounds(element);
+                            if (bounds && lineIntersectsRectangle(
+                                sourcePoint.x, sourcePoint.y,
+                                targetPoint.x, targetPoint.y,
+                                bounds.left, bounds.top,
+                                bounds.right, bounds.bottom
+                            )) {
+                                otherIntersectionPenalty += 1.0;
+                            }
+                        }
+                    });
+
+                    // 5. 연결선 방향 자연스러움 점수
+                    // 수평/수직 주요 방향과 일치하는 연결점 선호
+                    let naturalDirectionScore = 0;
+
+                    if (isHorizontalDominant) {
+                        // 수평 방향이 주요 방향인 경우
+                        if ((sourcePoint.direction === 'left' || sourcePoint.direction === 'right') &&
+                            (targetPoint.direction === 'left' || targetPoint.direction === 'right')) {
+                            naturalDirectionScore = 0.3;
+                        }
+                    } else {
+                        // 수직 방향이 주요 방향인 경우
+                        if ((sourcePoint.direction === 'top' || sourcePoint.direction === 'bottom') &&
+                            (targetPoint.direction === 'top' || targetPoint.direction === 'bottom')) {
+                            naturalDirectionScore = 0.3;
+                        }
+                    }
+
+                    // 6. 반대 방향 연결점 보너스 (예: 소스의 '오른쪽'과 타겟의 '왼쪽')
+                    let oppositeDirectionBonus = 0;
                     if (
                         (sourcePoint.direction === 'right' && targetPoint.direction === 'left') ||
                         (sourcePoint.direction === 'left' && targetPoint.direction === 'right') ||
                         (sourcePoint.direction === 'top' && targetPoint.direction === 'bottom') ||
                         (sourcePoint.direction === 'bottom' && targetPoint.direction === 'top')
                     ) {
-                        directionScore = 0.3; // 반대 방향일 때 가중치 추가
+                        oppositeDirectionBonus = 0.3;
                     }
 
-                    // 3. 요소 가림 검사 (다른 요소를 가리면 점수 감소)
-                    let intersectionPenalty = 0;
+                    // 7. 요소 중심 방향 일치 보너스
+                    // 요소 중심에서 연결점으로의 방향과 연결선의 방향이 일치할 때 보너스
+                    let centerAlignmentBonus = 0;
 
-                    // 두 점 사이의 선이 다른 요소와 교차하는지 확인
-                    for (const elementBounds of otherElements) {
-                        // 선분과 사각형의 교차 여부 확인
-                        if (lineIntersectsRectangle(
-                            sourcePoint.x, sourcePoint.y,
-                            targetPoint.x, targetPoint.y,
-                            elementBounds.left, elementBounds.top,
-                            elementBounds.right, elementBounds.bottom
-                        )) {
-                            intersectionPenalty += 0.5; // 교차할 때마다 패널티 추가
-                        }
+                    // 소스 요소 중심에서 연결점 방향 확인
+                    const sourceCenterToPointDx = sourcePoint.x - sourceCenter.x;
+                    const sourceCenterToPointDy = sourcePoint.y - sourceCenter.y;
+
+                    // 연결선 방향 확인
+                    const lineDirectionDx = targetPoint.x - sourcePoint.x;
+                    const lineDirectionDy = targetPoint.y - sourcePoint.y;
+
+                    // 두 방향의 내적으로 방향 일치 확인 (양수면 같은 방향)
+                    const sourceDotProduct = sourceCenterToPointDx * lineDirectionDx + sourceCenterToPointDy * lineDirectionDy;
+
+                    if (sourceDotProduct > 0) {
+                        centerAlignmentBonus += 0.2;
                     }
 
-                    // 최종 점수 계산 (거리 점수가 가장 중요하고, 방향 호환성과 교차 패널티 적용)
-                    const totalScore = distanceScore * 0.7 + directionScore - intersectionPenalty;
+                    // 타겟 요소에 대해서도 동일하게 확인
+                    const targetCenterToPointDx = targetPoint.x - targetCenter.x;
+                    const targetCenterToPointDy = targetPoint.y - targetCenter.y;
+
+                    const targetLineDirectionDx = sourcePoint.x - targetPoint.x;
+                    const targetLineDirectionDy = sourcePoint.y - targetPoint.y;
+
+                    const targetDotProduct = targetCenterToPointDx * targetLineDirectionDx + targetCenterToPointDy * targetLineDirectionDy;
+
+                    if (targetDotProduct > 0) {
+                        centerAlignmentBonus += 0.2;
+                    }
+
+                    // 최종 점수 계산
+                    // 거리 점수가 가장 중요하고, 방향 적합성, 자연스러움, 반대 방향 보너스를 더하고, 교차 패널티 적용
+                    const totalScore =
+                        distanceScore * 0.4 +
+                        directionFitnessScore * 0.3 +
+                        naturalDirectionScore +
+                        oppositeDirectionBonus +
+                        centerAlignmentBonus -
+                        selfIntersectionPenalty -
+                        otherIntersectionPenalty * 0.5;
 
                     if (totalScore > maxScore) {
                         maxScore = totalScore;
@@ -374,6 +483,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 targetX: bestTargetPoint.x,
                 targetY: bestTargetPoint.y
             };
+        }
+
+        // 선이 요소를 가로지르는지 확인하는 개선된 함수
+        function doesLineIntersectElement(x1, y1, x2, y2, bounds, startDirection) {
+            // 연결점 방향에 따라 요소 내부에서 시작하는 부분은 교차로 간주하지 않음
+            let adjustedX1 = x1;
+            let adjustedY1 = y1;
+
+            // 연결점 방향에 따라 시작점 약간 조정 (요소 바깥으로)
+            const OFFSET = 0.1; // 아주 작은 오프셋
+
+            switch (startDirection) {
+                case 'top':
+                    adjustedY1 = bounds.top - OFFSET;
+                    break;
+                case 'right':
+                    adjustedX1 = bounds.right + OFFSET;
+                    break;
+                case 'bottom':
+                    adjustedY1 = bounds.bottom + OFFSET;
+                    break;
+                case 'left':
+                    adjustedX1 = bounds.left - OFFSET;
+                    break;
+            }
+
+            // 조정된 시작점으로 교차 검사
+            return lineIntersectsRectangle(
+                adjustedX1, adjustedY1,
+                x2, y2,
+                bounds.left, bounds.top,
+                bounds.right, bounds.bottom
+            );
         }
 
         // 선분과 사각형의 교차 여부 확인 함수
