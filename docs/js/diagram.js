@@ -236,7 +236,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         }
 
-        // 두 요소 사이의 연결점 계산 함수 - 좌우상하 각 방향에 하나씩 연결점 사용
+        // 두 요소 사이의 연결점 계산 함수 - 가중치 기반 연결점 선택
         function calculateConnectionPoints(sourceElement, targetElement) {
             const sourceBounds = getElementBounds(sourceElement);
             const targetBounds = getElementBounds(targetElement);
@@ -248,22 +248,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 위쪽 중앙
                 {
                     x: sourceBounds.left + sourceBounds.width / 2,
-                    y: sourceBounds.top
+                    y: sourceBounds.top,
+                    direction: 'top'
                 },
                 // 오른쪽 중앙
                 {
                     x: sourceBounds.right,
-                    y: sourceBounds.top + sourceBounds.height / 2
+                    y: sourceBounds.top + sourceBounds.height / 2,
+                    direction: 'right'
                 },
                 // 아래쪽 중앙
                 {
                     x: sourceBounds.left + sourceBounds.width / 2,
-                    y: sourceBounds.bottom
+                    y: sourceBounds.bottom,
+                    direction: 'bottom'
                 },
                 // 왼쪽 중앙
                 {
                     x: sourceBounds.left,
-                    y: sourceBounds.top + sourceBounds.height / 2
+                    y: sourceBounds.top + sourceBounds.height / 2,
+                    direction: 'left'
                 }
             ];
 
@@ -272,52 +276,139 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 위쪽 중앙
                 {
                     x: targetBounds.left + targetBounds.width / 2,
-                    y: targetBounds.top
+                    y: targetBounds.top,
+                    direction: 'top'
                 },
                 // 오른쪽 중앙
                 {
                     x: targetBounds.right,
-                    y: targetBounds.top + targetBounds.height / 2
+                    y: targetBounds.top + targetBounds.height / 2,
+                    direction: 'right'
                 },
                 // 아래쪽 중앙
                 {
                     x: targetBounds.left + targetBounds.width / 2,
-                    y: targetBounds.bottom
+                    y: targetBounds.bottom,
+                    direction: 'bottom'
                 },
                 // 왼쪽 중앙
                 {
                     x: targetBounds.left,
-                    y: targetBounds.top + targetBounds.height / 2
+                    y: targetBounds.top + targetBounds.height / 2,
+                    direction: 'left'
                 }
             ];
 
-            // 가장 가까운 두 점 찾기
-            let minDistance = Infinity;
-            let closestSourcePoint = null;
-            let closestTargetPoint = null;
+            // 다른 모든 요소의 경계 가져오기 (충돌 검사용)
+            const otherElements = [];
+            document.querySelectorAll('.diagram-element').forEach(element => {
+                if (element !== sourceElement && element !== targetElement) {
+                    const bounds = getElementBounds(element);
+                    if (bounds) {
+                        otherElements.push(bounds);
+                    }
+                }
+            });
 
-            // 모든 가능한 점 쌍에 대해 거리 계산
+            // 가중치 기반 최적 연결점 찾기
+            let maxScore = -Infinity;
+            let bestSourcePoint = null;
+            let bestTargetPoint = null;
+
+            // 모든 가능한 점 쌍에 대해 가중치 계산
             for (const sourcePoint of sourcePoints) {
                 for (const targetPoint of targetPoints) {
+                    // 1. 거리 계산 (가까울수록 점수 높음)
                     const dx = targetPoint.x - sourcePoint.x;
                     const dy = targetPoint.y - sourcePoint.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
 
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        closestSourcePoint = sourcePoint;
-                        closestTargetPoint = targetPoint;
+                    // 거리에 따른 기본 점수 (거리가 가까울수록 높은 점수)
+                    // 최대 거리를 1000으로 가정하고 정규화
+                    const maxDistance = 1000;
+                    const distanceScore = 1 - Math.min(distance, maxDistance) / maxDistance;
+
+                    // 2. 방향 호환성 점수 (반대 방향일수록 높은 점수)
+                    // 예: 소스의 '오른쪽'과 타겟의 '왼쪽'은 호환성 높음
+                    let directionScore = 0;
+                    if (
+                        (sourcePoint.direction === 'right' && targetPoint.direction === 'left') ||
+                        (sourcePoint.direction === 'left' && targetPoint.direction === 'right') ||
+                        (sourcePoint.direction === 'top' && targetPoint.direction === 'bottom') ||
+                        (sourcePoint.direction === 'bottom' && targetPoint.direction === 'top')
+                    ) {
+                        directionScore = 0.3; // 반대 방향일 때 가중치 추가
+                    }
+
+                    // 3. 요소 가림 검사 (다른 요소를 가리면 점수 감소)
+                    let intersectionPenalty = 0;
+
+                    // 두 점 사이의 선이 다른 요소와 교차하는지 확인
+                    for (const elementBounds of otherElements) {
+                        // 선분과 사각형의 교차 여부 확인
+                        if (lineIntersectsRectangle(
+                            sourcePoint.x, sourcePoint.y,
+                            targetPoint.x, targetPoint.y,
+                            elementBounds.left, elementBounds.top,
+                            elementBounds.right, elementBounds.bottom
+                        )) {
+                            intersectionPenalty += 0.5; // 교차할 때마다 패널티 추가
+                        }
+                    }
+
+                    // 최종 점수 계산 (거리 점수가 가장 중요하고, 방향 호환성과 교차 패널티 적용)
+                    const totalScore = distanceScore * 0.7 + directionScore - intersectionPenalty;
+
+                    if (totalScore > maxScore) {
+                        maxScore = totalScore;
+                        bestSourcePoint = sourcePoint;
+                        bestTargetPoint = targetPoint;
                     }
                 }
             }
 
-            // 가장 가까운 두 점 반환
+            // 최적 연결점 반환
             return {
-                sourceX: closestSourcePoint.x,
-                sourceY: closestSourcePoint.y,
-                targetX: closestTargetPoint.x,
-                targetY: closestTargetPoint.y
+                sourceX: bestSourcePoint.x,
+                sourceY: bestSourcePoint.y,
+                targetX: bestTargetPoint.x,
+                targetY: bestTargetPoint.y
             };
+        }
+
+        // 선분과 사각형의 교차 여부 확인 함수
+        function lineIntersectsRectangle(x1, y1, x2, y2, rectLeft, rectTop, rectRight, rectBottom) {
+            // 선분이 사각형의 네 변과 교차하는지 확인
+            return (
+                lineIntersectsLine(x1, y1, x2, y2, rectLeft, rectTop, rectRight, rectTop) || // 위쪽 변
+                lineIntersectsLine(x1, y1, x2, y2, rectRight, rectTop, rectRight, rectBottom) || // 오른쪽 변
+                lineIntersectsLine(x1, y1, x2, y2, rectLeft, rectBottom, rectRight, rectBottom) || // 아래쪽 변
+                lineIntersectsLine(x1, y1, x2, y2, rectLeft, rectTop, rectLeft, rectBottom) // 왼쪽 변
+            );
+        }
+
+        // 두 선분의 교차 여부 확인 함수
+        function lineIntersectsLine(x1, y1, x2, y2, x3, y3, x4, y4) {
+            // 두 선분의 방향 벡터
+            const dx1 = x2 - x1;
+            const dy1 = y2 - y1;
+            const dx2 = x4 - x3;
+            const dy2 = y4 - y3;
+
+            // 두 선분의 교차 여부 계산
+            const denominator = dy2 * dx1 - dx2 * dy1;
+
+            // 두 선분이 평행한 경우
+            if (denominator === 0) {
+                return false;
+            }
+
+            // 교차점의 매개변수 계산
+            const ua = (dx2 * (y1 - y3) - dy2 * (x1 - x3)) / denominator;
+            const ub = (dx1 * (y1 - y3) - dy1 * (x1 - x3)) / denominator;
+
+            // 교차점이 두 선분 위에 있는지 확인
+            return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
         }
 
         // 베지어 곡선 경로 생성 함수
