@@ -121,6 +121,220 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedElement = null;
         }
 
+        // 요소의 중심 좌표와 크기 계산 함수
+        function getElementBounds(element) {
+            // 요소 내의 rect 요소 찾기
+            const rect = element.querySelector('rect');
+            if (!rect) return null;
+
+            // rect의 속성 가져오기
+            const x = parseFloat(rect.getAttribute('x'));
+            const y = parseFloat(rect.getAttribute('y'));
+            const width = parseFloat(rect.getAttribute('width'));
+            const height = parseFloat(rect.getAttribute('height'));
+            const rx = parseFloat(rect.getAttribute('rx') || 0);
+
+            // 요소의 현재 위치 가져오기
+            const id = element.getAttribute('data-element-id');
+            const position = initialPositions[id] || { x: 0, y: 0 };
+
+            // 중심 좌표 계산
+            const centerX = x + width / 2 + position.x;
+            const centerY = y + height / 2 + position.y;
+
+            return {
+                x, y, width, height, rx,
+                centerX, centerY,
+                left: x + position.x,
+                top: y + position.y,
+                right: x + width + position.x,
+                bottom: y + height + position.y
+            };
+        }
+
+        // 두 요소 사이의 연결점 계산 함수
+        function calculateConnectionPoints(sourceElement, targetElement) {
+            const sourceBounds = getElementBounds(sourceElement);
+            const targetBounds = getElementBounds(targetElement);
+
+            if (!sourceBounds || !targetBounds) return null;
+
+            // 두 요소의 중심점 사이의 방향 벡터 계산
+            const dx = targetBounds.centerX - sourceBounds.centerX;
+            const dy = targetBounds.centerY - sourceBounds.centerY;
+
+            // 방향 벡터 정규화
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const nx = dx / length;
+            const ny = dy / length;
+
+            // 소스 요소의 가장자리 교차점 계산
+            let sourceX, sourceY;
+
+            // 수평 방향이 더 강한 경우
+            if (Math.abs(nx) > Math.abs(ny)) {
+                if (nx > 0) {
+                    // 오른쪽 방향
+                    sourceX = sourceBounds.right;
+                    sourceY = sourceBounds.centerY;
+                } else {
+                    // 왼쪽 방향
+                    sourceX = sourceBounds.left;
+                    sourceY = sourceBounds.centerY;
+                }
+            } else {
+                if (ny > 0) {
+                    // 아래쪽 방향
+                    sourceX = sourceBounds.centerX;
+                    sourceY = sourceBounds.bottom;
+                } else {
+                    // 위쪽 방향
+                    sourceX = sourceBounds.centerX;
+                    sourceY = sourceBounds.top;
+                }
+            }
+
+            // 타겟 요소의 가장자리 교차점 계산
+            let targetX, targetY;
+
+            // 수평 방향이 더 강한 경우
+            if (Math.abs(nx) > Math.abs(ny)) {
+                if (nx > 0) {
+                    // 오른쪽 방향
+                    targetX = targetBounds.left;
+                    targetY = targetBounds.centerY;
+                } else {
+                    // 왼쪽 방향
+                    targetX = targetBounds.right;
+                    targetY = targetBounds.centerY;
+                }
+            } else {
+                if (ny > 0) {
+                    // 아래쪽 방향
+                    targetX = targetBounds.centerX;
+                    targetY = targetBounds.top;
+                } else {
+                    // 위쪽 방향
+                    targetX = targetBounds.centerX;
+                    targetY = targetBounds.bottom;
+                }
+            }
+
+            // 화살표 방향 계산 (타겟에서 소스 방향으로)
+            const arrowDx = sourceX - targetX;
+            const arrowDy = sourceY - targetY;
+            const arrowLength = Math.sqrt(arrowDx * arrowDx + arrowDy * arrowDy);
+            const arrowNx = arrowDx / arrowLength;
+            const arrowNy = arrowDy / arrowLength;
+
+            // 화살표 크기
+            const arrowSize = 10;
+
+            // 화살표 포인트 계산
+            const arrowPoints = [
+                `${targetX},${targetY}`,
+                `${targetX - arrowNx * arrowSize + arrowNy * arrowSize/2},${targetY - arrowNy * arrowSize - arrowNx * arrowSize/2}`,
+                `${targetX - arrowNx * arrowSize - arrowNy * arrowSize/2},${targetY - arrowNy * arrowSize + arrowNx * arrowSize/2}`
+            ];
+
+            return {
+                sourceX, sourceY,
+                targetX, targetY,
+                arrowPoints: arrowPoints.join(' ')
+            };
+        }
+
+        // 베지어 곡선 경로 생성 함수
+        function createBezierPath(sourceX, sourceY, targetX, targetY) {
+            // 제어점 계산 (곡선의 휘어짐 정도 조절)
+            const dx = Math.abs(targetX - sourceX);
+            const dy = Math.abs(targetY - sourceY);
+
+            // 수평 거리가 더 긴 경우
+            if (dx > dy) {
+                const controlX1 = sourceX + dx * 0.3;
+                const controlY1 = sourceY;
+                const controlX2 = targetX - dx * 0.3;
+                const controlY2 = targetY;
+                return `M${sourceX},${sourceY} C${controlX1},${controlY1} ${controlX2},${controlY2} ${targetX},${targetY}`;
+            }
+            // 수직 거리가 더 긴 경우
+            else {
+                const controlX1 = sourceX;
+                const controlY1 = sourceY + dy * 0.3;
+                const controlX2 = targetX;
+                const controlY2 = targetY - dy * 0.3;
+                return `M${sourceX},${sourceY} C${controlX1},${controlY1} ${controlX2},${controlY2} ${targetX},${targetY}`;
+            }
+        }
+
+        // 화살표 포인트 계산 함수
+        function calculateArrowPoints(endX, endY, dx, dy) {
+            // 방향 벡터 정규화
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const nx = dx / length;
+            const ny = dy / length;
+
+            // 화살표 크기
+            const arrowSize = 10;
+
+            // 화살표 포인트 계산
+            return [
+                `${endX},${endY}`,
+                `${endX - nx * arrowSize + ny * arrowSize/2},${endY - ny * arrowSize - nx * arrowSize/2}`,
+                `${endX - nx * arrowSize - ny * arrowSize/2},${endY - ny * arrowSize + nx * arrowSize/2}`
+            ].join(' ');
+        }
+
+        // 페이지 로드 시 초기 연결선 설정
+        function initializeConnections() {
+            document.querySelectorAll('.diagram-connector').forEach(connector => {
+                const fromId = connector.getAttribute('data-from');
+                const toId = connector.getAttribute('data-to');
+
+                if (!fromId || !toId) return;
+
+                const sourceElement = document.querySelector(`.diagram-element[data-element-id="${fromId}"]`);
+                const targetElement = document.querySelector(`.diagram-element[data-element-id="${toId}"]`);
+
+                if (!sourceElement || !targetElement) return;
+
+                // 연결점 계산
+                const connectionPoints = calculateConnectionPoints(sourceElement, targetElement);
+                if (!connectionPoints) return;
+
+                // 베지어 곡선 경로 생성
+                const path = connector.querySelector('path');
+                if (path) {
+                    const pathData = createBezierPath(
+                        connectionPoints.sourceX,
+                        connectionPoints.sourceY,
+                        connectionPoints.targetX,
+                        connectionPoints.targetY
+                    );
+                    path.setAttribute('d', pathData);
+                }
+
+                // 화살표 업데이트
+                const polygon = connector.querySelector('polygon');
+                if (polygon) {
+                    // 방향 벡터 계산
+                    const dx = connectionPoints.sourceX - connectionPoints.targetX;
+                    const dy = connectionPoints.sourceY - connectionPoints.targetY;
+
+                    // 화살표 포인트 계산
+                    const arrowPoints = calculateArrowPoints(
+                        connectionPoints.targetX,
+                        connectionPoints.targetY,
+                        dx,
+                        dy
+                    );
+
+                    polygon.setAttribute('points', arrowPoints);
+                }
+            });
+        }
+
         // 연결선 업데이트 함수
         function updateConnections(id) {
             if (!connections[id]) return;
@@ -128,90 +342,74 @@ document.addEventListener('DOMContentLoaded', function() {
             connections[id].forEach(connection => {
                 const { connector, isFrom, targetId } = connection;
 
-                // 현재 요소와 타겟 요소의 위치
-                const sourcePos = initialPositions[id];
-                const targetPos = initialPositions[targetId];
+                // 현재 요소와 타겟 요소
+                const sourceElement = document.querySelector(`.diagram-element[data-element-id="${id}"]`);
+                const targetElement = document.querySelector(`.diagram-element[data-element-id="${targetId}"]`);
 
-                // 원본 라인 좌표 저장 (처음 로드 시 좌표)
-                if (!connector.hasAttribute('data-original-coords')) {
-                    const lines = connector.querySelectorAll('line');
-                    const polygons = connector.querySelectorAll('polygon');
+                if (!sourceElement || !targetElement) return;
 
-                    // 라인 원본 좌표 저장
-                    if (lines.length > 0) {
-                        const lineCoords = Array.from(lines).map(line => ({
-                            x1: parseFloat(line.getAttribute('x1')),
-                            y1: parseFloat(line.getAttribute('y1')),
-                            x2: parseFloat(line.getAttribute('x2')),
-                            y2: parseFloat(line.getAttribute('y2'))
-                        }));
-                        connector.setAttribute('data-original-lines', JSON.stringify(lineCoords));
-                    }
+                // 연결점 계산
+                const connectionPoints = isFrom
+                    ? calculateConnectionPoints(sourceElement, targetElement)
+                    : calculateConnectionPoints(targetElement, sourceElement);
 
-                    // 폴리곤 원본 좌표 저장
-                    if (polygons.length > 0) {
-                        const polygonCoords = Array.from(polygons).map(polygon =>
-                            polygon.getAttribute('points')
+                if (!connectionPoints) return;
+
+                // 베지어 곡선 경로 업데이트
+                const path = connector.querySelector('path');
+                if (path) {
+                    let pathData;
+                    if (isFrom) {
+                        pathData = createBezierPath(
+                            connectionPoints.sourceX,
+                            connectionPoints.sourceY,
+                            connectionPoints.targetX,
+                            connectionPoints.targetY
                         );
-                        connector.setAttribute('data-original-polygons', JSON.stringify(polygonCoords));
+                    } else {
+                        pathData = createBezierPath(
+                            connectionPoints.targetX,
+                            connectionPoints.targetY,
+                            connectionPoints.sourceX,
+                            connectionPoints.sourceY
+                        );
                     }
+                    path.setAttribute('d', pathData);
                 }
 
-                // 원본 좌표 가져오기
-                const originalLines = JSON.parse(connector.getAttribute('data-original-lines') || '[]');
-                const originalPolygons = JSON.parse(connector.getAttribute('data-original-polygons') || '[]');
-
-                // 연결선의 모든 라인 요소 업데이트
-                connector.querySelectorAll('line').forEach((line, index) => {
-                    if (index >= originalLines.length) return;
-
-                    const origLine = originalLines[index];
-
-                    // 시작점과 끝점 업데이트
+                // 화살표 업데이트
+                const polygon = connector.querySelector('polygon');
+                if (polygon) {
+                    // 방향 벡터 계산
+                    let dx, dy;
                     if (isFrom) {
-                        // 시작점이 현재 요소에 연결된 경우
-                        line.setAttribute('x1', origLine.x1 + sourcePos.x);
-                        line.setAttribute('y1', origLine.y1 + sourcePos.y);
-                        // 끝점은 타겟 요소에 연결
-                        line.setAttribute('x2', origLine.x2 + targetPos.x);
-                        line.setAttribute('y2', origLine.y2 + targetPos.y);
+                        dx = connectionPoints.sourceX - connectionPoints.targetX;
+                        dy = connectionPoints.sourceY - connectionPoints.targetY;
+
+                        // 화살표 포인트 계산
+                        const arrowPoints = calculateArrowPoints(
+                            connectionPoints.targetX,
+                            connectionPoints.targetY,
+                            dx,
+                            dy
+                        );
+
+                        polygon.setAttribute('points', arrowPoints);
                     } else {
-                        // 끝점이 현재 요소에 연결된 경우
-                        line.setAttribute('x2', origLine.x2 + sourcePos.x);
-                        line.setAttribute('y2', origLine.y2 + sourcePos.y);
-                        // 시작점은 타겟 요소에 연결
-                        line.setAttribute('x1', origLine.x1 + targetPos.x);
-                        line.setAttribute('y1', origLine.y1 + targetPos.y);
+                        dx = connectionPoints.targetX - connectionPoints.sourceX;
+                        dy = connectionPoints.targetY - connectionPoints.sourceY;
+
+                        // 화살표 포인트 계산
+                        const arrowPoints = calculateArrowPoints(
+                            connectionPoints.sourceX,
+                            connectionPoints.sourceY,
+                            dx,
+                            dy
+                        );
+
+                        polygon.setAttribute('points', arrowPoints);
                     }
-                });
-
-                // 화살표(폴리곤) 업데이트
-                connector.querySelectorAll('polygon').forEach((polygon, index) => {
-                    if (index >= originalPolygons.length) return;
-
-                    const origPoints = originalPolygons[index];
-                    const points = origPoints.split(' ');
-
-                    let updatedPoints;
-                    if (isFrom) {
-                        // 화살표가 타겟 요소를 가리키는 경우
-                        updatedPoints = points.map(point => {
-                            const [x, y] = point.split(',').map(parseFloat);
-                            // 화살표 위치 계산 - 타겟 요소 위치 기준
-                            return `${x + targetPos.x},${y + targetPos.y}`;
-                        });
-                    } else {
-                        // 화살표가 현재 요소를 가리키는 경우
-                        updatedPoints = points.map(point => {
-                            const [x, y] = point.split(',').map(parseFloat);
-                            // 화살표 위치 계산 - 현재 요소 위치 기준
-                            return `${x + sourcePos.x},${y + sourcePos.y}`;
-                        });
-                    }
-
-                    // 업데이트된 포인트 설정
-                    polygon.setAttribute('points', updatedPoints.join(' '));
-                });
+                }
             });
 
             // 모든 연결선 업데이트 (양쪽 끝점이 모두 이동한 경우 처리)
@@ -220,69 +418,56 @@ document.addEventListener('DOMContentLoaded', function() {
                 const toId = connector.getAttribute('data-to');
 
                 if (fromId && toId && fromId !== id && toId !== id) {
-                    const fromPos = initialPositions[fromId];
-                    const toPos = initialPositions[toId];
-
-                    // 원본 좌표가 저장되어 있는지 확인
-                    if (!connector.hasAttribute('data-original-lines')) {
-                        const lines = connector.querySelectorAll('line');
-                        const polygons = connector.querySelectorAll('polygon');
-
-                        // 라인 원본 좌표 저장
-                        if (lines.length > 0) {
-                            const lineCoords = Array.from(lines).map(line => ({
-                                x1: parseFloat(line.getAttribute('x1')),
-                                y1: parseFloat(line.getAttribute('y1')),
-                                x2: parseFloat(line.getAttribute('x2')),
-                                y2: parseFloat(line.getAttribute('y2'))
-                            }));
-                            connector.setAttribute('data-original-lines', JSON.stringify(lineCoords));
-                        }
-
-                        // 폴리곤 원본 좌표 저장
-                        if (polygons.length > 0) {
-                            const polygonCoords = Array.from(polygons).map(polygon =>
-                                polygon.getAttribute('points')
-                            );
-                            connector.setAttribute('data-original-polygons', JSON.stringify(polygonCoords));
-                        }
+                    // 양쪽 요소 모두 이미 처리된 경우는 건너뜀
+                    if (connections[fromId] && connections[fromId].some(c => c.targetId === toId)) {
+                        return;
                     }
 
-                    // 원본 좌표 가져오기
-                    const originalLines = JSON.parse(connector.getAttribute('data-original-lines') || '[]');
-                    const originalPolygons = JSON.parse(connector.getAttribute('data-original-polygons') || '[]');
+                    // 소스와 타겟 요소
+                    const sourceElement = document.querySelector(`.diagram-element[data-element-id="${fromId}"]`);
+                    const targetElement = document.querySelector(`.diagram-element[data-element-id="${toId}"]`);
 
-                    // 라인 업데이트
-                    connector.querySelectorAll('line').forEach((line, index) => {
-                        if (index >= originalLines.length) return;
+                    if (!sourceElement || !targetElement) return;
 
-                        const origLine = originalLines[index];
+                    // 연결점 계산
+                    const connectionPoints = calculateConnectionPoints(sourceElement, targetElement);
+                    if (!connectionPoints) return;
 
-                        // 시작점과 끝점 업데이트
-                        line.setAttribute('x1', origLine.x1 + fromPos.x);
-                        line.setAttribute('y1', origLine.y1 + fromPos.y);
-                        line.setAttribute('x2', origLine.x2 + toPos.x);
-                        line.setAttribute('y2', origLine.y2 + toPos.y);
-                    });
+                    // 베지어 곡선 경로 업데이트
+                    const path = connector.querySelector('path');
+                    if (path) {
+                        const pathData = createBezierPath(
+                            connectionPoints.sourceX,
+                            connectionPoints.sourceY,
+                            connectionPoints.targetX,
+                            connectionPoints.targetY
+                        );
+                        path.setAttribute('d', pathData);
+                    }
 
                     // 화살표 업데이트
-                    connector.querySelectorAll('polygon').forEach((polygon, index) => {
-                        if (index >= originalPolygons.length) return;
+                    const polygon = connector.querySelector('polygon');
+                    if (polygon) {
+                        // 방향 벡터 계산
+                        const dx = connectionPoints.sourceX - connectionPoints.targetX;
+                        const dy = connectionPoints.sourceY - connectionPoints.targetY;
 
-                        const origPoints = originalPolygons[index];
-                        const points = origPoints.split(' ');
+                        // 화살표 포인트 계산
+                        const arrowPoints = calculateArrowPoints(
+                            connectionPoints.targetX,
+                            connectionPoints.targetY,
+                            dx,
+                            dy
+                        );
 
-                        // 화살표는 보통 끝점(toId)에 위치
-                        const updatedPoints = points.map(point => {
-                            const [x, y] = point.split(',').map(parseFloat);
-                            return `${x + toPos.x},${y + toPos.y}`;
-                        });
-
-                        polygon.setAttribute('points', updatedPoints.join(' '));
-                    });
+                        polygon.setAttribute('points', arrowPoints);
+                    }
                 }
             });
         }
+
+        // 페이지 로드 시 초기 연결선 설정
+        initializeConnections();
 
         // 사용자에게 드래그 가능함을 알리는 툴팁 추가
         const tooltip = document.createElement('div');

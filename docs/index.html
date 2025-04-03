@@ -394,56 +394,53 @@ alias r='toast region'  # Manage AWS region">Copy</button>
                   <!-- Arrows -->
                   <!-- Main CLI to BasePlugin -->
                   <g class="diagram-connector" data-from="main-cli" data-to="base-plugin">
-                    <line x1="400" y1="180" x2="400" y2="230" stroke="#007bff" stroke-width="2"/>
+                    <path d="M400,180 C400,200 400,210 400,230" stroke="#007bff" stroke-width="2" fill="none"/>
                     <polygon points="400,230 395,220 405,220" fill="#007bff"/>
                   </g>
 
                   <!-- BasePlugin to Plugin Row -->
                   <g class="diagram-connector" data-from="base-plugin" data-to="env-plugin">
-                    <line x1="400" y1="300" x2="400" y2="345" stroke="#007bff" stroke-width="2"/>
+                    <path d="M400,300 C400,315 400,330 400,345" stroke="#007bff" stroke-width="2" fill="none"/>
                     <polygon points="400,345 395,335 405,335" fill="#007bff"/>
                   </g>
                   <g class="diagram-connector" data-from="base-plugin" data-to="am-plugin">
-                    <line x1="400" y1="325" x2="120" y2="325" stroke="#007bff" stroke-width="2"/>
-                    <line x1="120" y1="325" x2="120" y2="345" stroke="#007bff" stroke-width="2"/>
+                    <path d="M400,325 C300,325 200,325 120,325 C120,330 120,335 120,345" stroke="#007bff" stroke-width="2" fill="none"/>
                     <polygon points="120,345 115,335 125,335" fill="#007bff"/>
                   </g>
                   <g class="diagram-connector" data-from="base-plugin" data-to="utils">
-                    <line x1="400" y1="325" x2="700" y2="325" stroke="#007bff" stroke-width="2"/>
-                    <line x1="700" y1="325" x2="700" y2="345" stroke="#007bff" stroke-width="2"/>
+                    <path d="M400,325 C500,325 600,325 700,325 C700,330 700,335 700,345" stroke="#007bff" stroke-width="2" fill="none"/>
                     <polygon points="700,345 695,335 705,335" fill="#007bff"/>
                   </g>
 
                   <!-- Plugin Row 1 to Row 2 connections -->
                   <g class="diagram-connector" data-from="am-plugin" data-to="cdw-plugin">
-                    <line x1="120" y1="400" x2="120" y2="410" stroke="#007bff" stroke-width="1"/>
+                    <path d="M120,400 C120,403 120,407 120,410" stroke="#007bff" stroke-width="1" fill="none"/>
                   </g>
                   <g class="diagram-connector" data-from="ctx-plugin" data-to="dot-plugin">
-                    <line x1="270" y1="400" x2="270" y2="410" stroke="#007bff" stroke-width="1"/>
+                    <path d="M270,400 C270,403 270,407 270,410" stroke="#007bff" stroke-width="1" fill="none"/>
                   </g>
                   <g class="diagram-connector" data-from="env-plugin" data-to="region-plugin">
-                    <line x1="420" y1="400" x2="420" y2="410" stroke="#007bff" stroke-width="1"/>
+                    <path d="M420,400 C420,403 420,407 420,410" stroke="#007bff" stroke-width="1" fill="none"/>
                   </g>
                   <g class="diagram-connector" data-from="git-plugin" data-to="integration">
-                    <line x1="570" y1="400" x2="570" y2="410" stroke="#007bff" stroke-width="1" stroke-dasharray="4,2"/>
-                    <line x1="570" y1="410" x2="625" y2="410" stroke="#007bff" stroke-width="1" stroke-dasharray="4,2"/>
+                    <path d="M570,400 C570,403 570,407 570,410 C585,410 600,410 625,410" stroke="#007bff" stroke-width="1" stroke-dasharray="4,2" fill="none"/>
                   </g>
 
                   <!-- Plugins to Commands Connections -->
                   <g class="diagram-connector" data-from="region-plugin" data-to="plugin-commands">
-                    <line x1="400" y1="465" x2="400" y2="485" stroke="#6c757d" stroke-width="1" stroke-dasharray="4,2"/>
+                    <path d="M400,465 C400,470 400,480 400,485" stroke="#6c757d" stroke-width="1" stroke-dasharray="4,2" fill="none"/>
                     <polygon points="400,485 395,475 405,475" fill="#6c757d"/>
                   </g>
 
                   <!-- External Dependencies to Main CLI -->
                   <g class="diagram-connector" data-from="dependencies" data-to="main-cli">
-                    <line x1="170" y1="140" x2="195" y2="140" stroke="#6c757d" stroke-width="1" stroke-dasharray="4,2"/>
+                    <path d="M170,140 C180,140 185,140 195,140" stroke="#6c757d" stroke-width="1" stroke-dasharray="4,2" fill="none"/>
                     <polygon points="195,140 185,135 185,145" fill="#6c757d"/>
                   </g>
 
                   <!-- Main CLI to UI -->
                   <g class="diagram-connector" data-from="main-cli" data-to="ui">
-                    <line x1="600" y1="140" x2="625" y2="140" stroke="#6c757d" stroke-width="1" stroke-dasharray="4,2"/>
+                    <path d="M600,140 C610,140 615,140 625,140" stroke="#6c757d" stroke-width="1" stroke-dasharray="4,2" fill="none"/>
                     <polygon points="625,140 615,135 615,145" fill="#6c757d"/>
                   </g>
 
