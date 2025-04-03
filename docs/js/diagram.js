@@ -476,12 +476,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // 최적 연결점 반환
+            // 최적 연결점과 방향 정보 반환
             return {
                 sourceX: bestSourcePoint.x,
                 sourceY: bestSourcePoint.y,
                 targetX: bestTargetPoint.x,
-                targetY: bestTargetPoint.y
+                targetY: bestTargetPoint.y,
+                sourceDirection: bestSourcePoint.direction,
+                targetDirection: bestTargetPoint.direction
             };
         }
 
@@ -553,8 +555,8 @@ document.addEventListener('DOMContentLoaded', function() {
             return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
         }
 
-        // 베지어 곡선 경로 생성 함수
-        function createBezierPath(sourceX, sourceY, targetX, targetY) {
+        // 베지어 곡선 경로 생성 함수 - 개선된 자연스러운 곡선
+        function createBezierPath(sourceX, sourceY, targetX, targetY, sourceDirection, targetDirection) {
             // 방향 벡터 계산
             const dx = targetX - sourceX;
             const dy = targetY - sourceY;
@@ -566,50 +568,116 @@ document.addEventListener('DOMContentLoaded', function() {
             const isHorizontal = Math.abs(dx) > Math.abs(dy);
 
             // 제어점 거리 계산 (거리에 비례하되 최소/최대값 설정)
-            const controlDistanceMin = Math.min(distance * 0.3, 60);
-            const controlDistanceMax = Math.min(distance * 0.5, 120);
+            // 거리에 따라 동적으로 조정하여 더 자연스러운 곡선 생성
+            const controlDistanceFactor = Math.min(0.4, Math.max(0.2, distance / 500));
+            const controlDistance = distance * controlDistanceFactor;
 
             let controlX1, controlY1, controlX2, controlY2;
 
-            // 요소를 선으로 가리지 않도록 제어점 위치 조정
-            if (isHorizontal) {
-                // 수평 방향 연결인 경우
-                const offsetY = Math.min(Math.abs(dy) * 0.5, 50) * (dy >= 0 ? 1 : -1);
+            // 연결점 방향에 따른 제어점 위치 조정
+            // 소스와 타겟의 연결점 방향을 고려하여 더 자연스러운 곡선 생성
+            if (sourceDirection && targetDirection) {
+                // 소스 연결점 방향에 따른 첫 번째 제어점 위치 계산
+                switch (sourceDirection) {
+                    case 'top':
+                        controlX1 = sourceX;
+                        controlY1 = sourceY - controlDistance;
+                        break;
+                    case 'right':
+                        controlX1 = sourceX + controlDistance;
+                        controlY1 = sourceY;
+                        break;
+                    case 'bottom':
+                        controlX1 = sourceX;
+                        controlY1 = sourceY + controlDistance;
+                        break;
+                    case 'left':
+                        controlX1 = sourceX - controlDistance;
+                        controlY1 = sourceY;
+                        break;
+                }
 
-                // 첫 번째 제어점: 출발점에서 수평으로 이동 후 수직 방향으로 약간 휘어짐
-                controlX1 = sourceX + controlDistanceMin * (dx >= 0 ? 1 : -1);
-                controlY1 = sourceY + offsetY * 0.3;
+                // 타겟 연결점 방향에 따른 두 번째 제어점 위치 계산
+                switch (targetDirection) {
+                    case 'top':
+                        controlX2 = targetX;
+                        controlY2 = targetY - controlDistance;
+                        break;
+                    case 'right':
+                        controlX2 = targetX + controlDistance;
+                        controlY2 = targetY;
+                        break;
+                    case 'bottom':
+                        controlX2 = targetX;
+                        controlY2 = targetY + controlDistance;
+                        break;
+                    case 'left':
+                        controlX2 = targetX - controlDistance;
+                        controlY2 = targetY;
+                        break;
+                }
 
-                // 두 번째 제어점: 도착점에서 수평으로 이동 후 수직 방향으로 약간 휘어짐
-                controlX2 = targetX - controlDistanceMin * (dx >= 0 ? 1 : -1);
-                controlY2 = targetY + offsetY * 0.3;
+                // 반대 방향 연결점인 경우 제어점 조정 (예: 소스의 '오른쪽'과 타겟의 '왼쪽')
+                if (
+                    (sourceDirection === 'right' && targetDirection === 'left') ||
+                    (sourceDirection === 'left' && targetDirection === 'right') ||
+                    (sourceDirection === 'top' && targetDirection === 'bottom') ||
+                    (sourceDirection === 'bottom' && targetDirection === 'top')
+                ) {
+                    // 중간 지점 계산
+                    const midX = (sourceX + targetX) / 2;
+                    const midY = (sourceY + targetY) / 2;
+
+                    // 제어점을 중간 지점 쪽으로 약간 당겨서 더 부드러운 곡선 생성
+                    controlX1 = (controlX1 + midX) / 2;
+                    controlY1 = (controlY1 + midY) / 2;
+                    controlX2 = (controlX2 + midX) / 2;
+                    controlY2 = (controlY2 + midY) / 2;
+                }
             } else {
-                // 수직 방향 연결인 경우
-                const offsetX = Math.min(Math.abs(dx) * 0.5, 50) * (dx >= 0 ? 1 : -1);
+                // 연결점 방향 정보가 없는 경우 기존 방식으로 계산
+                if (isHorizontal) {
+                    // 수평 방향 연결인 경우
+                    const offsetY = Math.min(Math.abs(dy) * 0.5, 50) * (dy >= 0 ? 1 : -1);
 
-                // 첫 번째 제어점: 출발점에서 수직으로 이동 후 수평 방향으로 약간 휘어짐
-                controlX1 = sourceX + offsetX * 0.3;
-                controlY1 = sourceY + controlDistanceMin * (dy >= 0 ? 1 : -1);
+                    // 첫 번째 제어점: 출발점에서 수평으로 이동 후 수직 방향으로 약간 휘어짐
+                    controlX1 = sourceX + controlDistance * (dx >= 0 ? 1 : -1);
+                    controlY1 = sourceY + offsetY * 0.3;
 
-                // 두 번째 제어점: 도착점에서 수직으로 이동 후 수평 방향으로 약간 휘어짐
-                controlX2 = targetX + offsetX * 0.3;
-                controlY2 = targetY - controlDistanceMin * (dy >= 0 ? 1 : -1);
-            }
+                    // 두 번째 제어점: 도착점에서 수평으로 이동 후 수직 방향으로 약간 휘어짐
+                    controlX2 = targetX - controlDistance * (dx >= 0 ? 1 : -1);
+                    controlY2 = targetY + offsetY * 0.3;
+                } else {
+                    // 수직 방향 연결인 경우
+                    const offsetX = Math.min(Math.abs(dx) * 0.5, 50) * (dx >= 0 ? 1 : -1);
 
-            // 대각선 방향 연결인 경우 추가 조정
-            if (Math.abs(dx) > 50 && Math.abs(dy) > 50) {
-                // 대각선 방향의 경우 더 부드러운 곡선을 위해 제어점 조정
-                const midX = (sourceX + targetX) / 2;
-                const midY = (sourceY + targetY) / 2;
+                    // 첫 번째 제어점: 출발점에서 수직으로 이동 후 수평 방향으로 약간 휘어짐
+                    controlX1 = sourceX + offsetX * 0.3;
+                    controlY1 = sourceY + controlDistance * (dy >= 0 ? 1 : -1);
 
-                // 중간 지점에서 약간 벗어난 위치로 제어점 조정
-                const offsetX = Math.min(Math.abs(dx) * 0.2, 40) * (dx >= 0 ? 1 : -1);
-                const offsetY = Math.min(Math.abs(dy) * 0.2, 40) * (dy >= 0 ? 1 : -1);
+                    // 두 번째 제어점: 도착점에서 수직으로 이동 후 수평 방향으로 약간 휘어짐
+                    controlX2 = targetX + offsetX * 0.3;
+                    controlY2 = targetY - controlDistance * (dy >= 0 ? 1 : -1);
+                }
 
-                controlX1 = midX - offsetX + offsetY * 0.5;
-                controlY1 = midY - offsetY - offsetX * 0.5;
-                controlX2 = midX + offsetX + offsetY * 0.5;
-                controlY2 = midY + offsetY - offsetX * 0.5;
+                // 대각선 방향 연결인 경우 추가 조정
+                if (Math.abs(dx) > 50 && Math.abs(dy) > 50) {
+                    // 대각선 방향의 경우 더 부드러운 곡선을 위해 제어점 조정
+                    const midX = (sourceX + targetX) / 2;
+                    const midY = (sourceY + targetY) / 2;
+
+                    // 중간 지점에서 약간 벗어난 위치로 제어점 조정
+                    const offsetX = Math.min(Math.abs(dx) * 0.2, 40) * (dx >= 0 ? 1 : -1);
+                    const offsetY = Math.min(Math.abs(dy) * 0.2, 40) * (dy >= 0 ? 1 : -1);
+
+                    // 대각선 방향에 따라 제어점 위치 미세 조정
+                    const diagonalFactor = Math.min(Math.abs(dx / dy), Math.abs(dy / dx));
+
+                    controlX1 = midX - offsetX + offsetY * 0.5 * diagonalFactor;
+                    controlY1 = midY - offsetY - offsetX * 0.5 * diagonalFactor;
+                    controlX2 = midX + offsetX + offsetY * 0.5 * diagonalFactor;
+                    controlY2 = midY + offsetY - offsetX * 0.5 * diagonalFactor;
+                }
             }
 
             // 3차 베지어 곡선 사용
@@ -635,12 +703,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 const connectionPoints = calculateConnectionPoints(sourceElement, targetElement);
                 if (!connectionPoints) return;
 
-                // 베지어 곡선 경로 생성
+                // 베지어 곡선 경로 생성 - 연결점 방향 정보 전달
                 const pathData = createBezierPath(
                     connectionPoints.sourceX,
                     connectionPoints.sourceY,
                     connectionPoints.targetX,
-                    connectionPoints.targetY
+                    connectionPoints.targetY,
+                    connectionPoints.sourceDirection,
+                    connectionPoints.targetDirection
                 );
 
                 // 경로 설정
@@ -676,12 +746,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     const strokeWidth = path.getAttribute('stroke-width');
                     const strokeDasharray = path.getAttribute('stroke-dasharray');
 
-                    // 베지어 곡선 경로 생성
+                    // 베지어 곡선 경로 생성 - 연결점 방향 정보 전달
                     const pathData = createBezierPath(
                         connectionPoints.sourceX,
                         connectionPoints.sourceY,
                         connectionPoints.targetX,
-                        connectionPoints.targetY
+                        connectionPoints.targetY,
+                        connectionPoints.sourceDirection,
+                        connectionPoints.targetDirection
                     );
 
                     // 경로 업데이트
