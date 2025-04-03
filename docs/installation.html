@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Toast-cli - Toast.sh AWS, Kubernetes & Git Management CLI Tool</title>
+    <title>Installation - Toast-cli</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,7 +20,7 @@
                 </div>
                 <ul class="nav-links">
                     <li><a href="overview.html">Overview</a></li>
-                    <li><a href="installation.html">Installation</a></li>
+                    <li><a href="installation.html" class="active">Installation</a></li>
                     <li><a href="plugins.html">Plugins</a></li>
                     <li><a href="architecture.html">Architecture</a></li>
                     <li><a href="https://github.com/opspresso/toast-cli" target="_blank" class="github-link">GitHub</a></li>
@@ -34,33 +34,81 @@
         </div>
     </header>
 
-    <section class="hero">
+    <section class="installation">
         <div class="container">
-            <div class="hero-content">
-                <h1>Simplify your AWS, Kubernetes & Git workflow</h1>
-                <p>A powerful, plugin-based CLI tool designed for DevOps engineers and cloud practitioners.</p>
-                <div class="cta-buttons">
-                    <a href="installation.html" class="btn primary">Get Started</a>
-                    <a href="https://github.com/opspresso/toast-cli" target="_blank" class="btn secondary">View on GitHub</a>
+            <h2>Installation</h2>
+            <div class="install-methods">
+                <div class="install-method">
+                    <h3>Install from PyPI</h3>
+                    <div class="code-block">
+                        <pre><code>pip install toast-cli</code></pre>
+                        <button class="copy-btn" data-clipboard-text="pip install toast-cli">Copy</button>
+                    </div>
+                    <p><a href="https://pypi.org/project/toast-cli/" target="_blank">View on PyPI</a></p>
+                </div>
+                <div class="install-method">
+                    <h3>Install from GitHub</h3>
+                    <div class="code-block">
+                        <pre><code>pip install git+https://github.com/opspresso/toast-cli.git</code></pre>
+                        <button class="copy-btn" data-clipboard-text="pip install git+https://github.com/opspresso/toast-cli.git">Copy</button>
+                    </div>
+                </div>
+                <div class="install-method">
+                    <h3>Development Mode</h3>
+                    <div class="code-block">
+                        <pre><code>git clone https://github.com/opspresso/toast-cli.git
+cd toast-cli
+pip install -e .</code></pre>
+                        <button class="copy-btn" data-clipboard-text="git clone https://github.com/opspresso/toast-cli.git
+cd toast-cli
+pip install -e .">Copy</button>
+                    </div>
                 </div>
             </div>
-            <div class="terminal">
-                <div class="terminal-header">
-                    <span class="terminal-button red"></span>
-                    <span class="terminal-button yellow"></span>
-                    <span class="terminal-button green"></span>
-                </div>
-                <div class="terminal-content">
-                    <pre><code>$ pip install toast-cli
-$ toast --help
-$ toast am      # Show AWS identity
-$ toast cdw     # Navigate workspace directories
-$ toast ctx     # Manage Kubernetes contexts
-$ toast dot     # Manage .env.local files with AWS SSM
-$ toast env     # Manage AWS profiles
-$ toast git     # Manage Git repositories
-$ toast region  # Set AWS region
-$ toast version # Display current version</code></pre>
+            <div class="requirements">
+                <h3>Dependencies</h3>
+                <ul>
+                    <li>Python 3.6+</li>
+                    <li>Click - Command-line interface creation</li>
+                    <li>External tools:</li>
+                    <ul>
+                        <li>fzf - Interactive selection in terminal</li>
+                        <li>jq - JSON processing for formatted output</li>
+                        <li>aws-cli - AWS command line interface</li>
+                        <li>kubectl - Kubernetes command line tool</li>
+                    </ul>
+                </ul>
+                <h3>Recommended Aliases</h3>
+                <div class="code-block">
+                    <pre><code># Main alias
+alias t='toast'
+
+# Navigate workspace directories
+c() {
+  cd "$(toast cdw)"
+}
+
+# Common Command Aliases
+alias m='toast am'      # Show AWS identity
+alias x='toast ctx'     # Manage Kubernetes contexts
+alias d='toast dot'     # Manage .env.local files
+alias e='toast env'     # Manage AWS profiles
+alias g='toast git'     # Manage Git repositories
+alias r='toast region'  # Manage AWS region</code></pre>
+                    <button class="copy-btn" data-clipboard-text="alias t='toast'
+
+# Navigate workspace directories
+c() {
+  cd \"$(toast cdw)\"
+}
+
+# Common Command Aliases
+alias m='toast am'      # Show AWS identity
+alias x='toast ctx'     # Manage Kubernetes contexts
+alias d='toast dot'     # Manage .env.local files
+alias e='toast env'     # Manage AWS profiles
+alias g='toast git'     # Manage Git repositories
+alias r='toast region'  # Manage AWS region">Copy</button>
                 </div>
             </div>
         </div>

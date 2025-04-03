@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture - Toast-cli</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <nav>
+                <div class="logo">
+                    <h1><a href="index.html">Toast-cli</a></h1>
+                </div>
+                <ul class="nav-links">
+                    <li><a href="overview.html">Overview</a></li>
+                    <li><a href="installation.html">Installation</a></li>
+                    <li><a href="plugins.html">Plugins</a></li>
+                    <li><a href="architecture.html" class="active">Architecture</a></li>
+                    <li><a href="https://github.com/opspresso/toast-cli" target="_blank" class="github-link">GitHub</a></li>
+                </ul>
+                <div class="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <section class="architecture">
+        <div class="container">
+            <h2>Architecture</h2>
+            <p>Toast-cli follows a plugin-based architecture that makes it easy to extend and maintain.</p>
+
+            <div class="architecture-diagram">
+                <svg width="1000" height="800" xmlns="http://www.w3.org/2000/svg" class="interactive-diagram">
+                  <rect width="1000" height="800" fill="#f8f9fa"/>
+                  <!-- 다이어그램 요소들은 JavaScript에서 동적으로 생성됩니다 -->
+                </svg>
+                <p class="caption">Toast-cli Plugin Architecture (각 항목을 드래그하여 이동 가능)</p>
+            </div>
+
+            <div class="structure-details">
+                <h3>Package Structure</h3>
+                <pre><code>toast-cli/
+  ├── setup.py            # Package setup script
+  ├── setup.cfg           # Package configuration
+  ├── pyproject.toml      # Build system requirements
+  ├── MANIFEST.in         # Additional files to include
+  ├── VERSION             # Version information (v3.2.0.dev0)
+  ├── README.md           # Project documentation
+  ├── ARCHITECTURE.md     # Architecture documentation
+  ├── LICENSE             # License information
+  ├── docs/               # Documentation website files
+  │   ├── CNAME           # Custom domain configuration
+  │   ├── favicon.ico     # Website favicon
+  │   ├── index.html      # Main documentation page
+  │   ├── css/            # Stylesheet files
+  │   ├── images/         # Documentation images
+  │   └── js/             # JavaScript files
+  └── toast/              # Main package
+      ├── __init__.py     # Package initialization and CLI entry point
+      ├── __main__.py     # Entry point for running as a module
+      ├── helpers.py      # Helper functions and custom UI elements
+      └── plugins/        # Plugin modules
+          ├── __init__.py
+          ├── base_plugin.py
+          ├── am_plugin.py
+          ├── cdw_plugin.py
+          ├── ctx_plugin.py
+          ├── dot_plugin.py
+          ├── env_plugin.py
+          ├── git_plugin.py
+          ├── region_plugin.py
+          └── utils.py</code></pre>
+            </div>
+
+            <div class="adding-plugins">
+                <h3>Adding New Plugins</h3>
+                <p>To add a new plugin:</p>
+                <ol>
+                    <li>Create a new Python file in the <code>toast/plugins</code> directory</li>
+                    <li>Define a class that extends <code>BasePlugin</code></li>
+                    <li>Implement the required methods (<code>execute</code> and optionally <code>get_arguments</code>)</li>
+                    <li>Set the <code>name</code> and <code>help</code> class variables</li>
+                </ol>
+                <p>The plugin will be automatically discovered and loaded when the application starts.</p>
+
+                <div class="code-block">
+                    <pre><code>from toast.plugins.base_plugin import BasePlugin
+import click
+
+class MyPlugin(BasePlugin):
+    name = "mycommand"
+    help = "Description of my command"
+
+    @classmethod
+    def get_arguments(cls, func):
+        # Optional: Define command arguments
+        func = click.option("--option", "-o", help="An option for my command")(func)
+        return func
+
+    @classmethod
+    def execute(cls, **kwargs):
+        # Command implementation
+        option = kwargs.get("option")
+        if option:
+            click.echo(f"Executing with option: {option}")
+        else:
+            click.echo("My custom command execution")</code></pre>
+                    <button class="copy-btn" data-clipboard-text="from toast.plugins.base_plugin import BasePlugin
+import click
+
+class MyPlugin(BasePlugin):
+    name = &quot;mycommand&quot;
+    help = &quot;Description of my command&quot;
+
+    @classmethod
+    def get_arguments(cls, func):
+        # Optional: Define command arguments
+        func = click.option(&quot;--option&quot;, &quot;-o&quot;, help=&quot;An option for my command&quot;)(func)
+        return func
+
+    @classmethod
+    def execute(cls, **kwargs):
+        # Command implementation
+        option = kwargs.get(&quot;option&quot;)
+        if option:
+            click.echo(f&quot;Executing with option: {option}&quot;)
+        else:
+            click.echo(&quot;My custom command execution&quot;)">Copy</button>
+                </div>
+            </div>
+
+            <div class="architecture-benefits">
+                <h3>Benefits of the Plugin Architecture</h3>
+                <ul>
+                    <li><strong>Modularity:</strong> Each command is isolated in its own module</li>
+                    <li><strong>Extensibility:</strong> New commands can be added without modifying existing code</li>
+                    <li><strong>Maintainability:</strong> Code is organized into logical components</li>
+                    <li><strong>Testability:</strong> Plugins can be tested independently</li>
+                    <li><strong>Consistency:</strong> Common patterns are enforced through the base class</li>
+                    <li><strong>Discoverability:</strong> Commands are automatically found and registered</li>
+                </ul>
+            </div>
+
+            <div class="learn-more">
+                <a href="https://github.com/opspresso/toast-cli/blob/main/ARCHITECTURE.md" target="_blank" class="btn secondary">Learn More</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-logo">
+                    <h2>Toast-cli</h2>
+                    <p>A Python-based CLI tool for AWS, Kubernetes & Git management</p>
+                </div>
+                <div class="footer-links">
+                    <div class="link-column">
+                        <h3>Resources</h3>
+                        <ul>
+                            <li><a href="https://github.com/opspresso/toast-cli">GitHub Repository</a></li>
+                            <li><a href="https://github.com/opspresso/toast-cli/issues">Issue Tracker</a></li>
+                            <li><a href="https://github.com/opspresso/toast-cli/releases">Releases</a></li>
+                            <li><a href="https://pypi.org/project/toast-cli/">PyPI Package</a></li>
+                        </ul>
+                    </div>
+                    <div class="link-column">
+                        <h3>Community</h3>
+                        <ul>
+                            <li><a href="https://github.com/opspresso">Opspresso GitHub</a></li>
+                            <li><a href="https://github.com/opspresso/toast-cli/graphs/contributors">Contributors</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="copyright">
+                <p>&copy; 2025 Opspresso. Licensed under <a href="https://github.com/opspresso/toast-cli/blob/main/LICENSE">GNU General Public License v3.0</a></p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/data.js"></script>
+    <script src="js/diagram.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

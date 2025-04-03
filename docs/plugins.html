@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plugins - Toast-cli</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <nav>
+                <div class="logo">
+                    <h1><a href="index.html">Toast-cli</a></h1>
+                </div>
+                <ul class="nav-links">
+                    <li><a href="overview.html">Overview</a></li>
+                    <li><a href="installation.html">Installation</a></li>
+                    <li><a href="plugins.html" class="active">Plugins</a></li>
+                    <li><a href="architecture.html">Architecture</a></li>
+                    <li><a href="https://github.com/opspresso/toast-cli" target="_blank" class="github-link">GitHub</a></li>
+                </ul>
+                <div class="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <section class="plugins">
+        <div class="container">
+            <h2>Plugins</h2>
+            <p>Toast-cli features a modular plugin architecture. Here are the available plugins:</p>
+
+            <div class="plugin-grid">
+                <div class="plugin-card">
+                    <div class="plugin-header">
+                        <h3>am</h3>
+                        <span class="plugin-badge">AWS</span>
+                    </div>
+                    <div class="plugin-body">
+                        <p>Show AWS caller identity information</p>
+                        <div class="plugin-usage">
+                            <code>toast am</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="plugin-card">
+                    <div class="plugin-header">
+                        <h3>cdw</h3>
+                        <span class="plugin-badge">Workspace</span>
+                    </div>
+                    <div class="plugin-body">
+                        <p>Navigate to workspace directories</p>
+                        <div class="plugin-usage">
+                            <code>toast cdw</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="plugin-card">
+                    <div class="plugin-header">
+                        <h3>ctx</h3>
+                        <span class="plugin-badge">Kubernetes</span>
+                    </div>
+                    <div class="plugin-body">
+                        <p>Manage Kubernetes contexts</p>
+                        <div class="plugin-usage">
+                            <code>toast ctx</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="plugin-card">
+                    <div class="plugin-header">
+                        <h3>dot</h3>
+                        <span class="plugin-badge">Environment</span>
+                    </div>
+                    <div class="plugin-body">
+                        <p>Manage .env.local files with AWS SSM integration</p>
+                        <div class="plugin-usage">
+                            <code>toast dot ls</code>
+                            <code>toast dot up</code>
+                            <code>toast dot down</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="plugin-card">
+                    <div class="plugin-header">
+                        <h3>env</h3>
+                        <span class="plugin-badge">AWS</span>
+                    </div>
+                    <div class="plugin-body">
+                        <p>Manage AWS profiles</p>
+                        <div class="plugin-usage">
+                            <code>toast env</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="plugin-card">
+                    <div class="plugin-header">
+                        <h3>git</h3>
+                        <span class="plugin-badge">Git</span>
+                    </div>
+                    <div class="plugin-body">
+                        <p>Manage Git repositories</p>
+                        <div class="plugin-usage">
+                            <code>toast git repo_name clone</code>
+                            <code>toast git repo_name rm</code>
+                            <code>toast git repo_name branch -b branch_name</code>
+                            <code>toast git repo_name pull</code>
+                            <code>toast git repo_name pull -r</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="plugin-card">
+                    <div class="plugin-header">
+                        <h3>region</h3>
+                        <span class="plugin-badge">AWS</span>
+                    </div>
+                    <div class="plugin-body">
+                        <p>Set AWS region</p>
+                        <div class="plugin-usage">
+                            <code>toast region</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-logo">
+                    <h2>Toast-cli</h2>
+                    <p>A Python-based CLI tool for AWS, Kubernetes & Git management</p>
+                </div>
+                <div class="footer-links">
+                    <div class="link-column">
+                        <h3>Resources</h3>
+                        <ul>
+                            <li><a href="https://github.com/opspresso/toast-cli">GitHub Repository</a></li>
+                            <li><a href="https://github.com/opspresso/toast-cli/issues">Issue Tracker</a></li>
+                            <li><a href="https://github.com/opspresso/toast-cli/releases">Releases</a></li>
+                            <li><a href="https://pypi.org/project/toast-cli/">PyPI Package</a></li>
+                        </ul>
+                    </div>
+                    <div class="link-column">
+                        <h3>Community</h3>
+                        <ul>
+                            <li><a href="https://github.com/opspresso">Opspresso GitHub</a></li>
+                            <li><a href="https://github.com/opspresso/toast-cli/graphs/contributors">Contributors</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="copyright">
+                <p>&copy; 2025 Opspresso. Licensed under <a href="https://github.com/opspresso/toast-cli/blob/main/LICENSE">GNU General Public License v3.0</a></p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Toast-cli - Toast.sh AWS, Kubernetes & Git Management CLI Tool</title>
+    <title>Overview - Toast-cli</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,7 +19,7 @@
                     <h1><a href="index.html">Toast-cli</a></h1>
                 </div>
                 <ul class="nav-links">
-                    <li><a href="overview.html">Overview</a></li>
+                    <li><a href="overview.html" class="active">Overview</a></li>
                     <li><a href="installation.html">Installation</a></li>
                     <li><a href="plugins.html">Plugins</a></li>
                     <li><a href="architecture.html">Architecture</a></li>
@@ -34,33 +34,30 @@
         </div>
     </header>
 
-    <section class="hero">
+    <section class="overview">
         <div class="container">
-            <div class="hero-content">
-                <h1>Simplify your AWS, Kubernetes & Git workflow</h1>
-                <p>A powerful, plugin-based CLI tool designed for DevOps engineers and cloud practitioners.</p>
-                <div class="cta-buttons">
-                    <a href="installation.html" class="btn primary">Get Started</a>
-                    <a href="https://github.com/opspresso/toast-cli" target="_blank" class="btn secondary">View on GitHub</a>
+            <h2>Overview</h2>
+            <p>Toast-cli is a Python-based CLI tool that provides various utility commands for AWS, Kubernetes, and Git operations. The architecture follows a plugin-based design pattern, allowing for easy extension of functionality through the addition of new plugins. It provides a unified interface for common DevOps tasks and enhances productivity through interactive selection and streamlined workflows.</p>
+            <div class="features">
+                <div class="feature">
+                    <div class="feature-icon">🔌</div>
+                    <h3>Plugin-based Architecture</h3>
+                    <p>Easily extend functionality by adding new plugins without modifying core code.</p>
                 </div>
-            </div>
-            <div class="terminal">
-                <div class="terminal-header">
-                    <span class="terminal-button red"></span>
-                    <span class="terminal-button yellow"></span>
-                    <span class="terminal-button green"></span>
+                <div class="feature">
+                    <div class="feature-icon">☁️</div>
+                    <h3>AWS Integration</h3>
+                    <p>Seamlessly manage AWS profiles, regions, identity, and securely store environment variables in SSM.</p>
                 </div>
-                <div class="terminal-content">
-                    <pre><code>$ pip install toast-cli
-$ toast --help
-$ toast am      # Show AWS identity
-$ toast cdw     # Navigate workspace directories
-$ toast ctx     # Manage Kubernetes contexts
-$ toast dot     # Manage .env.local files with AWS SSM
-$ toast env     # Manage AWS profiles
-$ toast git     # Manage Git repositories
-$ toast region  # Set AWS region
-$ toast version # Display current version</code></pre>
+                <div class="feature">
+                    <div class="feature-icon">⎈</div>
+                    <h3>Kubernetes Management</h3>
+                    <p>Quickly switch between Kubernetes contexts and manage clusters.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔄</div>
+                    <h3>Git Workflow</h3>
+                    <p>Simplify Git operations with repository cloning, branch creation, and pull operations with rebase support.</p>
                 </div>
             </div>
         </div>
