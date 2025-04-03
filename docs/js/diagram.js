@@ -182,6 +182,17 @@ document.addEventListener('DOMContentLoaded', function() {
             parent.removeChild(selectedElement);
             parent.appendChild(selectedElement);
 
+            // 연결된 모든 연결선도 맨 앞으로 가져오기
+            if (id && connections[id]) {
+                connections[id].forEach(connection => {
+                    const { connector } = connection;
+                    // 연결선을 부모 노드에서 제거한 후 다시 추가
+                    const connectorParent = connector.parentNode;
+                    connectorParent.removeChild(connector);
+                    connectorParent.appendChild(connector);
+                });
+            }
+
             // 전역 이벤트 리스너 추가
             document.addEventListener('mousemove', drag);
             document.addEventListener('mouseup', endDrag);
@@ -210,7 +221,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // 연결된 선 업데이트
             updateConnections(id);
 
-            // 이동 중인 요소와 연결된 모든 연결선의 점 크기 확대
+            // 이동 중인 요소와 연결된 모든 연결선의 점 크기 확대 및 연결선을 맨 앞으로 가져오기
             if (connections[id]) {
                 connections[id].forEach(connection => {
                     const { connector, isFrom } = connection;
@@ -223,8 +234,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         const originalR = parseFloat(point.getAttribute('data-original-r'));
                         point.setAttribute('r', originalR * 1.5); // 원래 크기의 1.5배로 설정
                     }
+
+                    // 연결선을 맨 앞으로 가져오기 (드래그 중에도 계속 맨 앞에 표시)
+                    const connectorParent = connector.parentNode;
+                    connectorParent.removeChild(connector);
+                    connectorParent.appendChild(connector);
                 });
             }
+
+            // 요소를 맨 앞으로 가져오기 (연결선 위에 표시)
+            const parent = selectedElement.parentNode;
+            parent.removeChild(selectedElement);
+            parent.appendChild(selectedElement);
         }
 
         // 드래그 종료 함수
