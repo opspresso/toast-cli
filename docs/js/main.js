@@ -220,70 +220,52 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // 화살표 방향 계산 (타겟에서 소스 방향으로)
-            const arrowDx = sourceX - targetX;
-            const arrowDy = sourceY - targetY;
-            const arrowLength = Math.sqrt(arrowDx * arrowDx + arrowDy * arrowDy);
-            const arrowNx = arrowDx / arrowLength;
-            const arrowNy = arrowDy / arrowLength;
-
-            // 화살표 크기
-            const arrowSize = 10;
-
-            // 화살표 포인트 계산
-            const arrowPoints = [
-                `${targetX},${targetY}`,
-                `${targetX - arrowNx * arrowSize + arrowNy * arrowSize/2},${targetY - arrowNy * arrowSize - arrowNx * arrowSize/2}`,
-                `${targetX - arrowNx * arrowSize - arrowNy * arrowSize/2},${targetY - arrowNy * arrowSize + arrowNx * arrowSize/2}`
-            ];
-
             return {
                 sourceX, sourceY,
-                targetX, targetY,
-                arrowPoints: arrowPoints.join(' ')
+                targetX, targetY
             };
         }
 
         // 베지어 곡선 경로 생성 함수
         function createBezierPath(sourceX, sourceY, targetX, targetY) {
-            // 제어점 계산 (곡선의 휘어짐 정도 조절)
-            const dx = Math.abs(targetX - sourceX);
-            const dy = Math.abs(targetY - sourceY);
+            // 방향 벡터 계산
+            const dx = targetX - sourceX;
+            const dy = targetY - sourceY;
 
-            // 수평 거리가 더 긴 경우
-            if (dx > dy) {
-                const controlX1 = sourceX + dx * 0.3;
-                const controlY1 = sourceY;
-                const controlX2 = targetX - dx * 0.3;
-                const controlY2 = targetY;
-                return `M${sourceX},${sourceY} C${controlX1},${controlY1} ${controlX2},${controlY2} ${targetX},${targetY}`;
-            }
-            // 수직 거리가 더 긴 경우
-            else {
-                const controlX1 = sourceX;
-                const controlY1 = sourceY + dy * 0.3;
-                const controlX2 = targetX;
-                const controlY2 = targetY - dy * 0.3;
-                return `M${sourceX},${sourceY} C${controlX1},${controlY1} ${controlX2},${controlY2} ${targetX},${targetY}`;
-            }
-        }
-
-        // 화살표 포인트 계산 함수
-        function calculateArrowPoints(endX, endY, dx, dy) {
             // 방향 벡터 정규화
             const length = Math.sqrt(dx * dx + dy * dy);
             const nx = dx / length;
             const ny = dy / length;
 
-            // 화살표 크기
-            const arrowSize = 10;
+            // 제어점 거리 계산 (거리에 비례하여 조정)
+            const distance = Math.min(length * 0.4, 50);
 
-            // 화살표 포인트 계산
-            return [
-                `${endX},${endY}`,
-                `${endX - nx * arrowSize + ny * arrowSize/2},${endY - ny * arrowSize - nx * arrowSize/2}`,
-                `${endX - nx * arrowSize - ny * arrowSize/2},${endY - ny * arrowSize + nx * arrowSize/2}`
-            ].join(' ');
+            // 수직 벡터 계산 (방향 벡터에 수직인 벡터)
+            const perpX = -ny;
+            const perpY = nx;
+
+            // 제어점 계산 (항상 외부로 휘어지도록)
+            // 두 요소 사이의 중간점
+            const midX = (sourceX + targetX) / 2;
+            const midY = (sourceY + targetY) / 2;
+
+            // 중간점에서 수직 방향으로 이동한 제어점
+            const controlX = midX + perpX * distance;
+            const controlY = midY + perpY * distance;
+
+            // 2차 베지어 곡선 사용 (제어점 1개)
+            return `M${sourceX},${sourceY} Q${controlX},${controlY} ${targetX},${targetY}`;
+        }
+
+        // 연결선 곡률 조정 함수
+        function adjustCurvature(sourceX, sourceY, targetX, targetY) {
+            // 두 점 사이의 거리 계산
+            const dx = Math.abs(targetX - sourceX);
+            const dy = Math.abs(targetY - sourceY);
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // 거리에 따라 곡률 조정 (거리가 멀수록 곡률 증가)
+            return Math.min(0.4, Math.max(0.2, distance / 500));
         }
 
         // 페이지 로드 시 초기 연결선 설정
@@ -315,23 +297,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     path.setAttribute('d', pathData);
                 }
 
-                // 화살표 업데이트
-                const polygon = connector.querySelector('polygon');
-                if (polygon) {
-                    // 방향 벡터 계산
-                    const dx = connectionPoints.sourceX - connectionPoints.targetX;
-                    const dy = connectionPoints.sourceY - connectionPoints.targetY;
-
-                    // 화살표 포인트 계산
-                    const arrowPoints = calculateArrowPoints(
-                        connectionPoints.targetX,
-                        connectionPoints.targetY,
-                        dx,
-                        dy
-                    );
-
-                    polygon.setAttribute('points', arrowPoints);
-                }
+                // 폴리곤 요소는 제거됨 (화살표 대신 연결선만 사용)
             });
         }
 
@@ -377,39 +343,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     path.setAttribute('d', pathData);
                 }
 
-                // 화살표 업데이트
-                const polygon = connector.querySelector('polygon');
-                if (polygon) {
-                    // 방향 벡터 계산
-                    let dx, dy;
-                    if (isFrom) {
-                        dx = connectionPoints.sourceX - connectionPoints.targetX;
-                        dy = connectionPoints.sourceY - connectionPoints.targetY;
-
-                        // 화살표 포인트 계산
-                        const arrowPoints = calculateArrowPoints(
-                            connectionPoints.targetX,
-                            connectionPoints.targetY,
-                            dx,
-                            dy
-                        );
-
-                        polygon.setAttribute('points', arrowPoints);
-                    } else {
-                        dx = connectionPoints.targetX - connectionPoints.sourceX;
-                        dy = connectionPoints.targetY - connectionPoints.sourceY;
-
-                        // 화살표 포인트 계산
-                        const arrowPoints = calculateArrowPoints(
-                            connectionPoints.sourceX,
-                            connectionPoints.sourceY,
-                            dx,
-                            dy
-                        );
-
-                        polygon.setAttribute('points', arrowPoints);
-                    }
-                }
+                // 폴리곤 요소는 제거됨 (화살표 대신 연결선만 사용)
             });
 
             // 모든 연결선 업데이트 (양쪽 끝점이 모두 이동한 경우 처리)
@@ -445,23 +379,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         path.setAttribute('d', pathData);
                     }
 
-                    // 화살표 업데이트
-                    const polygon = connector.querySelector('polygon');
-                    if (polygon) {
-                        // 방향 벡터 계산
-                        const dx = connectionPoints.sourceX - connectionPoints.targetX;
-                        const dy = connectionPoints.sourceY - connectionPoints.targetY;
-
-                        // 화살표 포인트 계산
-                        const arrowPoints = calculateArrowPoints(
-                            connectionPoints.targetX,
-                            connectionPoints.targetY,
-                            dx,
-                            dy
-                        );
-
-                        polygon.setAttribute('points', arrowPoints);
-                    }
+                    // 폴리곤 요소는 제거됨 (화살표 대신 연결선만 사용)
                 }
             });
         }
