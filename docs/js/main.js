@@ -237,35 +237,121 @@ document.addEventListener('DOMContentLoaded', function() {
             const nx = dx / length;
             const ny = dy / length;
 
-            // 제어점 거리 계산 (거리에 비례하여 조정)
-            const distance = Math.min(length * 0.4, 50);
-
             // 수직 벡터 계산 (방향 벡터에 수직인 벡터)
             const perpX = -ny;
             const perpY = nx;
 
-            // 제어점 계산 (항상 외부로 휘어지도록)
-            // 두 요소 사이의 중간점
-            const midX = (sourceX + targetX) / 2;
-            const midY = (sourceY + targetY) / 2;
+            // 두 점 사이의 각도 계산 (라디안)
+            const angle = Math.atan2(dy, dx);
 
-            // 중간점에서 수직 방향으로 이동한 제어점
-            const controlX = midX + perpX * distance;
-            const controlY = midY + perpY * distance;
+            // 곡률 계수 계산 (거리와 각도에 따라 동적으로 조정)
+            const curvature = adjustCurvature(sourceX, sourceY, targetX, targetY, angle);
 
-            // 2차 베지어 곡선 사용 (제어점 1개)
-            return `M${sourceX},${sourceY} Q${controlX},${controlY} ${targetX},${targetY}`;
+            // 제어점 거리 계산 (거리에 비례하여 조정)
+            const controlDistance = Math.min(length * 0.3, 60);
+
+            // 제어점의 수직 오프셋 계산 (자연스러운 곡선을 위해)
+            // 각도에 따라 오프셋 조정 (0도 또는 90도에 가까울수록 오프셋 감소)
+            const angleOffset = Math.sin(2 * angle) * 0.5 + 0.5; // 0~1 사이 값
+            const perpOffset = Math.min(length * 0.2, 40) * angleOffset;
+
+            // 제어점 계산 - 항상 방향 벡터와 수직 벡터를 모두 고려
+            let control1X, control1Y, control2X, control2Y;
+
+            // 첫 번째 제어점: 시작점에서 방향 벡터를 따라 이동 + 수직 방향 오프셋
+            control1X = sourceX + nx * controlDistance + perpX * perpOffset;
+            control1Y = sourceY + ny * controlDistance + perpY * perpOffset;
+
+            // 두 번째 제어점: 끝점에서 반대 방향 벡터를 따라 이동 + 수직 방향 오프셋
+            control2X = targetX - nx * controlDistance + perpX * perpOffset;
+            control2Y = targetY - ny * controlDistance + perpY * perpOffset;
+
+            // 특수 케이스 처리: 거의 수직 또는 수평인 경우
+            const isNearlyHorizontal = Math.abs(ny) < 0.1;
+            const isNearlyVertical = Math.abs(nx) < 0.1;
+
+            if (isNearlyHorizontal) {
+                // 거의 수평인 경우, 수직 오프셋 증가
+                const vertOffset = Math.min(length * 0.15, 30);
+                control1Y = sourceY + vertOffset;
+                control2Y = targetY + vertOffset;
+            } else if (isNearlyVertical) {
+                // 거의 수직인 경우, 수평 오프셋 증가
+                const horizOffset = Math.min(length * 0.15, 30);
+                control1X = sourceX + horizOffset;
+                control2X = targetX + horizOffset;
+            }
+
+            // 두 요소가 매우 가까운 경우 (짧은 연결선)
+            if (length < 100) {
+                // 중간점 계산
+                const midX = (sourceX + targetX) / 2;
+                const midY = (sourceY + targetY) / 2;
+
+                // 중간점에서 수직 방향으로 이동한 제어점 계산
+                const shortOffset = Math.max(length * 0.3, 20);
+
+                // 제어점을 중간점 주변에 배치
+                control1X = midX + perpX * shortOffset * 0.7;
+                control1Y = midY + perpY * shortOffset * 0.7;
+                control2X = midX + perpX * shortOffset * 0.7;
+                control2Y = midY + perpY * shortOffset * 0.7;
+            }
+
+            // 두 요소가 대각선 방향으로 멀리 떨어져 있는 경우 곡선을 더 부드럽게 조정
+            if (Math.abs(dx) > 150 && Math.abs(dy) > 150) {
+                // 중간점 계산
+                const midX = (sourceX + targetX) / 2;
+                const midY = (sourceY + targetY) / 2;
+
+                // 중간점에서 수직 방향으로 이동한 제어점 계산
+                const longOffset = Math.min(length * 0.25, 50);
+
+                // 제어점 위치 조정 - 중간점에서 약간 떨어진 위치에 배치
+                control1X = midX - nx * longOffset * 0.5 + perpX * longOffset;
+                control1Y = midY - ny * longOffset * 0.5 + perpY * longOffset;
+                control2X = midX + nx * longOffset * 0.5 + perpX * longOffset;
+                control2Y = midY + ny * longOffset * 0.5 + perpY * longOffset;
+            }
+
+            // 3차 베지어 곡선 사용 (제어점 2개)
+            return `M${sourceX},${sourceY} C${control1X},${control1Y} ${control2X},${control2Y} ${targetX},${targetY}`;
         }
 
         // 연결선 곡률 조정 함수
-        function adjustCurvature(sourceX, sourceY, targetX, targetY) {
+        function adjustCurvature(sourceX, sourceY, targetX, targetY, angle) {
             // 두 점 사이의 거리 계산
             const dx = Math.abs(targetX - sourceX);
             const dy = Math.abs(targetY - sourceY);
             const distance = Math.sqrt(dx * dx + dy * dy);
 
-            // 거리에 따라 곡률 조정 (거리가 멀수록 곡률 증가)
-            return Math.min(0.4, Math.max(0.2, distance / 500));
+            // 기본 곡률 계산 (거리에 따라 조정)
+            let baseCurvature = Math.min(0.35, Math.max(0.15, distance / 600));
+
+            // 각도에 따른 곡률 조정 (0도 또는 90도에 가까울수록 곡률 증가)
+            const angleNormalized = Math.abs(angle) % (Math.PI / 2);
+            const angleEffect = Math.min(1, Math.abs(angleNormalized - Math.PI / 4) / (Math.PI / 4));
+            baseCurvature *= (1 + angleEffect * 0.3);
+
+            // 거리에 따른 추가 조정
+            if (distance < 100) {
+                // 짧은 거리는 곡률 증가
+                baseCurvature *= 1.4;
+            } else if (distance > 300) {
+                // 긴 거리는 곡률 약간 감소
+                baseCurvature *= 0.9;
+            }
+
+            // 수직/수평 방향에 따른 곡률 조정
+            if (dx < 50 || dy < 50) {
+                // 거의 수직이나 수평인 경우 곡률 증가
+                baseCurvature *= 1.5;
+            } else if (Math.abs(dx - dy) < 50) {
+                // 대각선 방향인 경우 곡률 약간 증가
+                baseCurvature *= 1.2;
+            }
+
+            return baseCurvature;
         }
 
         // 페이지 로드 시 초기 연결선 설정
