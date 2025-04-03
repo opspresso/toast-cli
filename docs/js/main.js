@@ -97,7 +97,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 group.setAttribute('data-to', connector.to);
 
                 const path = document.createElementNS(SVG_NS, 'path');
-                path.setAttribute('d', connector.path);
+
+                // 스타일 속성 설정
                 path.setAttribute('stroke', connector.stroke);
                 path.setAttribute('stroke-width', connector.strokeWidth);
                 path.setAttribute('fill', connector.fill);
@@ -108,6 +109,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 group.appendChild(path);
                 interactiveDiagram.appendChild(group);
             });
+
+            // 모든 연결선 초기화
+            initializeAllConnections();
         }
 
         // 다이어그램 요소 생성
@@ -376,6 +380,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // 3차 베지어 곡선 사용
             return `M${sourceX},${sourceY} C${controlX1},${controlY1} ${controlX2},${controlY2} ${targetX},${targetY}`;
+        }
+
+        // 모든 연결선 초기화 함수
+        function initializeAllConnections() {
+            // 모든 연결선에 대해 경로 계산 및 설정
+            document.querySelectorAll('.diagram-connector').forEach(connector => {
+                const fromId = connector.getAttribute('data-from');
+                const toId = connector.getAttribute('data-to');
+
+                if (!fromId || !toId) return;
+
+                // 소스 및 타겟 요소 찾기
+                const sourceElement = document.querySelector(`.diagram-element[data-element-id="${fromId}"]`);
+                const targetElement = document.querySelector(`.diagram-element[data-element-id="${toId}"]`);
+
+                if (!sourceElement || !targetElement) return;
+
+                // 연결점 계산
+                const connectionPoints = calculateConnectionPoints(sourceElement, targetElement);
+                if (!connectionPoints) return;
+
+                // 베지어 곡선 경로 생성
+                const pathData = createBezierPath(
+                    connectionPoints.sourceX,
+                    connectionPoints.sourceY,
+                    connectionPoints.targetX,
+                    connectionPoints.targetY
+                );
+
+                // 경로 설정
+                const path = connector.querySelector('path');
+                if (path) {
+                    path.setAttribute('d', pathData);
+                }
+            });
         }
 
         // 연결선 업데이트 함수

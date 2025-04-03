@@ -158,29 +158,40 @@ const diagramElements = {
 
 // 연결선 정의
 const diagramConnectors = [
+  // 코어 컴포넌트 연결 (굵은 실선)
   // 메인 CLI에서 BasePlugin으로
-  { from: 'main-cli', to: 'base-plugin', path: 'M500,230 C500,250 500,260 500,280', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
+  { from: 'main-cli', to: 'base-plugin', stroke: '#007bff', strokeWidth: 2.5, fill: 'none' },
   // 메인 CLI에서 헬퍼 유틸리티로
-  { from: 'main-cli', to: 'helpers', path: 'M700,180 C720,180 730,180 750,180', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
+  { from: 'main-cli', to: 'helpers', stroke: '#007bff', strokeWidth: 2.5, fill: 'none' },
   // 메인 CLI에서 모듈 진입점으로
-  { from: 'main-cli', to: 'main-module', path: 'M300,180 C280,180 270,180 250,180', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
+  { from: 'main-cli', to: 'main-module', stroke: '#007bff', strokeWidth: 2.5, fill: 'none' },
   // BasePlugin에서 유틸리티로
-  { from: 'base-plugin', to: 'utils', path: 'M700,320 C720,320 730,320 750,320', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
+  { from: 'base-plugin', to: 'utils', stroke: '#007bff', strokeWidth: 2.5, fill: 'none' },
+
+  // 플러그인 상속 관계 (중간 굵기 실선)
   // BasePlugin에서 플러그인 행으로
-  { from: 'base-plugin', to: 'am-plugin', path: 'M300,360 C200,380 150,390 130,410', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
-  { from: 'base-plugin', to: 'ctx-plugin', path: 'M350,360 C330,380 320,390 310,410', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
-  { from: 'base-plugin', to: 'env-plugin', path: 'M450,360 C470,380 480,390 490,410', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
-  { from: 'base-plugin', to: 'git-plugin', path: 'M650,360 C660,380 665,390 670,410', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
+  { from: 'base-plugin', to: 'am-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
+  { from: 'base-plugin', to: 'ctx-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
+  { from: 'base-plugin', to: 'env-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
+  { from: 'base-plugin', to: 'git-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
+
+  // 플러그인 그룹 관계 (가는 실선)
   // 플러그인 행 1에서 행 2로 연결
-  { from: 'am-plugin', to: 'cdw-plugin', path: 'M130,470 C130,475 130,480 130,490', stroke: '#007bff', strokeWidth: 1, fill: 'none' },
-  { from: 'ctx-plugin', to: 'dot-plugin', path: 'M310,470 C310,475 310,480 310,490', stroke: '#007bff', strokeWidth: 1, fill: 'none' },
-  { from: 'env-plugin', to: 'region-plugin', path: 'M490,470 C490,475 490,480 490,490', stroke: '#007bff', strokeWidth: 1, fill: 'none' },
-  { from: 'git-plugin', to: 'aws-integration', path: 'M670,470 C670,475 670,480 670,490 C700,490 730,490 770,490', stroke: '#007bff', strokeWidth: 1, strokeDasharray: '4,2', fill: 'none' },
+  { from: 'am-plugin', to: 'cdw-plugin', stroke: '#0056b3', strokeWidth: 1.5, fill: 'none' },
+  { from: 'ctx-plugin', to: 'dot-plugin', stroke: '#0056b3', strokeWidth: 1.5, fill: 'none' },
+  { from: 'env-plugin', to: 'region-plugin', stroke: '#0056b3', strokeWidth: 1.5, fill: 'none' },
+
+  // 외부 통합 연결 (점선)
+  { from: 'git-plugin', to: 'aws-integration', stroke: '#28a745', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
+
+  // 명령 연결 (회색 점선)
   // 플러그인에서 명령으로 연결
-  { from: 'cdw-plugin', to: 'plugin-commands', path: 'M130,550 C130,570 150,580 200,600', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '4,2', fill: 'none' },
-  { from: 'dot-plugin', to: 'plugin-commands', path: 'M310,550 C310,570 320,580 350,600', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '4,2', fill: 'none' },
-  { from: 'region-plugin', to: 'plugin-commands', path: 'M490,550 C490,570 480,580 450,600', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '4,2', fill: 'none' },
-  { from: 'aws-integration', to: 'plugin-commands', path: 'M770,550 C770,570 750,580 700,600', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '4,2', fill: 'none' },
+  { from: 'cdw-plugin', to: 'plugin-commands', stroke: '#6c757d', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
+  { from: 'dot-plugin', to: 'plugin-commands', stroke: '#6c757d', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
+  { from: 'region-plugin', to: 'plugin-commands', stroke: '#6c757d', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
+  { from: 'aws-integration', to: 'plugin-commands', stroke: '#28a745', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
+
+  // 의존성 연결 (회색 긴 점선)
   // 외부 의존성에서 메인 CLI로
-  { from: 'dependencies', to: 'main-cli', path: 'M250,320 C270,320 280,320 300,320', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '4,2', fill: 'none' }
+  { from: 'dependencies', to: 'main-cli', stroke: '#6c757d', strokeWidth: 1.5, strokeDasharray: '8,4', fill: 'none' }
 ];
