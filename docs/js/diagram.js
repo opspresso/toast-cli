@@ -236,77 +236,87 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         }
 
-        // 두 요소 사이의 연결점 계산 함수
+        // 두 요소 사이의 연결점 계산 함수 - 좌우상하 각 방향에 하나씩 연결점 사용
         function calculateConnectionPoints(sourceElement, targetElement) {
             const sourceBounds = getElementBounds(sourceElement);
             const targetBounds = getElementBounds(targetElement);
 
             if (!sourceBounds || !targetBounds) return null;
 
-            // 두 요소의 중심점 사이의 방향 벡터 계산
-            const dx = targetBounds.centerX - sourceBounds.centerX;
-            const dy = targetBounds.centerY - sourceBounds.centerY;
-
-            // 방향 벡터 정규화
-            const length = Math.sqrt(dx * dx + dy * dy);
-            const nx = dx / length;
-            const ny = dy / length;
-
-            // 소스 요소의 가장자리 교차점 계산
-            let sourceX, sourceY;
-
-            // 수평 방향이 더 강한 경우
-            if (Math.abs(nx) > Math.abs(ny)) {
-                if (nx > 0) {
-                    // 오른쪽 방향
-                    sourceX = sourceBounds.right;
-                    sourceY = sourceBounds.centerY;
-                } else {
-                    // 왼쪽 방향
-                    sourceX = sourceBounds.left;
-                    sourceY = sourceBounds.centerY;
+            // 소스 요소의 좌우상하 연결점
+            const sourcePoints = [
+                // 위쪽 중앙
+                {
+                    x: sourceBounds.left + sourceBounds.width / 2,
+                    y: sourceBounds.top
+                },
+                // 오른쪽 중앙
+                {
+                    x: sourceBounds.right,
+                    y: sourceBounds.top + sourceBounds.height / 2
+                },
+                // 아래쪽 중앙
+                {
+                    x: sourceBounds.left + sourceBounds.width / 2,
+                    y: sourceBounds.bottom
+                },
+                // 왼쪽 중앙
+                {
+                    x: sourceBounds.left,
+                    y: sourceBounds.top + sourceBounds.height / 2
                 }
-            } else {
-                if (ny > 0) {
-                    // 아래쪽 방향
-                    sourceX = sourceBounds.centerX;
-                    sourceY = sourceBounds.bottom;
-                } else {
-                    // 위쪽 방향
-                    sourceX = sourceBounds.centerX;
-                    sourceY = sourceBounds.top;
+            ];
+
+            // 타겟 요소의 좌우상하 연결점
+            const targetPoints = [
+                // 위쪽 중앙
+                {
+                    x: targetBounds.left + targetBounds.width / 2,
+                    y: targetBounds.top
+                },
+                // 오른쪽 중앙
+                {
+                    x: targetBounds.right,
+                    y: targetBounds.top + targetBounds.height / 2
+                },
+                // 아래쪽 중앙
+                {
+                    x: targetBounds.left + targetBounds.width / 2,
+                    y: targetBounds.bottom
+                },
+                // 왼쪽 중앙
+                {
+                    x: targetBounds.left,
+                    y: targetBounds.top + targetBounds.height / 2
+                }
+            ];
+
+            // 가장 가까운 두 점 찾기
+            let minDistance = Infinity;
+            let closestSourcePoint = null;
+            let closestTargetPoint = null;
+
+            // 모든 가능한 점 쌍에 대해 거리 계산
+            for (const sourcePoint of sourcePoints) {
+                for (const targetPoint of targetPoints) {
+                    const dx = targetPoint.x - sourcePoint.x;
+                    const dy = targetPoint.y - sourcePoint.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        closestSourcePoint = sourcePoint;
+                        closestTargetPoint = targetPoint;
+                    }
                 }
             }
 
-            // 타겟 요소의 가장자리 교차점 계산
-            let targetX, targetY;
-
-            // 수평 방향이 더 강한 경우
-            if (Math.abs(nx) > Math.abs(ny)) {
-                if (nx > 0) {
-                    // 오른쪽 방향
-                    targetX = targetBounds.left;
-                    targetY = targetBounds.centerY;
-                } else {
-                    // 왼쪽 방향
-                    targetX = targetBounds.right;
-                    targetY = targetBounds.centerY;
-                }
-            } else {
-                if (ny > 0) {
-                    // 아래쪽 방향
-                    targetX = targetBounds.centerX;
-                    targetY = targetBounds.top;
-                } else {
-                    // 위쪽 방향
-                    targetX = targetBounds.centerX;
-                    targetY = targetBounds.bottom;
-                }
-            }
-
+            // 가장 가까운 두 점 반환
             return {
-                sourceX, sourceY,
-                targetX, targetY
+                sourceX: closestSourcePoint.x,
+                sourceY: closestSourcePoint.y,
+                targetX: closestTargetPoint.x,
+                targetY: closestTargetPoint.y
             };
         }
 
