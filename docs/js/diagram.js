@@ -176,6 +176,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 y: event.clientY - position.y
             };
 
+            // 요소를 맨 앞으로 가져오기 (SVG에서는 나중에 추가된 요소가 앞에 표시됨)
+            // 부모 노드에서 요소를 제거한 후 다시 추가
+            const parent = selectedElement.parentNode;
+            parent.removeChild(selectedElement);
+            parent.appendChild(selectedElement);
+
             // 전역 이벤트 리스너 추가
             document.addEventListener('mousemove', drag);
             document.addEventListener('mouseup', endDrag);
