@@ -1,5 +1,5 @@
-
 // Architecture diagram elements and connectors
+
 // 다이어그램 요소 정의
 const diagramElements = {
   // 제목
@@ -7,7 +7,7 @@ const diagramElements = {
     type: 'title',
     content: [
       { type: 'text', x: 500, y: 50, fontFamily: 'Arial', fontSize: 28, textAnchor: 'middle', fontWeight: 'bold', text: 'Toast-cli Architecture' },
-      { type: 'text', x: 500, y: 90, fontFamily: 'Arial', fontSize: 18, textAnchor: 'middle', fill: '#6c757d', text: 'Plugin-based Design Pattern v3.1.0' }
+      { type: 'text', x: 500, y: 90, fontFamily: 'Arial', fontSize: 18, textAnchor: 'middle', fill: '#6c757d', text: 'Plugin-based Design Pattern v3.2.0' }
     ]
   },
   // 메인 CLI 박스

@@ -78,7 +78,7 @@ pip install toast-cli
 pip install --upgrade toast-cli
 
 # Install specific version
-pip install toast-cli==3.1.0
+pip install toast-cli==3.2.0
 
 # Install development version from GitHub
 pip install git+https://github.com/opspresso/toast-cli.git
