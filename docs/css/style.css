@@ -427,13 +427,38 @@ nav {
 .architecture-diagram {
     margin: 3rem 0;
     text-align: center;
+    overflow: hidden;
+    position: relative;
 }
 
-.architecture-diagram img {
+.interactive-diagram {
     max-width: 100%;
     height: auto;
     box-shadow: var(--shadow);
     border-radius: var(--border-radius);
+    background-color: #f8f9fa;
+}
+
+.diagram-element {
+    cursor: grab;
+}
+
+.diagram-element:hover rect,
+.diagram-element:hover text {
+    filter: brightness(1.05);
+}
+
+.diagram-element.dragging {
+    cursor: grabbing;
+}
+
+.diagram-element.dragging rect {
+    filter: brightness(1.1);
+    stroke-width: 2.5px;
+}
+
+.diagram-connector {
+    pointer-events: none;
 }
 
 .caption {
