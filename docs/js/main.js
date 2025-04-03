@@ -9,6 +9,181 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Architecture diagram elements and connectors
+    // 다이어그램 요소 정의
+    const diagramElements = {
+        // 제목
+        'title': {
+            type: 'title',
+            content: [
+                { type: 'text', x: 400, y: 40, fontFamily: 'Arial', fontSize: 24, textAnchor: 'middle', fontWeight: 'bold', text: 'Toast-cli Architecture' },
+                { type: 'text', x: 400, y: 70, fontFamily: 'Arial', fontSize: 16, textAnchor: 'middle', fill: '#6c757d', text: 'Plugin-based Design Pattern v3.1.0' }
+            ]
+        },
+        // 메인 CLI 박스
+        'main-cli': {
+            type: 'box',
+            rect: { x: 200, y: 100, width: 400, height: 80, rx: 10, fill: '#e9f5ff', stroke: '#007bff', strokeWidth: 2 },
+            content: [
+                { type: 'text', x: 400, y: 145, fontFamily: 'Arial', fontSize: 18, textAnchor: 'middle', text: 'Main CLI Application' },
+                { type: 'text', x: 400, y: 165, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', fill: '#6c757d', text: '(toast/__init__.py)' }
+            ]
+        },
+        // BasePlugin 박스
+        'base-plugin': {
+            type: 'box',
+            rect: { x: 250, y: 230, width: 300, height: 70, rx: 10, fill: '#e9f5ff', stroke: '#007bff', strokeWidth: 2 },
+            content: [
+                { type: 'text', x: 400, y: 270, fontFamily: 'Arial', fontSize: 16, textAnchor: 'middle', text: 'BasePlugin' },
+                { type: 'text', x: 400, y: 290, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '(toast/plugins/base_plugin.py)' }
+            ]
+        },
+        // 플러그인 행 1
+        'am-plugin': {
+            type: 'box',
+            rect: { x: 50, y: 350, width: 140, height: 50, rx: 6, fill: '#ffffff', stroke: '#007bff', strokeWidth: 1 },
+            content: [
+                { type: 'text', x: 120, y: 380, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', text: 'am_plugin.py' }
+            ]
+        },
+        'ctx-plugin': {
+            type: 'box',
+            rect: { x: 200, y: 350, width: 140, height: 50, rx: 6, fill: '#ffffff', stroke: '#007bff', strokeWidth: 1 },
+            content: [
+                { type: 'text', x: 270, y: 380, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', text: 'ctx_plugin.py' }
+            ]
+        },
+        'env-plugin': {
+            type: 'box',
+            rect: { x: 350, y: 350, width: 140, height: 50, rx: 6, fill: '#ffffff', stroke: '#007bff', strokeWidth: 1 },
+            content: [
+                { type: 'text', x: 420, y: 380, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', text: 'env_plugin.py' }
+            ]
+        },
+        'git-plugin': {
+            type: 'box',
+            rect: { x: 500, y: 350, width: 140, height: 50, rx: 6, fill: '#ffffff', stroke: '#007bff', strokeWidth: 1 },
+            content: [
+                { type: 'text', x: 570, y: 380, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', text: 'git_plugin.py' }
+            ]
+        },
+        'utils': {
+            type: 'box',
+            rect: { x: 650, y: 350, width: 100, height: 50, rx: 6, fill: '#ffffff', stroke: '#007bff', strokeWidth: 1 },
+            content: [
+                { type: 'text', x: 700, y: 380, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', text: 'utils.py' }
+            ]
+        },
+        // 플러그인 행 2
+        'cdw-plugin': {
+            type: 'box',
+            rect: { x: 50, y: 410, width: 140, height: 50, rx: 6, fill: '#ffffff', stroke: '#007bff', strokeWidth: 1 },
+            content: [
+                { type: 'text', x: 120, y: 440, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', text: 'cdw_plugin.py' }
+            ]
+        },
+        'dot-plugin': {
+            type: 'box',
+            rect: { x: 200, y: 410, width: 140, height: 50, rx: 6, fill: '#ffffff', stroke: '#007bff', strokeWidth: 1 },
+            content: [
+                { type: 'text', x: 270, y: 440, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', text: 'dot_plugin.py' }
+            ]
+        },
+        'region-plugin': {
+            type: 'box',
+            rect: { x: 350, y: 410, width: 140, height: 50, rx: 6, fill: '#ffffff', stroke: '#007bff', strokeWidth: 1 },
+            content: [
+                { type: 'text', x: 420, y: 440, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', text: 'region_plugin.py' }
+            ]
+        },
+        // 플러그인 명령 박스
+        'plugin-commands': {
+            type: 'box',
+            rect: { x: 150, y: 490, width: 500, height: 70, rx: 6, fill: '#f8f9fa', stroke: '#6c757d', strokeWidth: 1 },
+            content: [
+                { type: 'text', x: 400, y: 515, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', fontWeight: 'bold', text: 'Plugin Commands' },
+                { type: 'text', x: 400, y: 540, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: 'am | cdw | ctx | dot | env | git | region | version' }
+            ]
+        },
+        // 외부 의존성 박스
+        'dependencies': {
+            type: 'box',
+            rect: { x: 40, y: 100, width: 130, height: 180, rx: 6, fill: '#f8f9fa', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '5,3' },
+            content: [
+                { type: 'text', x: 105, y: 125, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', fontWeight: 'bold', text: 'Dependencies' },
+                { type: 'text', x: 105, y: 150, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '• Click' },
+                { type: 'text', x: 105, y: 170, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '• importlib' },
+                { type: 'text', x: 105, y: 190, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '• pkgutil' },
+                { type: 'text', x: 105, y: 210, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '• fzf' },
+                { type: 'text', x: 105, y: 230, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '• jq' },
+                { type: 'text', x: 105, y: 250, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '• aws-cli' },
+                { type: 'text', x: 105, y: 270, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '• kubectl' }
+            ]
+        },
+        // 외부 도구 박스
+        'ui': {
+            type: 'box',
+            rect: { x: 630, y: 100, width: 130, height: 180, rx: 6, fill: '#f8f9fa', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '5,3' },
+            content: [
+                { type: 'text', x: 695, y: 125, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', fontWeight: 'bold', text: 'User Interface' },
+                { type: 'text', x: 695, y: 150, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '• CLI commands' },
+                { type: 'text', x: 695, y: 170, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '• Interactive' },
+                { type: 'text', x: 695, y: 190, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '  selection (fzf)' },
+                { type: 'text', x: 695, y: 210, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '• Colorized JSON' },
+                { type: 'text', x: 695, y: 230, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '  output (jq)' },
+                { type: 'text', x: 695, y: 250, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '• Custom help' }
+            ]
+        },
+        // 통합 박스
+        'integration': {
+            type: 'box',
+            rect: { x: 500, y: 410, width: 250, height: 50, rx: 6, fill: '#f8f9fa', stroke: '#28a745', strokeWidth: 1 },
+            content: [
+                { type: 'text', x: 625, y: 440, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', fill: '#28a745', text: 'AWS SSM Parameter Store Integration' }
+            ]
+        },
+        // 범례
+        'legend': {
+            type: 'legend',
+            content: [
+                { type: 'rect', x: 200, y: 563, width: 15, height: 15, rx: 2, fill: '#e9f5ff', stroke: '#007bff', strokeWidth: 1 },
+                { type: 'text', x: 225, y: 575, fontFamily: 'Arial', fontSize: 12, text: 'Core Components' },
+                { type: 'rect', x: 335, y: 563, width: 15, height: 15, rx: 2, fill: '#ffffff', stroke: '#007bff', strokeWidth: 1 },
+                { type: 'text', x: 360, y: 575, fontFamily: 'Arial', fontSize: 12, text: 'Plugins' },
+                { type: 'rect', x: 450, y: 563, width: 15, height: 15, rx: 2, fill: '#f8f9fa', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '5,3' },
+                { type: 'text', x: 475, y: 575, fontFamily: 'Arial', fontSize: 12, text: 'External' },
+                { type: 'rect', x: 565, y: 563, width: 15, height: 15, rx: 2, fill: '#f8f9fa', stroke: '#28a745', strokeWidth: 1 },
+                { type: 'text', x: 590, y: 575, fontFamily: 'Arial', fontSize: 12, text: 'Integrations' }
+            ]
+        }
+    };
+
+    // 연결선 정의
+    const diagramConnectors = [
+        // 메인 CLI에서 BasePlugin으로
+        { from: 'main-cli', to: 'base-plugin', path: 'M400,180 C400,200 400,210 400,230', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
+
+        // BasePlugin에서 플러그인 행으로
+        { from: 'base-plugin', to: 'env-plugin', path: 'M400,300 C400,315 400,330 400,345', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
+        { from: 'base-plugin', to: 'am-plugin', path: 'M400,325 C300,325 200,325 120,325 C120,330 120,335 120,345', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
+        { from: 'base-plugin', to: 'utils', path: 'M400,325 C500,325 600,325 700,325 C700,330 700,335 700,345', stroke: '#007bff', strokeWidth: 2, fill: 'none' },
+
+        // 플러그인 행 1에서 행 2로 연결
+        { from: 'am-plugin', to: 'cdw-plugin', path: 'M120,400 C120,403 120,407 120,410', stroke: '#007bff', strokeWidth: 1, fill: 'none' },
+        { from: 'ctx-plugin', to: 'dot-plugin', path: 'M270,400 C270,403 270,407 270,410', stroke: '#007bff', strokeWidth: 1, fill: 'none' },
+        { from: 'env-plugin', to: 'region-plugin', path: 'M420,400 C420,403 420,407 420,410', stroke: '#007bff', strokeWidth: 1, fill: 'none' },
+        { from: 'git-plugin', to: 'integration', path: 'M570,400 C570,403 570,407 570,410 C585,410 600,410 625,410', stroke: '#007bff', strokeWidth: 1, strokeDasharray: '4,2', fill: 'none' },
+
+        // 플러그인에서 명령으로 연결
+        { from: 'region-plugin', to: 'plugin-commands', path: 'M400,465 C400,470 400,480 400,485', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '4,2', fill: 'none' },
+
+        // 외부 의존성에서 메인 CLI로
+        { from: 'dependencies', to: 'main-cli', path: 'M170,140 C180,140 185,140 195,140', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '4,2', fill: 'none' },
+
+        // 메인 CLI에서 UI로
+        { from: 'main-cli', to: 'ui', path: 'M600,140 C610,140 615,140 625,140', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '4,2', fill: 'none' }
+    ];
+
     // Architecture diagram drag functionality
     const interactiveDiagram = document.querySelector('.interactive-diagram');
     if (interactiveDiagram) {
@@ -23,6 +198,95 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // SVG 네임스페이스
         const SVG_NS = 'http://www.w3.org/2000/svg';
+
+        // 다이어그램 요소 생성 함수
+        function createDiagramElements() {
+            // 모든 요소 생성
+            for (const [id, element] of Object.entries(diagramElements)) {
+                const group = document.createElementNS(SVG_NS, 'g');
+                group.classList.add('diagram-element');
+                group.setAttribute('data-element-type', element.type);
+                group.setAttribute('data-element-id', id);
+
+                // 박스 요소 생성
+                if (element.rect) {
+                    const rect = document.createElementNS(SVG_NS, 'rect');
+                    rect.setAttribute('x', element.rect.x);
+                    rect.setAttribute('y', element.rect.y);
+                    rect.setAttribute('width', element.rect.width);
+                    rect.setAttribute('height', element.rect.height);
+                    rect.setAttribute('rx', element.rect.rx);
+                    rect.setAttribute('fill', element.rect.fill);
+                    rect.setAttribute('stroke', element.rect.stroke);
+                    rect.setAttribute('stroke-width', element.rect.strokeWidth);
+                    if (element.rect.strokeDasharray) {
+                        rect.setAttribute('stroke-dasharray', element.rect.strokeDasharray);
+                    }
+                    group.appendChild(rect);
+                }
+
+                // 내용 요소 생성
+                if (element.content) {
+                    element.content.forEach(item => {
+                        if (item.type === 'text') {
+                            const text = document.createElementNS(SVG_NS, 'text');
+                            text.setAttribute('x', item.x);
+                            text.setAttribute('y', item.y);
+                            text.setAttribute('font-family', item.fontFamily);
+                            text.setAttribute('font-size', item.fontSize);
+                            text.setAttribute('text-anchor', item.textAnchor);
+                            if (item.fontWeight) {
+                                text.setAttribute('font-weight', item.fontWeight);
+                            }
+                            if (item.fill) {
+                                text.setAttribute('fill', item.fill);
+                            }
+                            text.textContent = item.text;
+                            group.appendChild(text);
+                        } else if (item.type === 'rect') {
+                            const rect = document.createElementNS(SVG_NS, 'rect');
+                            rect.setAttribute('x', item.x);
+                            rect.setAttribute('y', item.y);
+                            rect.setAttribute('width', item.width);
+                            rect.setAttribute('height', item.height);
+                            rect.setAttribute('rx', item.rx);
+                            rect.setAttribute('fill', item.fill);
+                            rect.setAttribute('stroke', item.stroke);
+                            rect.setAttribute('stroke-width', item.strokeWidth);
+                            if (item.strokeDasharray) {
+                                rect.setAttribute('stroke-dasharray', item.strokeDasharray);
+                            }
+                            group.appendChild(rect);
+                        }
+                    });
+                }
+
+                interactiveDiagram.appendChild(group);
+            }
+
+            // 연결선 생성
+            diagramConnectors.forEach((connector, index) => {
+                const group = document.createElementNS(SVG_NS, 'g');
+                group.classList.add('diagram-connector');
+                group.setAttribute('data-from', connector.from);
+                group.setAttribute('data-to', connector.to);
+
+                const path = document.createElementNS(SVG_NS, 'path');
+                path.setAttribute('d', connector.path);
+                path.setAttribute('stroke', connector.stroke);
+                path.setAttribute('stroke-width', connector.strokeWidth);
+                path.setAttribute('fill', connector.fill);
+                if (connector.strokeDasharray) {
+                    path.setAttribute('stroke-dasharray', connector.strokeDasharray);
+                }
+
+                group.appendChild(path);
+                interactiveDiagram.appendChild(group);
+            });
+        }
+
+        // 다이어그램 요소 생성
+        createDiagramElements();
 
         // 모든 다이어그램 요소에 대해 초기 위치 저장
         document.querySelectorAll('.diagram-element').forEach(element => {
