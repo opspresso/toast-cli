@@ -97,7 +97,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     path.setAttribute('stroke-dasharray', connector.strokeDasharray);
                 }
 
+                // 시작점과 끝점에 원 추가
+                const startCircle = document.createElementNS(SVG_NS, 'circle');
+                startCircle.classList.add('connector-point', 'start-point');
+                startCircle.setAttribute('r', connector.strokeWidth); // 기본 크기는 선 두께와 동일
+                startCircle.setAttribute('fill', connector.stroke);
+                startCircle.setAttribute('data-original-r', connector.strokeWidth); // 원래 크기 저장
+
+                const endCircle = document.createElementNS(SVG_NS, 'circle');
+                endCircle.classList.add('connector-point', 'end-point');
+                endCircle.setAttribute('r', connector.strokeWidth); // 기본 크기는 선 두께와 동일
+                endCircle.setAttribute('fill', connector.stroke);
+                endCircle.setAttribute('data-original-r', connector.strokeWidth); // 원래 크기 저장
+
                 group.appendChild(path);
+                group.appendChild(startCircle);
+                group.appendChild(endCircle);
                 interactiveDiagram.appendChild(group);
             });
 
@@ -188,11 +203,43 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // 연결된 선 업데이트
             updateConnections(id);
+
+            // 이동 중인 요소와 연결된 모든 연결선의 점 크기 확대
+            if (connections[id]) {
+                connections[id].forEach(connection => {
+                    const { connector, isFrom } = connection;
+
+                    // 이동 중인 요소와 연결된 점 찾기
+                    const pointSelector = isFrom ? '.start-point' : '.end-point';
+                    const point = connector.querySelector(pointSelector);
+
+                    if (point) {
+                        const originalR = parseFloat(point.getAttribute('data-original-r'));
+                        point.setAttribute('r', originalR * 1.5); // 원래 크기의 1.5배로 설정
+                    }
+                });
+            }
         }
 
         // 드래그 종료 함수
         function endDrag() {
             if (!selectedElement) return;
+
+            const id = selectedElement.getAttribute('data-element-id');
+            if (id && connections[id]) {
+                // 모든 연결된 점의 크기를 원래대로 복원
+                connections[id].forEach(connection => {
+                    const { connector } = connection;
+
+                    // 모든 점 찾기
+                    const points = connector.querySelectorAll('.connector-point');
+
+                    points.forEach(point => {
+                        const originalR = parseFloat(point.getAttribute('data-original-r'));
+                        point.setAttribute('r', originalR); // 원래 크기로 복원
+                    });
+                });
+            }
 
             // 스타일 복원
             selectedElement.style.cursor = 'grab';
@@ -718,6 +765,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (path) {
                     path.setAttribute('d', pathData);
                 }
+
+                // 시작점과 끝점 원 위치 설정
+                const startCircle = connector.querySelector('.start-point');
+                const endCircle = connector.querySelector('.end-point');
+
+                if (startCircle) {
+                    startCircle.setAttribute('cx', connectionPoints.sourceX);
+                    startCircle.setAttribute('cy', connectionPoints.sourceY);
+                }
+
+                if (endCircle) {
+                    endCircle.setAttribute('cx', connectionPoints.targetX);
+                    endCircle.setAttribute('cy', connectionPoints.targetY);
+                }
             });
         }
 
@@ -766,40 +827,21 @@ document.addEventListener('DOMContentLoaded', function() {
                         path.setAttribute('stroke-dasharray', strokeDasharray);
                     }
                 }
+
+                // 시작점과 끝점 원 위치 업데이트
+                const startCircle = connector.querySelector('.start-point');
+                const endCircle = connector.querySelector('.end-point');
+
+                if (startCircle) {
+                    startCircle.setAttribute('cx', connectionPoints.sourceX);
+                    startCircle.setAttribute('cy', connectionPoints.sourceY);
+                }
+
+                if (endCircle) {
+                    endCircle.setAttribute('cx', connectionPoints.targetX);
+                    endCircle.setAttribute('cy', connectionPoints.targetY);
+                }
             });
         }
-
-        // 사용자에게 드래그 가능함을 알리는 툴팁 추가
-        const tooltip = document.createElement('div');
-        tooltip.textContent = '박스를 드래그하여 이동할 수 있습니다';
-        tooltip.style.position = 'absolute';
-        tooltip.style.top = '10px';
-        tooltip.style.left = '50%';
-        tooltip.style.transform = 'translateX(-50%)';
-        tooltip.style.backgroundColor = 'rgba(0, 123, 255, 0.8)';
-        tooltip.style.color = 'white';
-        tooltip.style.padding = '5px 10px';
-        tooltip.style.borderRadius = '4px';
-        tooltip.style.fontSize = '14px';
-        tooltip.style.zIndex = '1000';
-        tooltip.style.opacity = '0';
-        tooltip.style.transition = 'opacity 0.3s ease';
-
-        document.querySelector('.architecture-diagram').appendChild(tooltip);
-
-        // 툴팁 표시
-        setTimeout(() => {
-            tooltip.style.opacity = '1';
-
-            // 3초 후 툴팁 숨기기
-            setTimeout(() => {
-                tooltip.style.opacity = '0';
-
-                // 페이드 아웃 후 제거
-                setTimeout(() => {
-                    tooltip.remove();
-                }, 300);
-            }, 3000);
-        }, 500);
     }
 });
