@@ -1,37 +1,29 @@
-# Toast CLI Development Guide
+# Project Code Guidelines
 
-## Basic Guidelines
-- Focus on specific problems, avoid complexity
-- Prefer standard libraries and documented patterns
-- Use meaningful names and clear organization
-- Handle errors and edge cases properly
-- Comment complex logic, keep code self-documenting
+## Core Principles
 
-## Commands
-```bash
-# Installation
-pip install -e .             # Development mode
-python -m build              # Build packages
-twine upload dist/*          # Publish to PyPI
+- **Focus on the problem**: Avoid unnecessary complexity or expanding the scope.
+- **Prefer standard solutions**: Use standard libraries and documented patterns before creating custom ones.
+- **Write clean code**: Use meaningful names and organize code clearly.
+- **Maintain consistent style**: Follow a consistent code style throughout the project. Use formatters (e.g. Prettier, Black) and linters (e.g. ESLint, Flake8) to enforce it.
+- **Handle errors gracefully**: Address edge cases and ensure robustness.
+- **Comment when needed**: Add comments for complex logic, but keep code self-explanatory whenever possible.
 
-# Running
-python -m toast              # Run from source
-toast                        # Run installed version
-```
+## Documentation Standards
 
-## Code Style
-- **Python**: >=3.6
-- **Type Hints**: Use typing module annotations
-- **Naming**:
-  - snake_case for functions, variables, files
-  - CamelCase for classes
-  - Plugins end with `_plugin.py`
-- **Imports**: Group by standard library, then third-party
-- **Documentation**: Docstrings for all functions and classes
-- **Error Handling**: Specific exceptions in try/except
+- Keep `README.md` and `ARCHITECTURE.md` up to date.
+- `README.md` should include:
+  - Project overview
+  - Setup instructions
+  - Usage examples
+- `ARCHITECTURE.md` should cover:
+  - System design
+  - Component relationships
+  - Data flow
 
-## Plugin Development
-- Extend BasePlugin class
-- Define name and help class variables
-- Implement execute() method
-- Place in toast/plugins/ directory
+## Testing Strategy
+
+- Write unit tests for individual functions and modules.
+- Add integration tests to validate interactions between components.
+- Ensure critical paths are well covered by tests.
+- Integrate automated testing into the development workflow.

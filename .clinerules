@@ -1,22 +1,29 @@
-# Project Guidelines
+# Project Code Guidelines
 
-## Core Guidelines
+## Core Principles
 
-- Focus on solving the specific problem - avoid unnecessary complexity or scope creep.
-- Use standard libraries and documented patterns first before creating custom solutions.
-- Write clean, well-structured code with meaningful names and clear organization.
-- Handle errors and edge cases properly to ensure code robustness.
-- Include helpful comments for complex logic while keeping code self-documenting.
+- **Focus on the problem**: Avoid unnecessary complexity or expanding the scope.
+- **Prefer standard solutions**: Use standard libraries and documented patterns before creating custom ones.
+- **Write clean code**: Use meaningful names and organize code clearly.
+- **Maintain consistent style**: Follow a consistent code style throughout the project. Use formatters (e.g. Prettier, Black) and linters (e.g. ESLint, Flake8) to enforce it.
+- **Handle errors gracefully**: Address edge cases and ensure robustness.
+- **Comment when needed**: Add comments for complex logic, but keep code self-explanatory whenever possible.
 
 ## Documentation Standards
 
-- Maintain up-to-date documentation in README.md and ARCHITECTURE.md
-- README.md should include project overview, setup instructions, and usage examples
-- ARCHITECTURE.md should document system design, component relationships, and data flow
+- Keep `README.md` and `ARCHITECTURE.md` up to date.
+- `README.md` should include:
+  - Project overview
+  - Setup instructions
+  - Usage examples
+- `ARCHITECTURE.md` should cover:
+  - System design
+  - Component relationships
+  - Data flow
 
 ## Testing Strategy
 
-- Write comprehensive unit tests for individual functions and modules
-- Implement integration tests to verify component interactions
-- Ensure adequate test coverage for critical code paths
-- Set up automated testing as part of the development workflow
+- Write unit tests for individual functions and modules.
+- Add integration tests to validate interactions between components.
+- Ensure critical paths are well covered by tests.
+- Integrate automated testing into the development workflow.
