@@ -2,6 +2,8 @@
 
 import click
 import subprocess
+import json
+from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
 
 class AmPlugin(BasePlugin):
@@ -15,8 +17,10 @@ class AmPlugin(BasePlugin):
         try:
             result = subprocess.run(["aws", "sts", "get-caller-identity"], capture_output=True, text=True)
             if result.returncode == 0:
-                formatted_json = subprocess.run(["jq", "-C", "."], input=result.stdout, capture_output=True, text=True)
-                click.echo(formatted_json.stdout)
+                # Parse JSON and print with rich
+                json_data = json.loads(result.stdout)
+                console = Console()
+                console.print_json(json.dumps(json_data))
             else:
                 click.echo("Error fetching AWS caller identity.")
         except Exception as e:

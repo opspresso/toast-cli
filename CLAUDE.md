@@ -36,7 +36,3 @@ All plugins should:
 - Define name and help class variables
 - Implement execute() method
 - Be placed in toast/plugins/ directory
-
-## Dependencies
-- Core: click
-- External tools: fzf, jq, aws-cli, kubectl

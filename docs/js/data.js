@@ -137,7 +137,7 @@ const diagramElements = {
     rect: { x: 50, y: 280, width: 200, height: 80, rx: 6, fill: '#f8f9fa', stroke: '#6c757d', strokeWidth: 1, strokeDasharray: '5,3' },
     content: [
       { type: 'text', x: 150, y: 310, fontFamily: 'Arial', fontSize: 16, textAnchor: 'middle', fontWeight: 'bold', text: 'Dependencies' },
-      { type: 'text', x: 150, y: 335, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: 'Click, importlib, pkgutil, fzf, jq, aws-cli, kubectl' }
+      { type: 'text', x: 150, y: 335, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: 'Click, importlib, pkgutil, fzf, rich, aws-cli, kubectl' }
     ]
   },
   // 범례

@@ -152,7 +152,7 @@ The `am` command shows the current AWS identity:
 
 1. **Identity Retrieval**:
    - Executes `aws sts get-caller-identity` to get the current AWS identity
-   - Uses `jq` to format the JSON output for better readability
+   - Uses `rich` to format the JSON output for better readability
    - Displays the account ID, user ARN, and user ID
 
 2. **Error Handling**:
@@ -231,7 +231,7 @@ The `env` command manages AWS profiles:
 
 4. **Identity Verification**:
    - After switching profiles, verifies the new identity using `aws sts get-caller-identity`
-   - Displays the new identity information in formatted JSON
+   - Displays the new identity information in formatted JSON using `rich`
 
 #### RegionPlugin (region command)
 
@@ -297,9 +297,10 @@ The plugin system has the following external dependencies:
 - subprocess: Execution of external commands
 - External tools used by various plugins:
   - fzf: Interactive selection in terminal
-  - jq: JSON processing for formatted output
   - aws-cli: AWS command line interface
   - kubectl: Kubernetes command line tool
+- Python packages:
+  - rich: Terminal formatting and JSON output
 
 ## Adding New Plugins
 

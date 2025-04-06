@@ -43,7 +43,7 @@ Toast is a Python-based CLI utility with a plugin architecture that simplifies t
 
 * **Interactive Interface**
   - FZF-powered selection menus
-  - Formatted JSON output with JQ
+  - Formatted JSON output with Rich
 
 ## Plugin Architecture
 
@@ -64,9 +64,10 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed information about the design
 * Click package for CLI interface
 * External tools used by various plugins:
   - fzf: Interactive selection in terminal
-  - jq: JSON processing for formatted output
   - aws-cli: AWS command line interface
   - kubectl: Kubernetes command line tool
+* Python packages:
+  - rich: Terminal formatting and JSON output
 
 ### Installation Methods
 
