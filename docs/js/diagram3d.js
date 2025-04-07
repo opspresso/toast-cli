@@ -88,12 +88,19 @@ document.addEventListener('DOMContentLoaded', function() {
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.screenSpacePanning = false;
+        controls.screenSpacePanning = true; // 화면 공간 패닝 활성화
         controls.minDistance = 100;
         controls.maxDistance = 1500;
         controls.maxPolarAngle = Math.PI / 1.5;
         controls.autoRotate = autoRotate;
         controls.autoRotateSpeed = 0.5;
+
+        // 마우스 버튼 설정 변경
+        controls.mouseButtons = {
+            LEFT: THREE.MOUSE.ROTATE,    // 왼쪽 버튼: 회전
+            MIDDLE: THREE.MOUSE.DOLLY,   // 중간 버튼: 줌
+            RIGHT: THREE.MOUSE.PAN       // 오른쪽 버튼: 패닝(이동)
+        };
 
         // 레이캐스터 설정 (마우스 상호작용용)
         raycaster = new THREE.Raycaster();
