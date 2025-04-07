@@ -48,6 +48,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 3D 객체 매핑 (ID -> 3D 객체)
     const objectMap = {};
+    // 연결점 정보 저장 (ID -> 연결점 객체들)
+    const connectionPointsMap = {};
     // 연결선 정보 저장
     const connections = [];
 
@@ -129,6 +131,57 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // 애니메이션 시작
         animate();
+    }
+
+    // 연결점 생성 함수
+    function createConnectionPoints(box, id) {
+        const width = box.geometry.parameters.width;
+        const height = box.geometry.parameters.height;
+        const depth = box.geometry.parameters.depth;
+        const position = box.position.clone();
+
+        // 연결점 크기
+        const pointSize = 3;
+
+        // 연결점 재질 (반투명 구체)
+        const pointMaterial = new THREE.MeshBasicMaterial({
+            color: 0x007bff,
+            transparent: true,
+            opacity: 0.7
+        });
+
+        // 연결점 위치 (좌, 우, 상, 하)
+        const points = {
+            left: new THREE.Vector3(position.x - width/2, position.y, position.z),
+            right: new THREE.Vector3(position.x + width/2, position.y, position.z),
+            top: new THREE.Vector3(position.x, position.y + height/2, position.z),
+            bottom: new THREE.Vector3(position.x, position.y - height/2, position.z)
+        };
+
+        // 연결점 객체 생성
+        const connectionPoints = {};
+
+        for (const [direction, pos] of Object.entries(points)) {
+            const pointGeometry = new THREE.SphereGeometry(pointSize, 8, 8);
+            const point = new THREE.Mesh(pointGeometry, pointMaterial);
+            point.position.copy(pos);
+            point.userData = {
+                isConnectionPoint: true,
+                direction: direction,
+                parentId: id
+            };
+
+            // 씬에 추가
+            groups.connectors.add(point);
+
+            // 연결점 객체 저장
+            connectionPoints[direction] = point;
+        }
+
+        // 연결점 맵에 저장
+        connectionPointsMap[id] = connectionPoints;
+
+        return connectionPoints;
     }
 
     // 요소 생성 함수
@@ -271,6 +324,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // 객체 맵에 저장
             objectMap[id] = box;
+
+            // 연결점 생성
+            createConnectionPoints(box, id);
         }
     }
 
@@ -330,6 +386,44 @@ document.addEventListener('DOMContentLoaded', function() {
         return mesh;
     }
 
+    // 가장 적합한 연결점 선택 함수 (가장 가까운 점 기준)
+    function findBestConnectionPoints(sourceObj, targetObj) {
+        // 소스와 타겟 객체의 연결점 가져오기
+        const sourcePoints = connectionPointsMap[sourceObj.userData.id];
+        const targetPoints = connectionPointsMap[targetObj.userData.id];
+
+        if (!sourcePoints || !targetPoints) {
+            console.error('연결점을 찾을 수 없습니다:', sourceObj.userData.id, targetObj.userData.id);
+            return null;
+        }
+
+        // 가장 가까운 연결점 쌍 찾기
+        let bestSourcePoint = null;
+        let bestTargetPoint = null;
+        let minDistance = Infinity;
+
+        // 각 소스 연결점에 대해
+        for (const [sourceDir, sourcePoint] of Object.entries(sourcePoints)) {
+            // 각 타겟 연결점에 대해
+            for (const [targetDir, targetPoint] of Object.entries(targetPoints)) {
+                // 두 연결점 사이의 거리 계산
+                const distance = sourcePoint.position.distanceTo(targetPoint.position);
+
+                // 가장 짧은 거리를 가진 연결점 쌍 선택
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    bestSourcePoint = sourcePoint;
+                    bestTargetPoint = targetPoint;
+                }
+            }
+        }
+
+        return {
+            source: bestSourcePoint,
+            target: bestTargetPoint
+        };
+    }
+
     // 연결선 생성 함수
     function createConnectors() {
         diagramConnectors.forEach((connector, index) => {
@@ -342,33 +436,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const color = new THREE.Color(connector.stroke);
             const lineWidth = connector.strokeWidth * 0.5;
 
-            // 시작점과 끝점 위치 계산
-            const sourcePos = sourceObj.position.clone();
-            const targetPos = targetObj.position.clone();
+            // 가장 적합한 연결점 선택
+            const connectionPoints = findBestConnectionPoints(sourceObj, targetObj);
 
-            // 연결선 방향 벡터
-            const direction = new THREE.Vector3().subVectors(targetPos, sourcePos).normalize();
+            if (!connectionPoints) return;
 
-            // 시작점과 끝점 조정 (객체 표면에서 시작/종료)
-            const sourceSize = new THREE.Vector3(
-                sourceObj.geometry.parameters.width,
-                sourceObj.geometry.parameters.height,
-                sourceObj.geometry.parameters.depth
-            );
-
-            const targetSize = new THREE.Vector3(
-                targetObj.geometry.parameters.width,
-                targetObj.geometry.parameters.height,
-                targetObj.geometry.parameters.depth
-            );
-
-            // 시작점 조정
-            const sourceOffset = calculateIntersectionOffset(direction.clone().negate(), sourceSize);
-            sourcePos.add(sourceOffset);
-
-            // 끝점 조정
-            const targetOffset = calculateIntersectionOffset(direction, targetSize);
-            targetPos.add(targetOffset);
+            // 시작점과 끝점 위치
+            const sourcePos = connectionPoints.source.position.clone();
+            const targetPos = connectionPoints.target.position.clone();
 
             // 곡선 제어점 계산
             const distance = sourcePos.distanceTo(targetPos);
@@ -390,10 +465,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
             // 선 재질 생성
-            let material;
-
-            // 선 재질 생성 - 점선 효과는 현재 버전에서 제대로 지원되지 않아 일반 선으로 대체
-            material = new THREE.LineBasicMaterial({
+            const material = new THREE.LineBasicMaterial({
                 color: color,
                 linewidth: lineWidth,
                 opacity: 0.6,
@@ -409,7 +481,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 sourceId: connector.from,
                 targetId: connector.to,
                 sourceObj,
-                targetObj
+                targetObj,
+                sourcePoint: connectionPoints.source,
+                targetPoint: connectionPoints.target
             });
 
             // 씬에 추가
@@ -437,8 +511,46 @@ document.addEventListener('DOMContentLoaded', function() {
         // 가장 작은 거리 선택 (첫 교차점)
         const minDistance = Math.min(distanceX, distanceY, distanceZ);
 
-        // 교차점까지의 오프셋 계산
-        return direction.clone().multiplyScalar(minDistance);
+        // 교차하는 면 결정
+        let faceNormal = new THREE.Vector3();
+        let faceIndex = 0; // 0: X축, 1: Y축, 2: Z축
+
+        if (minDistance === distanceX) {
+            // X축 면과 교차
+            faceNormal.set(Math.sign(direction.x), 0, 0);
+            faceIndex = 0;
+        } else if (minDistance === distanceY) {
+            // Y축 면과 교차
+            faceNormal.set(0, Math.sign(direction.y), 0);
+            faceIndex = 1;
+        } else {
+            // Z축 면과 교차
+            faceNormal.set(0, 0, Math.sign(direction.z));
+            faceIndex = 2;
+        }
+
+        // 교차점까지의 오프셋 계산 (방향 벡터 * 최소 거리)
+        const intersectionOffset = direction.clone().multiplyScalar(minDistance);
+
+        // 항상 옆면(X축 또는 Y축 면)을 통과하도록 강제 설정
+        // Z축 면과 교차하는 경우, 가장 가까운 옆면으로 변경
+        if (faceIndex === 2) {
+            // Z축 면과 교차하는 경우, X축 또는 Y축 면으로 변경
+            // X축과 Y축 중 더 가까운 면 선택
+            if (distanceX < distanceY) {
+                // X축 면이 더 가까움
+                intersectionOffset.x = Math.sign(direction.x) * halfSize.x;
+                intersectionOffset.y = direction.y * (halfSize.x / absDir.x);
+                intersectionOffset.z = direction.z * (halfSize.x / absDir.x);
+            } else {
+                // Y축 면이 더 가까움
+                intersectionOffset.x = direction.x * (halfSize.y / absDir.y);
+                intersectionOffset.y = Math.sign(direction.y) * halfSize.y;
+                intersectionOffset.z = direction.z * (halfSize.y / absDir.y);
+            }
+        }
+
+        return intersectionOffset;
     }
 
     // 요소 이름 추출 함수
@@ -575,6 +687,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 연결선 불투명도 증가
                 conn.line.material.opacity = 1;
 
+                // 연결점 강조 (크기 증가 및 색상 변경)
+                if (conn.sourcePoint) {
+                    conn.sourcePoint.scale.set(1.5, 1.5, 1.5);
+                    conn.sourcePoint.material.color.set(0xff0000); // 빨간색으로 변경
+                    conn.sourcePoint.material.opacity = 1;
+                }
+
+                if (conn.targetPoint) {
+                    conn.targetPoint.scale.set(1.5, 1.5, 1.5);
+                    conn.targetPoint.material.color.set(0xff0000); // 빨간색으로 변경
+                    conn.targetPoint.material.opacity = 1;
+                }
+
                 // 연결된 다른 객체도 약간 강조
                 const otherObj = conn.sourceId === id ? conn.targetObj : conn.sourceObj;
                 otherObj.scale.set(1.02, 1.02, 1.02);
@@ -587,6 +712,19 @@ document.addEventListener('DOMContentLoaded', function() {
         connections.forEach(conn => {
             // 연결선 불투명도 원래대로
             conn.line.material.opacity = 0.6;
+
+            // 연결점 원래대로
+            if (conn.sourcePoint) {
+                conn.sourcePoint.scale.set(1, 1, 1);
+                conn.sourcePoint.material.color.set(0x007bff); // 원래 색상으로 복원
+                conn.sourcePoint.material.opacity = 0.7;
+            }
+
+            if (conn.targetPoint) {
+                conn.targetPoint.scale.set(1, 1, 1);
+                conn.targetPoint.material.color.set(0x007bff); // 원래 색상으로 복원
+                conn.targetPoint.material.opacity = 0.7;
+            }
 
             // 연결된 객체들 크기 원래대로
             if (conn.sourceObj !== hoveredObject) {
