@@ -97,8 +97,10 @@ document.addEventListener('DOMContentLoaded', function() {
         raycaster = new THREE.Raycaster();
         mouse = new THREE.Vector2();
 
-        // 그룹 추가
+        // 그룹 추가 및 중앙 정렬
         Object.values(groups).forEach(group => {
+            // 그룹을 중앙으로 이동
+            group.position.set(0, 0, 0);
             scene.add(group);
         });
 
@@ -131,6 +133,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 요소 생성 함수
     function createElements() {
+        // 모든 요소의 중심점 계산을 위한 변수
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        // 먼저 모든 요소의 위치를 파악하여 중심점 계산
+        for (const [id, element] of Object.entries(diagramElements)) {
+            if (id === 'title' || id === 'legend') continue;
+
+            if (element.rect) {
+                const x = element.rect.x - 500;
+                const y = -element.rect.y + 400;
+                const width = element.rect.width;
+                const height = element.rect.height;
+
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x + width);
+                minY = Math.min(minY, y - height);
+                maxY = Math.max(maxY, y);
+            }
+        }
+
+        // 중심점 계산
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+
         // 모든 요소 생성
         for (const [id, element] of Object.entries(diagramElements)) {
             let group;
@@ -162,8 +188,8 @@ document.addEventListener('DOMContentLoaded', function() {
             let x = 0, y = 0, width = 100, height = 50, rx = 0;
 
             if (element.rect) {
-                x = element.rect.x - 500; // 중앙 기준으로 조정
-                y = -element.rect.y + 400; // Y축 반전 및 조정
+                x = element.rect.x - 500 - centerX; // 중앙 기준으로 조정
+                y = -element.rect.y + 400 - centerY; // Y축 반전 및 조정
                 width = element.rect.width;
                 height = element.rect.height;
                 rx = element.rect.rx || 0;
@@ -209,8 +235,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 element.content.forEach(item => {
                     if (item.type === 'text') {
                         // 텍스트 위치 계산
-                        const textX = item.x - 500; // 중앙 기준으로 조정
-                        const textY = -item.y + 400; // Y축 반전 및 조정
+                        const textX = item.x - 500 - centerX; // 중앙 기준으로 조정
+                        const textY = -item.y + 400 - centerY; // Y축 반전 및 조정
 
                         // 텍스트 내용에 따라 Z 위치 조정 (앞면에 표시)
                         const textZ = depth / 2 + 1; // 더 앞으로 나오도록 조정
