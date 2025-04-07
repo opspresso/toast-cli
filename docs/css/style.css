@@ -433,21 +433,31 @@ nav {
 
 .interactive-diagram {
     max-width: 100%;
-    height: 600px;
+    height: 800px;
     box-shadow: var(--shadow);
     border-radius: var(--border-radius);
     background-color: #f8f9fa;
     position: relative;
 }
 
-#3d-diagram-container {
+#diagram-2d, #diagram-3d {
     width: 100%;
-    height: 100%;
+    height: 800px;
+    position: relative;
+}
+
+#diagram-3d {
     cursor: grab;
 }
 
-#3d-diagram-container:active {
+#diagram-3d:active {
     cursor: grabbing;
+}
+
+#diagram-3d canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
 .diagram-controls {

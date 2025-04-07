@@ -55,13 +55,13 @@
                         </label>
                     </div>
                 </div>
-                <div id="2d-diagram-container">
+                <div id="diagram-2d">
                     <svg width="1000" height="800" xmlns="http://www.w3.org/2000/svg" class="interactive-diagram">
                         <rect width="1000" height="800" fill="#f8f9fa"/>
                         <!-- 다이어그램 요소들은 JavaScript에서 동적으로 생성됩니다 -->
                     </svg>
                 </div>
-                <div id="3d-diagram-container" class="interactive-diagram" style="display: none;"></div>
+                <div id="diagram-3d" class="interactive-diagram" style="display: none;"></div>
                 <p class="caption">Toast-cli Plugin Architecture (각 항목을 드래그하여 이동 가능)</p>
             </div>
 
@@ -216,8 +216,8 @@ class MyPlugin(BasePlugin):
         document.addEventListener('DOMContentLoaded', function() {
             const toggle2dBtn = document.getElementById('toggle-2d');
             const toggle3dBtn = document.getElementById('toggle-3d');
-            const container2d = document.getElementById('2d-diagram-container');
-            const container3d = document.getElementById('3d-diagram-container');
+            const container2d = document.getElementById('diagram-2d');
+            const container3d = document.getElementById('diagram-3d');
             const controls3d = document.querySelector('.controls-3d');
 
             // 2D 보기로 전환

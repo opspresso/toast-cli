@@ -1,7 +1,7 @@
 // 3D Architecture diagram functionality
 document.addEventListener('DOMContentLoaded', function() {
     // 3D 다이어그램 컨테이너 요소
-    const container = document.getElementById('3d-diagram-container');
+    const container = document.getElementById('diagram-3d');
     if (!container) return;
 
     // 툴팁 요소 생성
@@ -58,16 +58,20 @@ document.addEventListener('DOMContentLoaded', function() {
         scene.background = new THREE.Color('#f8f9fa');
 
         // 카메라 설정
-        const width = container.clientWidth;
-        const height = container.clientHeight;
+        const width = container.clientWidth || 1000;
+        const height = container.clientHeight || 800;
         camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 2000);
-        camera.position.set(0, 300, 800);
+        camera.position.set(0, 400, 1000);
 
         // 렌더러 설정
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(width, height);
         renderer.setPixelRatio(window.devicePixelRatio);
         container.appendChild(renderer.domElement);
+
+        // 디버깅을 위한 콘솔 로그
+        console.log('Three.js 초기화 완료');
+        console.log('컨테이너 크기:', width, height);
 
         // 조명 설정
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -613,7 +617,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 카메라 초기화 함수
     function resetCamera() {
         // 초기 카메라 위치로 애니메이션
-        const targetPosition = new THREE.Vector3(0, 300, 800);
+        const targetPosition = new THREE.Vector3(0, 400, 1000);
         const targetLookAt = new THREE.Vector3(0, 0, 0);
 
         // 애니메이션 설정
