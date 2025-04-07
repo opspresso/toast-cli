@@ -393,7 +393,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return mesh;
     }
 
-    // 가장 적합한 연결점 선택 함수 (가장 가까운 점 기준)
+    // 가장 적합한 연결점 선택 함수 (객체의 상대적 위치 기준)
     function findBestConnectionPoints(sourceObj, targetObj) {
         // 소스와 타겟 객체의 연결점 가져오기
         const sourcePoints = connectionPointsMap[sourceObj.userData.id];
@@ -404,30 +404,39 @@ document.addEventListener('DOMContentLoaded', function() {
             return null;
         }
 
-        // 가장 가까운 연결점 쌍 찾기
-        let bestSourcePoint = null;
-        let bestTargetPoint = null;
-        let minDistance = Infinity;
+        // 소스와 타겟 객체의 위치
+        const sourcePos = sourceObj.position.clone();
+        const targetPos = targetObj.position.clone();
 
-        // 각 소스 연결점에 대해
-        for (const [sourceDir, sourcePoint] of Object.entries(sourcePoints)) {
-            // 각 타겟 연결점에 대해
-            for (const [targetDir, targetPoint] of Object.entries(targetPoints)) {
-                // 두 연결점 사이의 거리 계산
-                const distance = sourcePoint.position.distanceTo(targetPoint.position);
+        // X축과 Y축의 거리 차이 계산
+        const deltaX = Math.abs(targetPos.x - sourcePos.x);
+        const deltaY = Math.abs(targetPos.y - sourcePos.y);
 
-                // 가장 짧은 거리를 가진 연결점 쌍 선택
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    bestSourcePoint = sourcePoint;
-                    bestTargetPoint = targetPoint;
-                }
-            }
+        // 객체 크기 정보
+        const sourceWidth = sourceObj.geometry.parameters.width;
+        const sourceHeight = sourceObj.geometry.parameters.height;
+        const targetWidth = targetObj.geometry.parameters.width;
+        const targetHeight = targetObj.geometry.parameters.height;
+
+        // 객체 간의 거리가 수직 방향으로 더 큰지 수평 방향으로 더 큰지 판단
+        // 객체 크기를 고려하여 판단 (객체가 넓을 경우 수평 연결 선호, 높을 경우 수직 연결 선호)
+        const isVerticalDominant = deltaY > deltaX * (sourceHeight / sourceWidth + targetHeight / targetWidth) / 2;
+
+        let sourceDir, targetDir;
+
+        if (isVerticalDominant) {
+            // 수직 방향이 우세한 경우 (위아래 연결)
+            sourceDir = targetPos.y > sourcePos.y ? 'top' : 'bottom';
+            targetDir = targetPos.y > sourcePos.y ? 'bottom' : 'top';
+        } else {
+            // 수평 방향이 우세한 경우 (좌우 연결)
+            sourceDir = targetPos.x > sourcePos.x ? 'right' : 'left';
+            targetDir = targetPos.x > sourcePos.x ? 'left' : 'right';
         }
 
         return {
-            source: bestSourcePoint,
-            target: bestTargetPoint
+            source: sourcePoints[sourceDir],
+            target: targetPoints[targetDir]
         };
     }
 
