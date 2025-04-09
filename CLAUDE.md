@@ -2,28 +2,49 @@
 
 ## Core Principles
 
-- **Focus on the problem**: Avoid unnecessary complexity or expanding the scope.
-- **Prefer standard solutions**: Use standard libraries and documented patterns before creating custom ones.
-- **Write clean code**: Use meaningful names and organize code clearly.
-- **Maintain consistent style**: Follow a consistent code style throughout the project. Use formatters (e.g. Prettier, Black) and linters (e.g. ESLint, Flake8) to enforce it.
-- **Handle errors gracefully**: Address edge cases and ensure robustness.
-- **Comment when needed**: Add comments for complex logic, but keep code self-explanatory whenever possible.
+- **Solve the right problem**: Avoid unnecessary complexity or scope creep.
+- **Favor standard solutions**: Use well-known libraries and documented patterns before writing custom code.
+- **Keep code clean and readable**: Use clear naming, logical structure, and avoid deeply nested logic.
+- **Ensure consistent style**: Apply formatters (e.g. Prettier, Black) and linters (e.g. ESLint, Flake8) across the codebase.
+- **Handle errors thoughtfully**: Consider edge cases and fail gracefully.
+- **Comment with intent**: Use comments to clarify non-obvious logic. Prefer expressive code over excessive comments.
+- **Design for change**: Structure code to be modular and adaptable to future changes.
+- **Keep dependencies shallow**: Minimize tight coupling between modules. Maintain clear boundaries.
+- **Fail fast and visibly**: Surface errors early with meaningful messages or logs.
+- **Automate where practical**: Use automation for formatting, testing, and deployment to reduce manual effort and error.
 
 ## Documentation Standards
 
-- Keep `README.md` and `ARCHITECTURE.md` up to date.
-- `README.md` should include:
-  - Project overview
-  - Setup instructions
-  - Usage examples
-- `ARCHITECTURE.md` should cover:
-  - System design
-  - Component relationships
-  - Data flow
+- Keep all documentation up to date and version-controlled.
+- Each document should serve a clear purpose:
+
+### `README.md`
+- Project overview and purpose
+- Setup and installation steps
+- Usage instructions or examples
+
+### `ARCHITECTURE.md`
+- High-level system design
+- Major components and their responsibilities
+- Data flow and integration points
+
+### `DATABASE.md`
+- Database schema and relationships
+- Key entities and fields
+- Indexing or optimization notes (if applicable)
+
+### `PAGES.md`
+- Page layout and navigation structure
+- Key components per page
+- User interactions and rendering logic
+
+### `SCENARIOS.md`
+- Representative user journeys
+- System behavior under different conditions (e.g. error states, edge cases)
 
 ## Testing Strategy
 
-- Write unit tests for individual functions and modules.
-- Add integration tests to validate interactions between components.
-- Ensure critical paths are well covered by tests.
-- Integrate automated testing into the development workflow.
+- Write automated tests for important logic and user flows.
+- Include unit tests for core functions, integration tests for data flow, and E2E tests for key scenarios.
+- Keep tests fast, isolated, and reliable.
+- Run tests continuously in CI.
