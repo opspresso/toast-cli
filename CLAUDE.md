@@ -1,5 +1,7 @@
 # Project Code Guidelines
 
+**Important: Before writing new code, search for similar existing code and maintain consistent logic and style patterns.**
+
 ## Core Principles
 
 - **Solve the right problem**: Avoid unnecessary complexity or scope creep.
