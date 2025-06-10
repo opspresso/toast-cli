@@ -34,8 +34,8 @@ class GitPlugin(BasePlugin):
 
     @classmethod
     def get_arguments(cls, func):
-        func = click.argument("repo_name", required=True)(func)
         func = click.argument("command", required=True)(func)
+        func = click.argument("repo_name", required=True)(func)
         func = click.option("--branch", "-b", help="Branch name for branch operation")(
             func
         )
@@ -49,7 +49,7 @@ class GitPlugin(BasePlugin):
 
     @classmethod
     def execute(
-        cls, repo_name, command, branch=None, target=None, rebase=False, **kwargs
+        cls, command, repo_name, branch=None, target=None, rebase=False, **kwargs
     ):
         # Get the current path
         current_path = os.getcwd()
