@@ -7,6 +7,25 @@ import re
 from toast.plugins.base_plugin import BasePlugin
 
 
+def get_github_host():
+    """Read GITHUB_HOST from .toast-config file or return default."""
+    config_file = ".toast-config"
+    default_host = "github.com"
+
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("GITHUB_HOST="):
+                        host = line.split("=", 1)[1]
+                        return host
+        except Exception as e:
+            click.echo(f"Warning: Could not read {config_file}: {e}")
+
+    return default_host
+
+
 class GitPlugin(BasePlugin):
     """Plugin for 'git' command - handles Git repository operations."""
 
@@ -15,11 +34,11 @@ class GitPlugin(BasePlugin):
 
     @classmethod
     def get_arguments(cls, func):
-        func = click.argument("command", required=True)(func)
         func = click.argument("repo_name", required=True)(func)
-        func = click.option(
-            "--branch", "-b", help="Branch name for branch operation"
-        )(func)
+        func = click.argument("command", required=True)(func)
+        func = click.option("--branch", "-b", help="Branch name for branch operation")(
+            func
+        )
         func = click.option(
             "--target", "-t", help="Target directory name for clone operation"
         )(func)
@@ -29,7 +48,9 @@ class GitPlugin(BasePlugin):
         return func
 
     @classmethod
-    def execute(cls, command, repo_name, branch=None, target=None, rebase=False, **kwargs):
+    def execute(
+        cls, repo_name, command, branch=None, target=None, rebase=False, **kwargs
+    ):
         # Get the current path
         current_path = os.getcwd()
 
@@ -50,8 +71,11 @@ class GitPlugin(BasePlugin):
             # Determine the target directory name
             target_dir = target if target else repo_name
 
+            # Get GitHub host from config or use default
+            github_host = get_github_host()
+
             # Construct the repository URL
-            repo_url = f"git@github.com:{username}/{repo_name}.git"
+            repo_url = f"git@{github_host}:{username}/{repo_name}.git"
 
             # Target path in the current directory
             target_path = os.path.join(current_path, target_dir)
@@ -157,7 +181,9 @@ class GitPlugin(BasePlugin):
 
                 if result.returncode == 0:
                     rebase_msg = "with rebase " if rebase else ""
-                    click.echo(f"Successfully pulled {rebase_msg}latest changes for {repo_name}")
+                    click.echo(
+                        f"Successfully pulled {rebase_msg}latest changes for {repo_name}"
+                    )
                 else:
                     click.echo(f"Error pulling repository: {result.stderr}")
 
