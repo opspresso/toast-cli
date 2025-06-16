@@ -30,7 +30,7 @@ toast am           # AWS identity
 toast cdw          # Navigate workspace
 toast ctx          # Kubernetes contexts
 toast env          # AWS profiles
-toast git          # Git operations
+toast git          # Git operations (clone, branch, pull, push)
 ```
 
 ## Architecture Overview
@@ -54,12 +54,12 @@ All plugins follow this structure:
 class MyPlugin(BasePlugin):
     name = "mycommand"
     help = "Command description"
-    
+
     @classmethod
     def get_arguments(cls, func):
         # Add Click options/arguments
         return func
-    
+
     @classmethod
     def execute(cls, **kwargs):
         # Command implementation
@@ -74,7 +74,7 @@ class MyPlugin(BasePlugin):
 ### Plugin Categories
 - **AWS plugins**: `am_plugin.py` (identity), `env_plugin.py` (profiles), `region_plugin.py` (regions)
 - **Kubernetes**: `ctx_plugin.py` (context management)
-- **Git**: `git_plugin.py` (repository operations)
+- **Git**: `git_plugin.py` (repository operations: clone, branch, pull, push)
 - **Environment**: `dot_plugin.py` (SSM integration for .env files)
 - **Navigation**: `cdw_plugin.py` (workspace directory navigation)
 
@@ -96,6 +96,31 @@ class MyPlugin(BasePlugin):
 - `fzf`: Interactive selection menus
 - `aws-cli`: AWS operations
 - `kubectl`: Kubernetes operations
+
+## Git Plugin Configuration
+
+### Organization-specific GitHub Hosts
+
+The git plugin supports per-organization GitHub host configuration:
+
+**Configuration file**: `~/workspace/github.com/{org}/.toast-config`
+```
+GITHUB_HOST=custom-host.com
+```
+
+**Key features**:
+- Automatic repository name sanitization (removes invalid characters like `/`, `:`, etc.)
+- Mirror push support for repository migration
+- Works with SSH config for different accounts/keys
+- Supports both regular push and force push operations
+
+### Development Notes for Git Plugin
+
+When working on git_plugin.py:
+- Always use `sanitize_repo_name()` to clean repository names
+- Use `get_github_host()` for host detection with organization support
+- Follow the simple pattern used by other commands (clone, pull, etc.)
+- Handle subprocess calls properly - avoid mixing `capture_output=True` with explicit `stdout`/`stderr`
 
 ## Project Code Guidelines
 

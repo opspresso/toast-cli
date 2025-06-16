@@ -100,7 +100,7 @@ Each plugin:
 | ctx | Manage Kubernetes contexts |
 | dot | Manage .env.local files with AWS SSM integration |
 | env | Manage AWS profiles |
-| git | Manage Git repositories |
+| git | Manage Git repositories (clone, branch, pull, push) |
 | region | Set AWS region |
 
 ### Plugin Functionality
@@ -135,8 +135,34 @@ Each plugin:
 
 #### GitPlugin (git)
 - Handles Git repository operations
-- Supports cloning, branch creation, pulling
-- Validates repository paths
+- Supports cloning, branch creation, pulling, pushing
+- Repository name sanitization (removes invalid characters)
+- Mirror push for repository migration
+- Organization-specific GitHub host configuration via `.toast-config`
+- Validates repository paths and workspace structure
+
+## Configuration
+
+### GitHub Host Configuration
+
+Toast-cli supports organization-specific GitHub host configuration through `.toast-config` files:
+
+**File Location**: `~/workspace/github.com/{org}/.toast-config`
+
+**Format**:
+```
+GITHUB_HOST=custom-host.com
+```
+
+**Search Priority**:
+1. Organization directory: `~/workspace/github.com/{org}/.toast-config`
+2. Current directory: `.toast-config`
+3. Default: `github.com`
+
+This enables:
+- Different GitHub Enterprise hosts per organization
+- Different SSH configurations and keys per organization
+- Seamless switching between GitHub accounts
 
 ## Dependencies
 

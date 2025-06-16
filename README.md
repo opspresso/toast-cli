@@ -20,7 +20,7 @@ Python-based CLI utility with plugin architecture for AWS, Kubernetes, and Git o
 * **Plugin Architecture**: Modular design with dynamic command discovery
 * **AWS Integration**: Identity checking, profile management, region selection, SSM integration
 * **Kubernetes**: Context switching, EKS integration
-* **Git**: Repository management, branch creation, pull operations
+* **Git**: Repository management, branch creation, pull/push operations
 * **Workspace**: Directory navigation, environment file management
 * **Interface**: FZF-powered menus, formatted output with Rich
 
@@ -86,7 +86,33 @@ toast dot ls               # List in SSM
 toast git repo-name clone  # Clone repository
 toast git repo-name branch -b branch-name  # Create branch
 toast git repo-name pull -r  # Pull with rebase
+toast git repo-name push    # Push to remote
+toast git repo-name push --mirror  # Mirror push for repository migration
 ```
+
+## Configuration
+
+### GitHub Host Configuration
+
+Configure custom GitHub hosts for different organizations by creating `.toast-config` files:
+
+```bash
+# For organization-specific hosts
+echo "GITHUB_HOST=github.enterprise.com" > ~/workspace/github.com/myorg/.toast-config
+
+# For custom SSH hosts (useful for different accounts)
+echo "GITHUB_HOST=myorg-github.com" > ~/workspace/github.com/myorg/.toast-config
+```
+
+**Example SSH config** (`~/.ssh/config`):
+```
+Host myorg-github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_rsa_myorg
+```
+
+This allows different organizations to use different GitHub accounts and SSH keys automatically.
 
 ## Creating Plugins
 
