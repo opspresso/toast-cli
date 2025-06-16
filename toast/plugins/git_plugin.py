@@ -9,19 +9,34 @@ from toast.plugins.base_plugin import BasePlugin
 
 def get_github_host():
     """Read GITHUB_HOST from .toast-config file or return default."""
-    config_file = ".toast-config"
     default_host = "github.com"
-
-    if os.path.exists(config_file):
-        try:
-            with open(config_file, "r") as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith("GITHUB_HOST="):
-                        host = line.split("=", 1)[1]
-                        return host
-        except Exception as e:
-            click.echo(f"Warning: Could not read {config_file}: {e}")
+    current_path = os.getcwd()
+    
+    # Check if we're in a workspace/github.com/org pattern
+    pattern = r"^(.*)/workspace/github\.com/([^/]+)"
+    match = re.match(pattern, current_path)
+    
+    config_locations = []
+    
+    if match:
+        # If in org directory, check org-specific config first
+        org_dir = os.path.join(match.group(1), "workspace", "github.com", match.group(2))
+        config_locations.append(os.path.join(org_dir, ".toast-config"))
+    
+    # Add current directory config
+    config_locations.append(".toast-config")
+    
+    for config_file in config_locations:
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("GITHUB_HOST="):
+                            host = line.split("=", 1)[1].strip()
+                            return host
+            except Exception as e:
+                click.echo(f"Warning: Could not read {config_file}: {e}")
 
     return default_host
 
@@ -89,7 +104,7 @@ class GitPlugin(BasePlugin):
         current_path = os.getcwd()
 
         # Check if the current path matches the expected pattern
-        pattern = r"^.*/workspace/github.com/([^/]+)$"
+        pattern = r"^.*/workspace/github\.com/([^/]+)"
         match = re.match(pattern, current_path)
 
         if not match:
@@ -254,7 +269,7 @@ class GitPlugin(BasePlugin):
                     # Add new remote for mirror push
                     subprocess.run(
                         ["git", "remote", "remove", "mirror-origin"],
-                        capture_output=True,
+                        stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL
                     )
                     
