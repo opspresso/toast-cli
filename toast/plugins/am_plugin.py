@@ -6,6 +6,7 @@ import json
 from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
 
+
 class AmPlugin(BasePlugin):
     """Plugin for 'am' command - shows AWS caller identity."""
 
@@ -15,7 +16,9 @@ class AmPlugin(BasePlugin):
     @classmethod
     def execute(cls, **kwargs):
         try:
-            result = subprocess.run(["aws", "sts", "get-caller-identity"], capture_output=True, text=True)
+            result = subprocess.run(
+                ["aws", "sts", "get-caller-identity"], capture_output=True, text=True
+            )
             if result.returncode == 0:
                 # Parse JSON and print with rich
                 json_data = json.loads(result.stdout)

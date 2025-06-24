@@ -37,20 +37,34 @@ class DotPlugin(BasePlugin):
             # List all parameters under /toast/ in AWS SSM Parameter Store
             try:
                 # Check if aws CLI is available
-                result = subprocess.run(["aws", "--version"], capture_output=True, text=True)
+                result = subprocess.run(
+                    ["aws", "--version"], capture_output=True, text=True
+                )
                 if result.returncode != 0:
-                    click.echo("Error: AWS CLI not found. Please install it to use this feature.")
+                    click.echo(
+                        "Error: AWS CLI not found. Please install it to use this feature."
+                    )
                     return
 
-                click.echo("Listing all .env.local parameters in AWS SSM Parameter Store...")
+                click.echo(
+                    "Listing all .env.local parameters in AWS SSM Parameter Store..."
+                )
 
                 # List parameters with path /toast/local/
-                result = subprocess.run([
-                    "aws", "ssm", "get-parameters-by-path",
-                    "--path", "/toast/local/",
-                    "--recursive",
-                    "--output", "json"
-                ], capture_output=True, text=True)
+                result = subprocess.run(
+                    [
+                        "aws",
+                        "ssm",
+                        "get-parameters-by-path",
+                        "--path",
+                        "/toast/local/",
+                        "--recursive",
+                        "--output",
+                        "json",
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
 
                 if result.returncode != 0:
                     click.echo(f"Error listing parameters: {result.stderr}")
@@ -68,7 +82,9 @@ class DotPlugin(BasePlugin):
                     click.echo("=" * 50)
 
                     # Filter parameters containing env-local
-                    env_params = [p for p in parameters if "env-local" in p.get("Name", "")]
+                    env_params = [
+                        p for p in parameters if "env-local" in p.get("Name", "")
+                    ]
 
                     for param in env_params:
                         param_name = param.get("Name", "")
@@ -76,7 +92,9 @@ class DotPlugin(BasePlugin):
 
                         # Format the date if it exists (it's a timestamp in AWS response)
                         if last_modified and not isinstance(last_modified, str):
-                            last_modified = datetime.fromtimestamp(last_modified).strftime('%Y-%m-%d %H:%M:%S')
+                            last_modified = datetime.fromtimestamp(
+                                last_modified
+                            ).strftime("%Y-%m-%d %H:%M:%S")
 
                         click.echo(f"{param_name} (Last Modified: {last_modified})")
 
@@ -94,7 +112,9 @@ class DotPlugin(BasePlugin):
                 return
 
             if not match:
-                click.echo("Error: Current directory is not in a recognized workspace structure.")
+                click.echo(
+                    "Error: Current directory is not in a recognized workspace structure."
+                )
                 return
 
             # Extract project and org info
@@ -104,46 +124,63 @@ class DotPlugin(BasePlugin):
 
             # Create the SSM parameter path
             ssm_path = f"/toast/local/{org_name}/{project_name}/env-local"
-            
+
             # Ask for confirmation before proceeding
             if not click.confirm(f"Upload .env.local to AWS SSM at {ssm_path}?"):
                 click.echo("Operation cancelled.")
                 return
 
             # Read the local .env file
-            with open(local_env_path, 'r') as file:
+            with open(local_env_path, "r") as file:
                 content = file.read()
 
             # Upload to SSM as SecureString
             try:
                 # Check if aws CLI is available
-                result = subprocess.run(["aws", "--version"], capture_output=True, text=True)
+                result = subprocess.run(
+                    ["aws", "--version"], capture_output=True, text=True
+                )
                 if result.returncode != 0:
-                    click.echo("Error: AWS CLI not found. Please install it to use this feature.")
+                    click.echo(
+                        "Error: AWS CLI not found. Please install it to use this feature."
+                    )
                     return
 
                 # Upload to SSM
-                click.echo(f"Uploading .env.local to AWS SSM Parameter Store at {ssm_path}...")
+                click.echo(
+                    f"Uploading .env.local to AWS SSM Parameter Store at {ssm_path}..."
+                )
 
                 # Create a temporary file to avoid command line issues with quotes
                 temp_file_path = os.path.expanduser("~/toast_temp_content.txt")
-                with open(temp_file_path, 'w') as temp_file:
+                with open(temp_file_path, "w") as temp_file:
                     temp_file.write(content)
 
                 # Use AWS CLI to put the parameter
-                result = subprocess.run([
-                    "aws", "ssm", "put-parameter",
-                    "--name", ssm_path,
-                    "--type", "SecureString",
-                    "--value", "file://" + temp_file_path,
-                    "--overwrite"
-                ], capture_output=True, text=True)
+                result = subprocess.run(
+                    [
+                        "aws",
+                        "ssm",
+                        "put-parameter",
+                        "--name",
+                        ssm_path,
+                        "--type",
+                        "SecureString",
+                        "--value",
+                        "file://" + temp_file_path,
+                        "--overwrite",
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
 
                 # Remove the temporary file
                 os.remove(temp_file_path)
 
                 if result.returncode == 0:
-                    click.echo(f"Successfully uploaded .env.local to AWS SSM at {ssm_path}")
+                    click.echo(
+                        f"Successfully uploaded .env.local to AWS SSM at {ssm_path}"
+                    )
                 else:
                     click.echo(f"Error uploading to AWS SSM: {result.stderr}")
             except Exception as e:
@@ -152,7 +189,9 @@ class DotPlugin(BasePlugin):
         elif command == "down" or command == "dn":
             # Download .env file from AWS SSM Parameter Store
             if not match:
-                click.echo("Error: Current directory is not in a recognized workspace structure.")
+                click.echo(
+                    "Error: Current directory is not in a recognized workspace structure."
+                )
                 return
 
             # Extract project and org info
@@ -162,32 +201,52 @@ class DotPlugin(BasePlugin):
 
             # Create the SSM parameter path
             ssm_path = f"/toast/local/{org_name}/{project_name}/env-local"
-            
+
             # Ask for confirmation before proceeding
-            overwrite_msg = " (will overwrite existing file)" if os.path.exists(local_env_path) else ""
-            if not click.confirm(f"Download .env.local from AWS SSM at {ssm_path}{overwrite_msg}?"):
+            overwrite_msg = (
+                " (will overwrite existing file)"
+                if os.path.exists(local_env_path)
+                else ""
+            )
+            if not click.confirm(
+                f"Download .env.local from AWS SSM at {ssm_path}{overwrite_msg}?"
+            ):
                 click.echo("Operation cancelled.")
                 return
 
             # Download from SSM
             try:
                 # Check if aws CLI is available
-                result = subprocess.run(["aws", "--version"], capture_output=True, text=True)
+                result = subprocess.run(
+                    ["aws", "--version"], capture_output=True, text=True
+                )
                 if result.returncode != 0:
-                    click.echo("Error: AWS CLI not found. Please install it to use this feature.")
+                    click.echo(
+                        "Error: AWS CLI not found. Please install it to use this feature."
+                    )
                     return
 
                 # Try to get the parameter
                 click.echo(f"Downloading from AWS SSM Parameter Store at {ssm_path}...")
-                result = subprocess.run([
-                    "aws", "ssm", "get-parameter",
-                    "--name", ssm_path,
-                    "--with-decryption",
-                    "--output", "json"
-                ], capture_output=True, text=True)
+                result = subprocess.run(
+                    [
+                        "aws",
+                        "ssm",
+                        "get-parameter",
+                        "--name",
+                        ssm_path,
+                        "--with-decryption",
+                        "--output",
+                        "json",
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
 
                 if result.returncode != 0:
-                    click.echo(f"Error: Parameter not found in AWS SSM or access denied.")
+                    click.echo(
+                        f"Error: Parameter not found in AWS SSM or access denied."
+                    )
                     return
 
                 # Parse the JSON response
@@ -200,10 +259,12 @@ class DotPlugin(BasePlugin):
                         return
 
                     # Write to local .env.local file
-                    with open(local_env_path, 'w') as file:
+                    with open(local_env_path, "w") as file:
                         file.write(parameter_value)
 
-                    click.echo(f"Successfully downloaded .env.local from AWS SSM and saved to {local_env_path}")
+                    click.echo(
+                        f"Successfully downloaded .env.local from AWS SSM and saved to {local_env_path}"
+                    )
                 except json.JSONDecodeError:
                     click.echo("Error parsing AWS SSM response.")
             except Exception as e:
@@ -225,6 +286,10 @@ class DotPlugin(BasePlugin):
 
                     # Create the SSM parameter path
                     ssm_path = f"/toast/local/{org_name}/{project_name}/env-local"
-                    click.echo(f"Use 'toast dot down' to check if {ssm_path} exists in AWS SSM")
+                    click.echo(
+                        f"Use 'toast dot down' to check if {ssm_path} exists in AWS SSM"
+                    )
                 else:
-                    click.echo("Current directory is not in a recognized workspace structure.")
+                    click.echo(
+                        "Current directory is not in a recognized workspace structure."
+                    )

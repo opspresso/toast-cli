@@ -2,6 +2,7 @@
 
 import click
 
+
 class BasePlugin:
     """Base class for all plugins."""
 
@@ -28,4 +29,6 @@ class BasePlugin:
     @classmethod
     def execute(cls, **kwargs):
         """Execute the command. Override in subclass."""
-        raise NotImplementedError(f"Plugin {cls.__name__} must implement execute method")
+        raise NotImplementedError(
+            f"Plugin {cls.__name__} must implement execute method"
+        )

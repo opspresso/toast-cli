@@ -9,7 +9,10 @@ import sys
 from typing import List, Type
 from toast.helpers import CustomHelpGroup
 
-def discover_and_load_plugins(plugins_package_name: str = "toast.plugins") -> List[Type]:
+
+def discover_and_load_plugins(
+    plugins_package_name: str = "toast.plugins",
+) -> List[Type]:
     """
     Dynamically discover and load all plugin classes from the plugins package.
 
@@ -41,15 +44,19 @@ def discover_and_load_plugins(plugins_package_name: str = "toast.plugins") -> Li
 
                 # Find all classes in the module that are subclasses of BasePlugin
                 for item_name, item in inspect.getmembers(module, inspect.isclass):
-                    if (issubclass(item, BasePlugin) and
-                        item is not BasePlugin and
-                        item.__module__ == module_name):
+                    if (
+                        issubclass(item, BasePlugin)
+                        and item is not BasePlugin
+                        and item.__module__ == module_name
+                    ):
                         discovered_plugins.append(item)
             except ImportError as e:
                 click.echo(f"Error loading plugin module {module_name}: {e}", err=True)
 
     except ImportError as e:
-        click.echo(f"Error loading plugins package {plugins_package_name}: {e}", err=True)
+        click.echo(
+            f"Error loading plugins package {plugins_package_name}: {e}", err=True
+        )
 
     return discovered_plugins
 
@@ -61,11 +68,14 @@ def toast_cli():
     """
     pass
 
+
 @toast_cli.command()
 def version():
     """Display the current version of toast-cli."""
     from toast.helpers import get_version
+
     click.echo(f"toast-cli version: {get_version()}")
+
 
 def main():
     # Discover and load all plugins
@@ -80,10 +90,13 @@ def main():
         try:
             plugin_class.register(toast_cli)
         except Exception as e:
-            click.echo(f"Error registering plugin {plugin_class.__name__}: {e}", err=True)
+            click.echo(
+                f"Error registering plugin {plugin_class.__name__}: {e}", err=True
+            )
 
     # Run the CLI
     toast_cli()
+
 
 if __name__ == "__main__":
     main()

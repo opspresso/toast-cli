@@ -11,21 +11,23 @@ def get_github_host():
     """Read GITHUB_HOST from .toast-config file or return default."""
     default_host = "github.com"
     current_path = os.getcwd()
-    
+
     # Check if we're in a workspace/github.com/org pattern
     pattern = r"^(.*)/workspace/github\.com/([^/]+)"
     match = re.match(pattern, current_path)
-    
+
     config_locations = []
-    
+
     if match:
         # If in org directory, check org-specific config first
-        org_dir = os.path.join(match.group(1), "workspace", "github.com", match.group(2))
+        org_dir = os.path.join(
+            match.group(1), "workspace", "github.com", match.group(2)
+        )
         config_locations.append(os.path.join(org_dir, ".toast-config"))
-    
+
     # Add current directory config
     config_locations.append(".toast-config")
-    
+
     for config_file in config_locations:
         if os.path.exists(config_file):
             try:
@@ -45,23 +47,50 @@ def sanitize_repo_name(repo_name):
     """Sanitize repository name by removing invalid characters."""
     if not repo_name:
         return "repo"
-    
+
     # Remove or replace invalid characters for repository names
     # Git repository names should only contain: letters, numbers, hyphens, underscores, dots
     # Remove: /, \, :, *, ?, ", <, >, |, and other special characters
-    invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|', ' ', '@', '#', '$', '%', '^', '&', '(', ')', '+', '=', '[', ']', '{', '}', ';', ',']
-    
+    invalid_chars = [
+        "/",
+        "\\",
+        ":",
+        "*",
+        "?",
+        '"',
+        "<",
+        ">",
+        "|",
+        " ",
+        "@",
+        "#",
+        "$",
+        "%",
+        "^",
+        "&",
+        "(",
+        ")",
+        "+",
+        "=",
+        "[",
+        "]",
+        "{",
+        "}",
+        ";",
+        ",",
+    ]
+
     sanitized = repo_name
     for char in invalid_chars:
-        sanitized = sanitized.replace(char, '')
-    
+        sanitized = sanitized.replace(char, "")
+
     # Remove leading/trailing dots and hyphens as they're not valid
-    sanitized = sanitized.strip('.-')
-    
+    sanitized = sanitized.strip(".-")
+
     # Ensure it's not empty after sanitization
     if not sanitized:
         sanitized = "repo"
-    
+
     return sanitized
 
 
@@ -85,21 +114,33 @@ class GitPlugin(BasePlugin):
             "--rebase", "-r", is_flag=True, help="Use rebase when pulling"
         )(func)
         func = click.option(
-            "--mirror", "-m", is_flag=True, help="Push with --mirror flag for repository migration"
+            "--mirror",
+            "-m",
+            is_flag=True,
+            help="Push with --mirror flag for repository migration",
         )(func)
         return func
 
     @classmethod
     def execute(
-        cls, command, repo_name, branch=None, target=None, rebase=False, mirror=False, **kwargs
+        cls,
+        command,
+        repo_name,
+        branch=None,
+        target=None,
+        rebase=False,
+        mirror=False,
+        **kwargs,
     ):
         # Sanitize repository name
         original_repo_name = repo_name
         repo_name = sanitize_repo_name(repo_name)
-        
+
         if original_repo_name != repo_name:
-            click.echo(f"Repository name sanitized: '{original_repo_name}' -> '{repo_name}'")
-        
+            click.echo(
+                f"Repository name sanitized: '{original_repo_name}' -> '{repo_name}'"
+            )
+
         # Get the current path
         current_path = os.getcwd()
 
@@ -260,30 +301,30 @@ class GitPlugin(BasePlugin):
                     # Mirror push for repository migration
                     # Get GitHub host from config or use default
                     github_host = get_github_host()
-                    
+
                     # Construct the repository URL using the same logic as clone
                     repo_url = f"git@{github_host}:{username}/{repo_name}.git"
-                    
+
                     click.echo(f"Mirror pushing {repo_name} to {repo_url}...")
-                    
+
                     # Add new remote for mirror push
                     subprocess.run(
                         ["git", "remote", "remove", "mirror-origin"],
                         stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL
+                        stderr=subprocess.DEVNULL,
                     )
-                    
+
                     result = subprocess.run(
                         ["git", "remote", "add", "mirror-origin", repo_url],
                         capture_output=True,
                         text=True,
                     )
-                    
+
                     if result.returncode != 0:
                         click.echo(f"Error adding mirror remote: {result.stderr}")
                         os.chdir(current_path)
                         return
-                    
+
                     # Execute mirror push
                     result = subprocess.run(
                         ["git", "push", "--mirror", "mirror-origin"],
@@ -298,7 +339,7 @@ class GitPlugin(BasePlugin):
                 else:
                     # Regular push
                     click.echo(f"Pushing {repo_name}...")
-                    
+
                     result = subprocess.run(
                         ["git", "push"],
                         capture_output=True,
@@ -319,4 +360,6 @@ class GitPlugin(BasePlugin):
 
         else:
             click.echo(f"Unknown command: {command}")
-            click.echo("Available commands: clone (cl), rm, branch (b), pull (p), push (ps)")
+            click.echo(
+                "Available commands: clone (cl), rm, branch (b), pull (p), push (ps)"
+            )

@@ -9,6 +9,7 @@ from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.utils import select_from_list
 
+
 class EnvPlugin(BasePlugin):
     """Plugin for 'env' command - manages AWS profiles."""
 
@@ -39,8 +40,8 @@ class EnvPlugin(BasePlugin):
 
             # Get current default profile
             current_default = None
-            if 'default' in profiles:
-                current_default = 'default'
+            if "default" in profiles:
+                current_default = "default"
 
             # Display current default profile if exists
             if current_default:
@@ -50,37 +51,47 @@ class EnvPlugin(BasePlugin):
             selected_profile = select_from_list(profiles, "Select AWS Profile")
 
             if selected_profile:
-                if selected_profile == 'default':
+                if selected_profile == "default":
                     click.echo("Already the default profile.")
                     return
 
                 # Get credentials from selected profile
-                aws_access_key_id = config[selected_profile].get('aws_access_key_id', '')
-                aws_secret_access_key = config[selected_profile].get('aws_secret_access_key', '')
-                aws_session_token = config[selected_profile].get('aws_session_token', '')
+                aws_access_key_id = config[selected_profile].get(
+                    "aws_access_key_id", ""
+                )
+                aws_secret_access_key = config[selected_profile].get(
+                    "aws_secret_access_key", ""
+                )
+                aws_session_token = config[selected_profile].get(
+                    "aws_session_token", ""
+                )
 
                 # Modify credentials file directly to set default profile
-                if 'default' not in config:
-                    config.add_section('default')
+                if "default" not in config:
+                    config.add_section("default")
 
-                config['default']['aws_access_key_id'] = aws_access_key_id
-                config['default']['aws_secret_access_key'] = aws_secret_access_key
+                config["default"]["aws_access_key_id"] = aws_access_key_id
+                config["default"]["aws_secret_access_key"] = aws_secret_access_key
 
                 # Set session token if available
                 if aws_session_token:
-                    config['default']['aws_session_token'] = aws_session_token
-                elif 'aws_session_token' in config['default']:
+                    config["default"]["aws_session_token"] = aws_session_token
+                elif "aws_session_token" in config["default"]:
                     # Remove existing token when switching to profile without token
-                    config.remove_option('default', 'aws_session_token')
+                    config.remove_option("default", "aws_session_token")
 
                 # Save changes to file
-                with open(credentials_path, 'w') as configfile:
+                with open(credentials_path, "w") as configfile:
                     config.write(configfile)
 
                 click.echo(f"Set '{selected_profile}' as default profile.")
 
                 try:
-                    result = subprocess.run(["aws", "sts", "get-caller-identity"], capture_output=True, text=True)
+                    result = subprocess.run(
+                        ["aws", "sts", "get-caller-identity"],
+                        capture_output=True,
+                        text=True,
+                    )
                     if result.returncode == 0:
                         # Parse JSON and print with rich
                         json_data = json.loads(result.stdout)

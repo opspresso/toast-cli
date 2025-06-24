@@ -6,6 +6,7 @@ import os
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.utils import select_from_list
 
+
 class CdwPlugin(BasePlugin):
     """Plugin for 'cdw' command - helps navigate to workspace directories."""
 
@@ -18,7 +19,11 @@ class CdwPlugin(BasePlugin):
         if not os.path.exists(workspace_dir):
             os.makedirs(workspace_dir)
 
-        result = subprocess.run(["find", workspace_dir, "-mindepth", "1", "-maxdepth", "2", "-type", "d"], capture_output=True, text=True)
+        result = subprocess.run(
+            ["find", workspace_dir, "-mindepth", "1", "-maxdepth", "2", "-type", "d"],
+            capture_output=True,
+            text=True,
+        )
         directories = sorted(result.stdout.splitlines())
 
         if not directories:
