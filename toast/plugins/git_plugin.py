@@ -8,20 +8,29 @@ from toast.plugins.base_plugin import BasePlugin
 
 
 def get_github_host():
-    """Read GITHUB_HOST from .toast-config file or return default."""
-    default_host = "github.com"
+    """Read GITHUB_HOST from .toast-config file or extract from path."""
     current_path = os.getcwd()
 
-    # Check if we're in a workspace/github.com/org pattern
-    pattern = r"^(.*)/workspace/github\.com/([^/]+)"
+    # First, try to extract host from the workspace path pattern
+    # Matches: /Users/user/workspace/{github-host}/{org} or /workspace/{github-host}/{org}
+    pattern = r"^(.*)/workspace/([^/]+)/([^/]+)"
     match = re.match(pattern, current_path)
+
+    default_host = "github.com"
+    extracted_host = None
+
+    if match:
+        extracted_host = match.group(2)
+        # Use extracted host as default if it looks like a GitHub host
+        if "github" in extracted_host.lower() or extracted_host.endswith(".com"):
+            default_host = extracted_host
 
     config_locations = []
 
     if match:
         # If in org directory, check org-specific config first
         org_dir = os.path.join(
-            match.group(1), "workspace", "github.com", match.group(2)
+            match.group(1), "workspace", match.group(2), match.group(3)
         )
         config_locations.append(os.path.join(org_dir, ".toast-config"))
 
@@ -145,17 +154,17 @@ class GitPlugin(BasePlugin):
         current_path = os.getcwd()
 
         # Check if the current path matches the expected pattern
-        pattern = r"^.*/workspace/github\.com/([^/]+)"
+        pattern = r"^.*/workspace/([^/]+)/([^/]+)"
         match = re.match(pattern, current_path)
 
         if not match:
             click.echo(
-                "Error: Current directory must be in ~/workspace/github.com/{username} format"
+                "Error: Current directory must be in ~/workspace/{github-host}/{username} format"
             )
             return
 
-        # Extract username from the path
-        username = match.group(1)
+        # Extract username from the path (host is handled by get_github_host())
+        username = match.group(2)
 
         if command == "clone" or command == "cl":
             # Determine the target directory name
