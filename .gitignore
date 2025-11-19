@@ -102,3 +102,5 @@ dist/
 .env
 .env*.local
 .env*.production
+
+.prompt.md

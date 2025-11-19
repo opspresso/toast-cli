@@ -29,8 +29,11 @@ toast version
 toast am           # AWS identity
 toast cdw          # Navigate workspace
 toast ctx          # Kubernetes contexts
+toast dot          # Environment file management (.env.local)
 toast env          # AWS profiles
 toast git          # Git operations (clone, branch, pull, push)
+toast prompt       # Prompt file management (.prompt.md)
+toast region       # AWS region
 ```
 
 ## Architecture Overview
@@ -75,7 +78,7 @@ class MyPlugin(BasePlugin):
 - **AWS plugins**: `am_plugin.py` (identity), `env_plugin.py` (profiles), `region_plugin.py` (regions)
 - **Kubernetes**: `ctx_plugin.py` (context management)
 - **Git**: `git_plugin.py` (repository operations: clone, branch, pull, push)
-- **Environment**: `dot_plugin.py` (SSM integration for .env files)
+- **Environment**: `dot_plugin.py` (SSM integration for .env.local files), `prompt_plugin.py` (SSM integration for .prompt.md files)
 - **Navigation**: `cdw_plugin.py` (workspace directory navigation)
 
 ## Adding New Plugins
@@ -117,10 +120,28 @@ GITHUB_HOST=custom-host.com
 ### Development Notes for Git Plugin
 
 When working on git_plugin.py:
-- Always use `sanitize_repo_name()` to clean repository names
+- Always use `sanitize_repo_name()` to clean repository names (removes `/`, `:`, and other invalid characters)
 - Use `get_github_host()` for host detection with organization support
 - Follow the simple pattern used by other commands (clone, pull, etc.)
 - Handle subprocess calls properly - avoid mixing `capture_output=True` with explicit `stdout`/`stderr`
+- Supported commands: `clone`, `branch`, `pull`, `push` (with optional flags like `-r`, `-f`, `--mirror`)
+
+### SSM Parameter Store Integration
+
+The `dot` and `prompt` plugins use AWS SSM Parameter Store for secure file storage:
+
+**Storage structure**:
+```
+/toast/local/{org}/{project}/env-local    # DotPlugin
+/toast/local/{org}/{project}/prompt-md    # PromptPlugin
+```
+
+**Common patterns**:
+- Validate workspace path: `workspace/github.com/{org}/{project}`
+- Store as SecureString type for encryption
+- Use temporary files for large content uploads
+- Commands: `ls` (list), `up` (upload), `down`/`dn` (download)
+- Include confirmation prompts before overwriting files
 
 ## Project Code Guidelines
 

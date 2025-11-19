@@ -19,6 +19,7 @@ toast-cli/
   ├── VERSION             # Version information
   ├── README.md           # Project documentation
   ├── ARCHITECTURE.md     # Architecture documentation
+  ├── CLAUDE.md           # Development guidelines and plugin documentation
   ├── LICENSE             # License information (GNU GPL v3.0)
   ├── docs/               # Documentation website files
   └── toast/              # Main package
@@ -34,6 +35,7 @@ toast-cli/
           ├── dot_plugin.py
           ├── env_plugin.py
           ├── git_plugin.py
+          ├── prompt_plugin.py
           ├── region_plugin.py
           └── utils.py
 ```
@@ -97,10 +99,11 @@ Each plugin:
 | version | Display the current version |
 | am | Show AWS caller identity |
 | cdw | Navigate to workspace directories |
-| ctx | Manage Kubernetes contexts |
+| ctx | Manage Kubernetes contexts (switch, add EKS clusters, delete) |
 | dot | Manage .env.local files with AWS SSM integration |
 | env | Manage AWS profiles |
-| git | Manage Git repositories (clone, branch, pull, push) |
+| git | Manage Git repositories (clone, branch, pull, push, mirror) |
+| prompt | Manage .prompt.md files with AWS SSM integration |
 | region | Set AWS region |
 
 ### Plugin Functionality
@@ -116,22 +119,36 @@ Each plugin:
 
 #### CtxPlugin (ctx)
 - Manages Kubernetes contexts
-- Integrates with EKS for cluster discovery
-- Handles context switching and deletion
+- Integrates with EKS for cluster discovery and automatic kubeconfig update
+- Handles context switching and deletion (individual or all contexts)
+- Interactive selection of contexts and clusters
 
 #### DotPlugin (dot)
-- Manages .env.local files with AWS SSM
+- Manages .env.local files with AWS SSM Parameter Store
+- Commands: `ls` (list), `up` (upload), `down`/`dn` (download)
 - Uploads/downloads environment variables as SecureString
-- Validates workspace path structure
+- SSM path: `/toast/local/{org}/{project}/env-local`
+- Validates workspace path structure (`workspace/github.com/{org}/{project}`)
+
+#### PromptPlugin (prompt)
+- Manages .prompt.md files with AWS SSM Parameter Store
+- Commands: `ls` (list), `up` (upload), `down`/`dn` (download)
+- Uploads/downloads prompt files as SecureString
+- SSM path: `/toast/local/{org}/{project}/prompt-md`
+- Validates workspace path structure (`workspace/github.com/{org}/{project}`)
 
 #### EnvPlugin (env)
-- Manages AWS profiles from credentials file
-- Sets selected profile as default
-- Verifies identity after switching
+- Manages AWS profiles from `~/.aws/credentials`
+- Interactive selection of profiles
+- Sets selected profile as default by updating credentials file
+- Handles session tokens when present
+- Verifies identity after switching using `aws sts get-caller-identity`
 
 #### RegionPlugin (region)
-- Displays and sets AWS regions
-- Updates AWS CLI configuration
+- Displays current AWS region
+- Lists available AWS regions using `aws ec2 describe-regions`
+- Interactive selection using fzf
+- Updates AWS CLI configuration with selected region
 
 #### GitPlugin (git)
 - Handles Git repository operations
