@@ -136,11 +136,25 @@ The `dot` and `prompt` plugins use AWS SSM Parameter Store for secure file stora
 /toast/local/{org}/{project}/prompt-md    # PromptPlugin
 ```
 
+**Commands**:
+| Command | Description |
+|---------|-------------|
+| `ls` | List all parameters in SSM |
+| `up` | Upload local file to SSM |
+| `down`/`dn` | Download from SSM to local |
+| `sync` | Compare local and SSM, then choose action (upload/download) |
+
+**Sync command features**:
+- Compares local file content with SSM parameter value
+- Displays SHA256 hash (first 12 chars) for both versions
+- Shows unified diff when contents differ
+- Interactive selection via fzf: Upload / Download / Cancel
+- Handles cases: identical, different, local_only, remote_only
+
 **Common patterns**:
 - Validate workspace path: `workspace/github.com/{org}/{project}`
 - Store as SecureString type for encryption
 - Use temporary files for large content uploads
-- Commands: `ls` (list), `up` (upload), `down`/`dn` (download)
 - Include confirmation prompts before overwriting files
 
 ## Project Code Guidelines

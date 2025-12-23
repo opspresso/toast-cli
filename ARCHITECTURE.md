@@ -2,7 +2,7 @@
 
 [![Website](https://img.shields.io/badge/Website-Visit-blue)](https://toast.sh/)
 [![PyPI](https://img.shields.io/pypi/v/toast-cli)](https://pypi.org/project/toast-cli/)
-[![Version](https://img.shields.io/badge/Version-v3.2.0.dev0-orange)](https://github.com/opspresso/toast-cli/releases)
+[![Version](https://img.shields.io/badge/Version-v3.6.0.dev0-orange)](https://github.com/opspresso/toast-cli/releases)
 
 ## Overview
 
@@ -125,17 +125,19 @@ Each plugin:
 
 #### DotPlugin (dot)
 - Manages .env.local files with AWS SSM Parameter Store
-- Commands: `ls` (list), `up` (upload), `down`/`dn` (download)
+- Commands: `ls` (list), `up` (upload), `down`/`dn` (download), `sync` (compare and choose)
 - Uploads/downloads environment variables as SecureString
 - SSM path: `/toast/local/{org}/{project}/env-local`
 - Validates workspace path structure (`workspace/github.com/{org}/{project}`)
+- Sync command: compares local/remote content, shows diff, offers upload/download choice
 
 #### PromptPlugin (prompt)
 - Manages .prompt.md files with AWS SSM Parameter Store
-- Commands: `ls` (list), `up` (upload), `down`/`dn` (download)
+- Commands: `ls` (list), `up` (upload), `down`/`dn` (download), `sync` (compare and choose)
 - Uploads/downloads prompt files as SecureString
 - SSM path: `/toast/local/{org}/{project}/prompt-md`
 - Validates workspace path structure (`workspace/github.com/{org}/{project}`)
+- Sync command: compares local/remote content, shows diff, offers upload/download choice
 
 #### EnvPlugin (env)
 - Manages AWS profiles from `~/.aws/credentials`

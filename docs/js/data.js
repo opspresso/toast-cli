@@ -7,7 +7,7 @@ const diagramElements = {
     type: 'title',
     content: [
       { type: 'text', x: 500, y: 50, fontFamily: 'Arial', fontSize: 28, textAnchor: 'middle', fontWeight: 'bold', text: 'Toast-cli Architecture' },
-      { type: 'text', x: 500, y: 90, fontFamily: 'Arial', fontSize: 18, textAnchor: 'middle', fill: '#6c757d', text: 'Plugin-based Design Pattern v3.2.0' }
+      { type: 'text', x: 500, y: 90, fontFamily: 'Arial', fontSize: 18, textAnchor: 'middle', fill: '#6c757d', text: 'Plugin-based Design Pattern v3.6.0' }
     ]
   },
   // 메인 CLI 박스
@@ -113,6 +113,14 @@ const diagramElements = {
       { type: 'text', x: 490, y: 540, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '(region_plugin.py)' }
     ]
   },
+  'prompt-plugin': {
+    type: 'box',
+    rect: { x: 770, y: 410, width: 180, height: 60, rx: 6, fill: '#ffffff', stroke: '#007bff', strokeWidth: 1 },
+    content: [
+      { type: 'text', x: 860, y: 440, fontFamily: 'Arial', fontSize: 16, textAnchor: 'middle', text: 'PromptPlugin' },
+      { type: 'text', x: 860, y: 460, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '(prompt_plugin.py)' }
+    ]
+  },
   // 통합 박스
   'aws-integration': {
     type: 'box',
@@ -128,7 +136,7 @@ const diagramElements = {
     rect: { x: 200, y: 600, width: 600, height: 80, rx: 6, fill: '#f8f9fa', stroke: '#6c757d', strokeWidth: 1 },
     content: [
       { type: 'text', x: 500, y: 630, fontFamily: 'Arial', fontSize: 18, textAnchor: 'middle', fontWeight: 'bold', text: 'Plugin Commands' },
-      { type: 'text', x: 500, y: 660, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', fill: '#6c757d', text: 'am | cdw | ctx | dot | env | git | region | version' }
+      { type: 'text', x: 500, y: 660, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', fill: '#6c757d', text: 'am | cdw | ctx | dot | env | git | prompt | region | version' }
     ]
   },
   // 외부 의존성 박스
@@ -174,6 +182,7 @@ const diagramConnectors = [
   { from: 'base-plugin', to: 'ctx-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
   { from: 'base-plugin', to: 'env-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
   { from: 'base-plugin', to: 'git-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
+  { from: 'base-plugin', to: 'prompt-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
 
   // 플러그인 그룹 관계 (가는 실선)
   // 플러그인 행 1에서 행 2로 연결

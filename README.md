@@ -85,12 +85,14 @@ toast ctx                  # Switch contexts
 toast dot                  # Check current directory for .env.local
 toast dot up               # Upload .env.local to SSM
 toast dot down             # Download .env.local from SSM (alias: dn)
+toast dot sync             # Compare local and SSM, choose action
 toast dot ls               # List all .env.local files in SSM
 
 # Prompt Files (.prompt.md)
 toast prompt               # Check current directory for .prompt.md
 toast prompt up            # Upload .prompt.md to SSM
 toast prompt down          # Download .prompt.md from SSM (alias: dn)
+toast prompt sync          # Compare local and SSM, choose action
 toast prompt ls            # List all .prompt.md files in SSM
 
 # Git Operations
