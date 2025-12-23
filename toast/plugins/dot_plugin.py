@@ -7,6 +7,14 @@ import subprocess
 import json
 from datetime import datetime
 from toast.plugins.base_plugin import BasePlugin
+from toast.plugins.utils import (
+    check_aws_cli,
+    get_ssm_parameter,
+    compare_contents,
+    show_diff,
+    compute_hash,
+    select_sync_action,
+)
 
 
 class DotPlugin(BasePlugin):
@@ -269,6 +277,129 @@ class DotPlugin(BasePlugin):
                     click.echo("Error parsing AWS SSM response.")
             except Exception as e:
                 click.echo(f"Error: {e}")
+
+        elif command == "sync":
+            # Compare local and SSM, then choose action
+            if not match:
+                click.echo(
+                    "Error: Current directory is not in a recognized workspace structure."
+                )
+                return
+
+            if not check_aws_cli():
+                click.echo(
+                    "Error: AWS CLI not found. Please install it to use this feature."
+                )
+                return
+
+            # Extract project and org info
+            project_root = match.group(1)
+            project_name = os.path.basename(project_root)
+            org_name = os.path.basename(os.path.dirname(project_root))
+            ssm_path = f"/toast/local/{org_name}/{project_name}/env-local"
+
+            click.echo(f"Comparing .env.local with SSM: {ssm_path}")
+            click.echo("=" * 60)
+
+            # Get local content
+            local_content = None
+            if os.path.exists(local_env_path):
+                with open(local_env_path, "r") as file:
+                    local_content = file.read()
+
+            # Get SSM content
+            remote_content, last_modified, error = get_ssm_parameter(ssm_path)
+            if error:
+                click.echo(f"Error fetching SSM parameter: {error}")
+                return
+
+            # Compare
+            status = compare_contents(local_content, remote_content)
+
+            # Display status
+            local_hash = compute_hash(local_content) if local_content else "-"
+            remote_hash = compute_hash(remote_content) if remote_content else "-"
+
+            click.echo(f"Local:  {local_hash if local_content else '(not found)'}")
+            click.echo(f"SSM:    {remote_hash if remote_content else '(not found)'}")
+
+            if last_modified:
+                click.echo(f"SSM Last Modified: {last_modified}")
+
+            click.echo("")
+
+            if status == "both_missing":
+                click.echo("Neither local file nor SSM parameter exists.")
+                return
+
+            if status == "identical":
+                click.echo("✓ Files are identical. No action needed.")
+                return
+
+            # Show diff if both exist and different
+            if status == "different":
+                click.echo("Differences found:")
+                click.echo("-" * 40)
+                diff_lines = show_diff(local_content, remote_content)
+                for line in diff_lines[:50]:  # Limit output
+                    if line.startswith("+") and not line.startswith("+++"):
+                        click.secho(line.rstrip(), fg="green")
+                    elif line.startswith("-") and not line.startswith("---"):
+                        click.secho(line.rstrip(), fg="red")
+                    else:
+                        click.echo(line.rstrip())
+                if len(diff_lines) > 50:
+                    click.echo(f"... ({len(diff_lines) - 50} more lines)")
+                click.echo("-" * 40)
+            elif status == "local_only":
+                click.echo("Local file exists, but SSM parameter does not.")
+            elif status == "remote_only":
+                click.echo("SSM parameter exists, but local file does not.")
+
+            click.echo("")
+
+            # Let user choose action
+            action = select_sync_action(status, ".env.local")
+
+            if action == "upload":
+                # Upload local to SSM
+                click.echo(f"Uploading .env.local to SSM...")
+                temp_file_path = os.path.expanduser("~/toast_temp_content.txt")
+                with open(temp_file_path, "w") as temp_file:
+                    temp_file.write(local_content)
+
+                result = subprocess.run(
+                    [
+                        "aws",
+                        "ssm",
+                        "put-parameter",
+                        "--name",
+                        ssm_path,
+                        "--type",
+                        "SecureString",
+                        "--value",
+                        "file://" + temp_file_path,
+                        "--overwrite",
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                os.remove(temp_file_path)
+
+                if result.returncode == 0:
+                    click.echo(f"✓ Successfully uploaded to {ssm_path}")
+                else:
+                    click.echo(f"Error uploading: {result.stderr}")
+
+            elif action == "download":
+                # Download SSM to local
+                click.echo(f"Downloading from SSM to .env.local...")
+                with open(local_env_path, "w") as file:
+                    file.write(remote_content)
+                click.echo(f"✓ Successfully downloaded to {local_env_path}")
+
+            else:
+                click.echo("Operation cancelled.")
 
         else:
             # Default behavior without a command - suggest using subcommands
