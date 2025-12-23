@@ -65,6 +65,7 @@ toast env            # Manage AWS profiles
 toast git            # Manage Git repositories
 toast prompt         # Manage .prompt.md files
 toast region         # Manage AWS region
+toast ssm            # AWS SSM Parameter Store operations
 toast version        # Display version
 ```
 
@@ -92,6 +93,14 @@ toast prompt               # Compare local and SSM, choose action (default: sync
 toast prompt up            # Upload .prompt.md to SSM
 toast prompt down          # Download .prompt.md from SSM (alias: dn)
 toast prompt ls            # List all .prompt.md files in SSM
+
+# SSM Parameter Store
+toast ssm                  # Interactive mode: browse and select parameters
+toast ssm ls               # List all parameters
+toast ssm ls /toast/       # List parameters under path
+toast ssm get /my/param    # Get parameter value (alias: g)
+toast ssm put /my/param 'value'  # Store as SecureString (alias: p)
+toast ssm rm /my/param     # Delete parameter (alias: d, delete)
 
 # Git Operations
 toast git repo-name clone                    # Clone repository
@@ -182,6 +191,7 @@ alias p='toast prompt'       # .prompt.md files
 alias e='toast env'          # AWS profiles
 alias g='toast git'          # Git repositories
 alias r='toast region'       # AWS region
+alias s='toast ssm'          # SSM Parameter Store
 ```
 
 ## Resources

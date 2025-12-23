@@ -121,13 +121,21 @@ const diagramElements = {
       { type: 'text', x: 860, y: 460, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '(prompt_plugin.py)' }
     ]
   },
+  'ssm-plugin': {
+    type: 'box',
+    rect: { x: 590, y: 490, width: 160, height: 60, rx: 6, fill: '#ffffff', stroke: '#007bff', strokeWidth: 1 },
+    content: [
+      { type: 'text', x: 670, y: 520, fontFamily: 'Arial', fontSize: 16, textAnchor: 'middle', text: 'SsmPlugin' },
+      { type: 'text', x: 670, y: 540, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#6c757d', text: '(ssm_plugin.py)' }
+    ]
+  },
   // 통합 박스
   'aws-integration': {
     type: 'box',
-    rect: { x: 590, y: 490, width: 360, height: 60, rx: 6, fill: '#f8f9fa', stroke: '#28a745', strokeWidth: 1 },
+    rect: { x: 770, y: 490, width: 180, height: 60, rx: 6, fill: '#f8f9fa', stroke: '#28a745', strokeWidth: 1 },
     content: [
-      { type: 'text', x: 770, y: 520, fontFamily: 'Arial', fontSize: 16, textAnchor: 'middle', fill: '#28a745', text: 'AWS Integration' },
-      { type: 'text', x: 770, y: 540, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#28a745', text: '(SSM Parameter Store, EKS, STS, Profiles, Regions)' }
+      { type: 'text', x: 860, y: 520, fontFamily: 'Arial', fontSize: 16, textAnchor: 'middle', fill: '#28a745', text: 'AWS Integration' },
+      { type: 'text', x: 860, y: 540, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#28a745', text: '(SSM, EKS, STS)' }
     ]
   },
   // 플러그인 명령 박스
@@ -136,7 +144,7 @@ const diagramElements = {
     rect: { x: 200, y: 600, width: 600, height: 80, rx: 6, fill: '#f8f9fa', stroke: '#6c757d', strokeWidth: 1 },
     content: [
       { type: 'text', x: 500, y: 630, fontFamily: 'Arial', fontSize: 18, textAnchor: 'middle', fontWeight: 'bold', text: 'Plugin Commands' },
-      { type: 'text', x: 500, y: 660, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', fill: '#6c757d', text: 'am | cdw | ctx | dot | env | git | prompt | region | version' }
+      { type: 'text', x: 500, y: 660, fontFamily: 'Arial', fontSize: 14, textAnchor: 'middle', fill: '#6c757d', text: 'am | cdw | ctx | dot | env | git | prompt | region | ssm | version' }
     ]
   },
   // 외부 의존성 박스
@@ -183,6 +191,7 @@ const diagramConnectors = [
   { from: 'base-plugin', to: 'env-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
   { from: 'base-plugin', to: 'git-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
   { from: 'base-plugin', to: 'prompt-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
+  { from: 'base-plugin', to: 'ssm-plugin', stroke: '#0056b3', strokeWidth: 2, fill: 'none' },
 
   // 플러그인 그룹 관계 (가는 실선)
   // 플러그인 행 1에서 행 2로 연결
@@ -198,6 +207,7 @@ const diagramConnectors = [
   { from: 'cdw-plugin', to: 'plugin-commands', stroke: '#6c757d', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
   { from: 'dot-plugin', to: 'plugin-commands', stroke: '#6c757d', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
   { from: 'region-plugin', to: 'plugin-commands', stroke: '#6c757d', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
+  { from: 'ssm-plugin', to: 'plugin-commands', stroke: '#6c757d', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
   { from: 'aws-integration', to: 'plugin-commands', stroke: '#28a745', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
 
   // 의존성 연결 (회색 긴 점선)

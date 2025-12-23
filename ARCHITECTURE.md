@@ -37,6 +37,7 @@ toast-cli/
           ├── git_plugin.py
           ├── prompt_plugin.py
           ├── region_plugin.py
+          ├── ssm_plugin.py
           └── utils.py
 ```
 
@@ -105,6 +106,7 @@ Each plugin:
 | git | Manage Git repositories (clone, branch, pull, push, mirror) |
 | prompt | Manage .prompt.md files with AWS SSM integration |
 | region | Set AWS region |
+| ssm | AWS SSM Parameter Store operations (get, put, delete, list) |
 
 ### Plugin Functionality
 
@@ -151,6 +153,14 @@ Each plugin:
 - Lists available AWS regions using `aws ec2 describe-regions`
 - Interactive selection using fzf
 - Updates AWS CLI configuration with selected region
+
+#### SsmPlugin (ssm)
+- Direct AWS SSM Parameter Store operations
+- Default behavior: Interactive mode (browse and select parameters via fzf)
+- Commands: `ls` (list), `get`/`g` (retrieve), `put`/`p` (store), `delete`/`rm`/`d` (remove)
+- Supports `--region` option for cross-region operations
+- Stores values as SecureString type for encryption
+- Interactive parameter creation and update
 
 #### GitPlugin (git)
 - Handles Git repository operations

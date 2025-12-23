@@ -34,6 +34,7 @@ toast env          # AWS profiles
 toast git          # Git operations (clone, branch, pull, push)
 toast prompt       # Prompt file management (.prompt.md)
 toast region       # AWS region
+toast ssm          # AWS SSM Parameter Store operations
 ```
 
 ## Architecture Overview
@@ -75,7 +76,7 @@ class MyPlugin(BasePlugin):
 - **Dynamic Loading**: No hardcoded plugin imports - all plugins discovered at runtime
 
 ### Plugin Categories
-- **AWS plugins**: `am_plugin.py` (identity), `env_plugin.py` (profiles), `region_plugin.py` (regions)
+- **AWS plugins**: `am_plugin.py` (identity), `env_plugin.py` (profiles), `region_plugin.py` (regions), `ssm_plugin.py` (SSM Parameter Store)
 - **Kubernetes**: `ctx_plugin.py` (context management)
 - **Git**: `git_plugin.py` (repository operations: clone, branch, pull, push)
 - **Environment**: `dot_plugin.py` (SSM integration for .env.local files), `prompt_plugin.py` (SSM integration for .prompt.md files)
