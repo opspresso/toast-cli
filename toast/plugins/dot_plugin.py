@@ -278,8 +278,8 @@ class DotPlugin(BasePlugin):
             except Exception as e:
                 click.echo(f"Error: {e}")
 
-        elif command == "sync":
-            # Compare local and SSM, then choose action
+        elif command == "sync" or command is None:
+            # Compare local and SSM, then choose action (default behavior)
             if not match:
                 click.echo(
                     "Error: Current directory is not in a recognized workspace structure."
@@ -400,27 +400,3 @@ class DotPlugin(BasePlugin):
 
             else:
                 click.echo("Operation cancelled.")
-
-        else:
-            # Default behavior without a command - suggest using subcommands
-            if os.path.exists(local_env_path):
-                click.echo(f"Found .env.local in current directory: {local_env_path}")
-                click.echo("Use 'toast dot up' to upload to AWS SSM")
-            else:
-                click.echo(".env.local not found in current directory.")
-
-                if match:
-                    # Extract the project root path
-                    project_root = match.group(1)
-                    project_name = os.path.basename(project_root)
-                    org_name = os.path.basename(os.path.dirname(project_root))
-
-                    # Create the SSM parameter path
-                    ssm_path = f"/toast/local/{org_name}/{project_name}/env-local"
-                    click.echo(
-                        f"Use 'toast dot down' to check if {ssm_path} exists in AWS SSM"
-                    )
-                else:
-                    click.echo(
-                        "Current directory is not in a recognized workspace structure."
-                    )

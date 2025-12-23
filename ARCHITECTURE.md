@@ -125,19 +125,19 @@ Each plugin:
 
 #### DotPlugin (dot)
 - Manages .env.local files with AWS SSM Parameter Store
-- Commands: `ls` (list), `up` (upload), `down`/`dn` (download), `sync` (compare and choose)
+- Default behavior: `sync` (compare local/remote, show diff, choose upload/download)
+- Commands: `sync` (default), `up` (upload), `down`/`dn` (download), `ls` (list)
 - Uploads/downloads environment variables as SecureString
 - SSM path: `/toast/local/{org}/{project}/env-local`
 - Validates workspace path structure (`workspace/github.com/{org}/{project}`)
-- Sync command: compares local/remote content, shows diff, offers upload/download choice
 
 #### PromptPlugin (prompt)
 - Manages .prompt.md files with AWS SSM Parameter Store
-- Commands: `ls` (list), `up` (upload), `down`/`dn` (download), `sync` (compare and choose)
+- Default behavior: `sync` (compare local/remote, show diff, choose upload/download)
+- Commands: `sync` (default), `up` (upload), `down`/`dn` (download), `ls` (list)
 - Uploads/downloads prompt files as SecureString
 - SSM path: `/toast/local/{org}/{project}/prompt-md`
 - Validates workspace path structure (`workspace/github.com/{org}/{project}`)
-- Sync command: compares local/remote content, shows diff, offers upload/download choice
 
 #### EnvPlugin (env)
 - Manages AWS profiles from `~/.aws/credentials`

@@ -82,17 +82,15 @@ toast ctx                  # Switch contexts
 # Select [Del...] to delete contexts (individual or all)
 
 # Environment Files (.env.local)
-toast dot                  # Check current directory for .env.local
+toast dot                  # Compare local and SSM, choose action (default: sync)
 toast dot up               # Upload .env.local to SSM
 toast dot down             # Download .env.local from SSM (alias: dn)
-toast dot sync             # Compare local and SSM, choose action
 toast dot ls               # List all .env.local files in SSM
 
 # Prompt Files (.prompt.md)
-toast prompt               # Check current directory for .prompt.md
+toast prompt               # Compare local and SSM, choose action (default: sync)
 toast prompt up            # Upload .prompt.md to SSM
 toast prompt down          # Download .prompt.md from SSM (alias: dn)
-toast prompt sync          # Compare local and SSM, choose action
 toast prompt ls            # List all .prompt.md files in SSM
 
 # Git Operations

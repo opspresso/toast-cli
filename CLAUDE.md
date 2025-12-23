@@ -139,10 +139,11 @@ The `dot` and `prompt` plugins use AWS SSM Parameter Store for secure file stora
 **Commands**:
 | Command | Description |
 |---------|-------------|
-| `ls` | List all parameters in SSM |
+| (none) | Default: same as `sync` |
+| `sync` | Compare local and SSM, then choose action (upload/download) |
 | `up` | Upload local file to SSM |
 | `down`/`dn` | Download from SSM to local |
-| `sync` | Compare local and SSM, then choose action (upload/download) |
+| `ls` | List all parameters in SSM |
 
 **Sync command features**:
 - Compares local file content with SSM parameter value
