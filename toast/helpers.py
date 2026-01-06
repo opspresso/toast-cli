@@ -2,7 +2,7 @@
 
 import click
 import os
-import pkg_resources
+from importlib.metadata import version
 
 
 def display_logo():
@@ -21,35 +21,17 @@ def display_logo():
 
 
 def get_version():
-    """Get the version from the VERSION file"""
+    """Get the version from package metadata"""
     try:
-        # Try to get the version from the package resource
-        version = (
-            pkg_resources.resource_string("toast_cli", "VERSION")
-            .decode("utf-8")
-            .strip()
-        )
-        return version
+        # Get version from installed package metadata
+        return version("toast-cli")
     except Exception:
-        try:
-            # Try again with a different package name
-            version = (
-                pkg_resources.resource_string("toast", "../VERSION")
-                .decode("utf-8")
-                .strip()
-            )
-            return version
-        except Exception:
-            try:
-                # Fallback to the local file path for development
-                version_file = os.path.join(os.path.dirname(__file__), "..", "VERSION")
-                if os.path.exists(version_file):
-                    with open(version_file, "r") as f:
-                        version = f.read().strip()
-                        return version
-                return "v3.0.0.dev1"
-            except Exception:
-                return "v3.0.0.dev2"
+        # Fallback to VERSION file for development environment
+        version_file = os.path.join(os.path.dirname(__file__), "..", "VERSION")
+        if os.path.exists(version_file):
+            with open(version_file, "r") as f:
+                return f.read().strip()
+        return "unknown"
 
 
 class CustomHelpCommand(click.Command):
