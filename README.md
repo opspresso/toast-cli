@@ -112,6 +112,35 @@ toast git repo-name push -f                  # Force push
 toast git repo-name push --mirror            # Mirror push for migration
 ```
 
+## Workspace Structure
+
+Toast-cli uses a standardized workspace directory structure for organizing projects:
+
+```
+~/workspace/{github-host}/{org}/{project}
+```
+
+**Examples**:
+- `~/workspace/github.com/opspresso/toast-cli`
+- `~/workspace/github.enterprise.com/myorg/myproject`
+
+**First-time Setup**:
+
+When you run `toast cdw` for the first time, it will automatically:
+1. Create `~/workspace` directory if it doesn't exist
+2. Create `~/workspace/github.com` as the default structure
+3. Display instructions for creating organization and project directories
+
+You can then create your project directories:
+```bash
+mkdir -p ~/workspace/github.com/{org}/{project}
+```
+
+**Benefits**:
+- Consistent project organization across all Git hosts
+- Automatic detection of GitHub host per organization
+- Seamless integration with other toast-cli commands (git, dot, prompt)
+
 ## Configuration
 
 ### GitHub Host Configuration

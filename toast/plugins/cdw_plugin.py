@@ -18,6 +18,7 @@ class CdwPlugin(BasePlugin):
         workspace_dir = os.path.expanduser("~/workspace")
         if not os.path.exists(workspace_dir):
             os.makedirs(workspace_dir)
+            click.echo(f"Created workspace directory: {workspace_dir}")
 
         result = subprocess.run(
             ["find", workspace_dir, "-mindepth", "1", "-maxdepth", "2", "-type", "d"],
@@ -27,7 +28,20 @@ class CdwPlugin(BasePlugin):
         directories = sorted(result.stdout.splitlines())
 
         if not directories:
-            click.echo("No directories found in ~/workspace.")
+            # Create default github.com directory structure
+            github_dir = os.path.join(workspace_dir, "github.com")
+            os.makedirs(github_dir, exist_ok=True)
+            click.echo(f"Created default directory structure: {github_dir}")
+            click.echo("")
+            click.echo("Toast-cli expects the following workspace structure:")
+            click.echo("  ~/workspace/{{github-host}}/{{org}}/{{project}}")
+            click.echo("")
+            click.echo("Examples:")
+            click.echo("  ~/workspace/github.com/opspresso/toast-cli")
+            click.echo("  ~/workspace/github.enterprise.com/myorg/myproject")
+            click.echo("")
+            click.echo("You can now create your organization and project directories:")
+            click.echo(f"  mkdir -p {github_dir}/{{org}}/{{project}}")
             return
 
         selected_dir = select_from_list(directories, "Select a directory")

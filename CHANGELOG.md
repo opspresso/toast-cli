@@ -32,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Enhanced terminal output**
   - Leveraged Rich library for syntax highlighting disabled where needed
   - Consistent color scheme across help displays
+- **Automatic workspace directory initialization**
+  - `toast cdw` now automatically creates `~/workspace` and `~/workspace/github.com` directories
+  - Displays helpful instructions for first-time users
+  - Eliminates manual directory setup for new installations
 
 ### Fixed
 - Version display now properly aligned on the same line as logo
