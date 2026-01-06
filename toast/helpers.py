@@ -3,21 +3,30 @@
 import click
 import os
 from importlib.metadata import version
+from rich.console import Console
+
+console = Console()
 
 
 def display_logo():
     """Display the toast-cli ASCII logo"""
-    logo = """
- _                  _           _ _
-| |_ ___   __ _ ___| |_     ___| (_)
-| __/ _ \ / _` / __| __|__ / __| | |
-| || (_) | (_| \__ \ ||___| (__| | |
- \__\___/ \__,_|___/\__|   \___|_|_|   {0}
-""".format(
-        get_version()
-    )
-    click.echo(logo)
-    click.echo("=" * 80)
+    logo_lines = [
+        " _                  _           _ _",
+        "| |_ ___   __ _ ___| |_     ___| (_)",
+        "| __/ _ \ / _` / __| __|__ / __| | |",
+        "| || (_) | (_| \__ \ ||___| (__| | |",
+        " \__\___/ \__,_|___/\__|   \___|_|_|",
+    ]
+
+    console.print()
+    for i, line in enumerate(logo_lines):
+        if i == len(logo_lines) - 1:
+            # Last line: append version on the same line
+            console.print(line, style="bold yellow", end="")
+            console.print(f"   {get_version()}", style="bold cyan", highlight=False)
+        else:
+            console.print(line, style="bold yellow", highlight=False)
+    console.print("=" * 80, style="dim")
 
 
 def get_version():
