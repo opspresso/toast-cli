@@ -35,7 +35,7 @@ Python-based CLI utility with plugin architecture for AWS, Kubernetes, and Git o
 ## Installation
 
 ### Requirements
-* Python 3.6+
+* Python 3.9+
 * External tools: fzf, aws-cli, kubectl
 * Python packages: click, rich
 

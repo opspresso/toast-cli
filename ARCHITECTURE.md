@@ -2,7 +2,7 @@
 
 [![Website](https://img.shields.io/badge/Website-Visit-blue)](https://toast.sh/)
 [![PyPI](https://img.shields.io/pypi/v/toast-cli)](https://pypi.org/project/toast-cli/)
-[![Version](https://img.shields.io/badge/Version-v3.6.0.dev0-orange)](https://github.com/opspresso/toast-cli/releases)
+[![Python](https://img.shields.io/badge/Python-3.9+-blue)](https://www.python.org/)
 
 ## Overview
 
@@ -56,7 +56,8 @@ toast-cli/
 
 #### Helper Utilities (toast/helpers.py)
 - Contains helper functions and UI elements
-- Handles version information retrieval
+- Retrieves version information using `importlib.metadata`
+- Displays colored logo using Rich Console
 - Provides custom Click classes for enhanced help display
 
 ### Plugin System
@@ -195,14 +196,20 @@ This enables:
 
 ## Dependencies
 
-- Click: Command-line interface creation
-- importlib/pkgutil: Dynamic module discovery
-- External tools:
-  - fzf: Interactive selection
-  - aws-cli: AWS operations
-  - kubectl: Kubernetes operations
-- Python packages:
-  - rich: Terminal formatting
+### Python Requirements
+- Python 3.9+
+- Standard library modules:
+  - `importlib.metadata`: Package metadata and version retrieval
+  - `importlib`/`pkgutil`: Dynamic module discovery and plugin loading
+
+### Python Packages
+- `click`: Command-line interface creation framework
+- `rich`: Terminal formatting and colored output
+
+### External Tools
+- `fzf`: Interactive fuzzy selection
+- `aws-cli`: AWS operations and API calls
+- `kubectl`: Kubernetes cluster operations
 
 ## Adding New Plugins
 
