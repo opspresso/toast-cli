@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
-import click
 import subprocess
+from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.utils import select_from_list
+
+console = Console()
 
 
 class RegionPlugin(BasePlugin):
@@ -23,9 +25,9 @@ class RegionPlugin(BasePlugin):
             )
             current_region = current_region_result.stdout.strip()
             if current_region:
-                click.echo(f"Current AWS region: {current_region}")
+                console.print(f"Current AWS region: {current_region}", style="bold cyan")
             else:
-                click.echo("No AWS region is currently set.")
+                console.print("No AWS region is currently set.", style="yellow")
 
             # Get available region list
             result = subprocess.run(
@@ -43,7 +45,7 @@ class RegionPlugin(BasePlugin):
             )
             regions = sorted(result.stdout.split())
             if not regions:
-                click.echo("No regions found.")
+                console.print("✗ No regions found.", style="bold red")
                 return
 
             selected_region = select_from_list(regions, "Select AWS Region")
@@ -53,8 +55,8 @@ class RegionPlugin(BasePlugin):
                     ["aws", "configure", "set", "default.region", selected_region]
                 )
                 subprocess.run(["aws", "configure", "set", "default.output", "json"])
-                click.echo(f"Set AWS region to {selected_region}")
+                console.print(f"✓ Set AWS region to {selected_region}", style="bold green")
             else:
-                click.echo("No region selected.")
+                console.print("No region selected.", style="yellow")
         except Exception as e:
-            click.echo(f"Error fetching AWS regions: {e}")
+            console.print(f"✗ Error fetching AWS regions: {e}", style="bold red")

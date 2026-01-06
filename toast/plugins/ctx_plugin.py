@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
-import click
 import subprocess
+from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.utils import select_from_list
+
+console = Console()
 
 
 class CtxPlugin(BasePlugin):
@@ -20,8 +22,9 @@ class CtxPlugin(BasePlugin):
             text=True,
         )
         if result.returncode != 0:
-            click.echo(
-                "Error fetching Kubernetes contexts. Is kubectl configured correctly?"
+            console.print(
+                "✗ Error fetching Kubernetes contexts. Is kubectl configured correctly?",
+                style="bold red"
             )
             return
 
@@ -37,7 +40,7 @@ class CtxPlugin(BasePlugin):
                 ["aws", "configure", "get", "region"], capture_output=True, text=True
             )
             if result.returncode != 0:
-                click.echo("Error fetching AWS region.")
+                console.print("✗ Error fetching AWS region.", style="bold red")
                 return
 
             region = region.stdout.strip()
@@ -58,12 +61,12 @@ class CtxPlugin(BasePlugin):
                 text=True,
             )
             if result.returncode != 0:
-                click.echo("Error fetching EKS clusters.")
+                console.print("✗ Error fetching EKS clusters.", style="bold red")
                 return
 
             clusters = sorted(result.stdout.split())
             if not clusters:
-                click.echo("No EKS clusters found.")
+                console.print("No EKS clusters found.", style="yellow")
                 return
 
             selected_cluster = select_from_list(clusters, "Select an EKS cluster")
@@ -82,9 +85,9 @@ class CtxPlugin(BasePlugin):
                         region,
                     ]
                 )
-                click.echo(f"Updated kubeconfig for {selected_cluster}")
+                console.print(f"✓ Updated kubeconfig for {selected_cluster}", style="bold green")
             else:
-                click.echo("No cluster selected.")
+                console.print("No cluster selected.", style="yellow")
         elif selected_ctx == "[Del...]":
             delete_contexts = [
                 ctx for ctx in contexts if ctx not in ("[New...]", "[Del...]")
@@ -95,16 +98,16 @@ class CtxPlugin(BasePlugin):
             )
             if selected_to_delete == "[All...]":
                 subprocess.run(["kubectl", "config", "unset", "contexts"])
-                click.echo("Deleted all Kubernetes contexts.")
+                console.print("✓ Deleted all Kubernetes contexts.", style="bold green")
             elif selected_to_delete:
                 subprocess.run(
                     ["kubectl", "config", "delete-context", selected_to_delete]
                 )
-                click.echo(f"Deleted Kubernetes context: {selected_to_delete}")
+                console.print(f"✓ Deleted Kubernetes context: {selected_to_delete}", style="bold green")
             else:
-                click.echo("No context selected for deletion.")
+                console.print("No context selected for deletion.", style="yellow")
         elif selected_ctx:
             subprocess.run(["kubectl", "config", "use-context", selected_ctx])
-            click.echo(f"Switched to Kubernetes context: {selected_ctx}")
+            console.print(f"✓ Switched to Kubernetes context: {selected_ctx}", style="bold green")
         else:
-            click.echo("No context selected.")
+            console.print("No context selected.", style="yellow")

@@ -6,7 +6,10 @@ import re
 import subprocess
 import json
 from datetime import datetime
+from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
+
+console = Console()
 from toast.plugins.utils import (
     check_aws_cli,
     get_ssm_parameter,
@@ -49,12 +52,12 @@ class PromptPlugin(BasePlugin):
                     ["aws", "--version"], capture_output=True, text=True
                 )
                 if result.returncode != 0:
-                    click.echo(
+                    console.print(
                         "Error: AWS CLI not found. Please install it to use this feature."
                     )
                     return
 
-                click.echo(
+                console.print(
                     "Listing all .prompt.md parameters in AWS SSM Parameter Store..."
                 )
 
@@ -75,7 +78,7 @@ class PromptPlugin(BasePlugin):
                 )
 
                 if result.returncode != 0:
-                    click.echo(f"Error listing parameters: {result.stderr}")
+                    console.print(f"Error listing parameters: {result.stderr}")
                     return
 
                 try:
@@ -83,11 +86,11 @@ class PromptPlugin(BasePlugin):
                     parameters = response.get("Parameters", [])
 
                     if not parameters:
-                        click.echo("No parameters found under /toast/local/ path.")
+                        console.print(f"No parameters found under /toast/local/ path.", style="yellow")
                         return
 
-                    click.echo("\nAWS SSM Parameters:")
-                    click.echo("=" * 50)
+                    console.print("\nAWS SSM Parameters:")
+                    console.print("=" * 50)
 
                     # Filter parameters containing prompt-md
                     prompt_params = [
@@ -104,21 +107,21 @@ class PromptPlugin(BasePlugin):
                                 last_modified
                             ).strftime("%Y-%m-%d %H:%M:%S")
 
-                        click.echo(f"{param_name} (Last Modified: {last_modified})")
+                        console.print(f"{param_name} (Last Modified: {last_modified})")
 
                 except json.JSONDecodeError:
-                    click.echo("Error parsing AWS SSM response.")
+                    console.print("Error parsing AWS SSM response.")
             except Exception as e:
-                click.echo(f"Error: {e}")
+                console.print(f"✗ Error: {e}", style="bold red")
 
         elif command == "up":
             # Upload local .prompt.md file to AWS SSM Parameter Store
             if not os.path.exists(local_prompt_path):
-                click.echo("Error: .prompt.md not found in current directory.")
+                console.print(f"✗ Error: .prompt.md not found in current directory.", style="bold red")
                 return
 
             if not match:
-                click.echo(
+                console.print(
                     "Error: Current directory is not in a recognized workspace structure."
                 )
                 return
@@ -133,7 +136,7 @@ class PromptPlugin(BasePlugin):
 
             # Ask for confirmation before proceeding
             if not click.confirm(f"Upload .prompt.md to AWS SSM at {ssm_path}?"):
-                click.echo("Operation cancelled.")
+                console.print("Operation cancelled.")
                 return
 
             # Read the local .prompt.md file
@@ -147,13 +150,13 @@ class PromptPlugin(BasePlugin):
                     ["aws", "--version"], capture_output=True, text=True
                 )
                 if result.returncode != 0:
-                    click.echo(
+                    console.print(
                         "Error: AWS CLI not found. Please install it to use this feature."
                     )
                     return
 
                 # Upload to SSM
-                click.echo(
+                console.print(
                     f"Uploading .prompt.md to AWS SSM Parameter Store at {ssm_path}..."
                 )
 
@@ -184,18 +187,18 @@ class PromptPlugin(BasePlugin):
                 os.remove(temp_file_path)
 
                 if result.returncode == 0:
-                    click.echo(
+                    console.print(
                         f"Successfully uploaded .prompt.md to AWS SSM at {ssm_path}"
                     )
                 else:
-                    click.echo(f"Error uploading to AWS SSM: {result.stderr}")
+                    console.print(f"Error uploading to AWS SSM: {result.stderr}")
             except Exception as e:
-                click.echo(f"Error: {e}")
+                console.print(f"✗ Error: {e}", style="bold red")
 
         elif command == "down" or command == "dn":
             # Download .prompt.md file from AWS SSM Parameter Store
             if not match:
-                click.echo(
+                console.print(
                     "Error: Current directory is not in a recognized workspace structure."
                 )
                 return
@@ -217,7 +220,7 @@ class PromptPlugin(BasePlugin):
             if not click.confirm(
                 f"Download .prompt.md from AWS SSM at {ssm_path}{overwrite_msg}?"
             ):
-                click.echo("Operation cancelled.")
+                console.print("Operation cancelled.")
                 return
 
             # Download from SSM
@@ -227,13 +230,13 @@ class PromptPlugin(BasePlugin):
                     ["aws", "--version"], capture_output=True, text=True
                 )
                 if result.returncode != 0:
-                    click.echo(
+                    console.print(
                         "Error: AWS CLI not found. Please install it to use this feature."
                     )
                     return
 
                 # Try to get the parameter
-                click.echo(f"Downloading from AWS SSM Parameter Store at {ssm_path}...")
+                console.print(f"Downloading from AWS SSM Parameter Store at {ssm_path}...")
                 result = subprocess.run(
                     [
                         "aws",
@@ -250,7 +253,7 @@ class PromptPlugin(BasePlugin):
                 )
 
                 if result.returncode != 0:
-                    click.echo(
+                    console.print(
                         f"Error: Parameter not found in AWS SSM or access denied."
                     )
                     return
@@ -261,31 +264,31 @@ class PromptPlugin(BasePlugin):
                     parameter_value = response.get("Parameter", {}).get("Value", "")
 
                     if not parameter_value:
-                        click.echo("Error: Retrieved parameter has no value.")
+                        console.print(f"✗ Error: Retrieved parameter has no value.", style="bold red")
                         return
 
                     # Write to local .prompt.md file
                     with open(local_prompt_path, "w") as file:
                         file.write(parameter_value)
 
-                    click.echo(
+                    console.print(
                         f"Successfully downloaded .prompt.md from AWS SSM and saved to {local_prompt_path}"
                     )
                 except json.JSONDecodeError:
-                    click.echo("Error parsing AWS SSM response.")
+                    console.print("Error parsing AWS SSM response.")
             except Exception as e:
-                click.echo(f"Error: {e}")
+                console.print(f"✗ Error: {e}", style="bold red")
 
         elif command == "sync" or command is None:
             # Compare local and SSM, then choose action (default behavior)
             if not match:
-                click.echo(
+                console.print(
                     "Error: Current directory is not in a recognized workspace structure."
                 )
                 return
 
             if not check_aws_cli():
-                click.echo(
+                console.print(
                     "Error: AWS CLI not found. Please install it to use this feature."
                 )
                 return
@@ -296,8 +299,8 @@ class PromptPlugin(BasePlugin):
             org_name = os.path.basename(os.path.dirname(project_root))
             ssm_path = f"/toast/local/{org_name}/{project_name}/prompt-md"
 
-            click.echo(f"Comparing .prompt.md with SSM: {ssm_path}")
-            click.echo("=" * 60)
+            console.print(f"Comparing .prompt.md with SSM: {ssm_path}")
+            console.print("=" * 60)
 
             # Get local content
             local_content = None
@@ -308,7 +311,7 @@ class PromptPlugin(BasePlugin):
             # Get SSM content
             remote_content, last_modified, error = get_ssm_parameter(ssm_path)
             if error:
-                click.echo(f"Error fetching SSM parameter: {error}")
+                console.print(f"Error fetching SSM parameter: {error}")
                 return
 
             # Compare
@@ -318,26 +321,26 @@ class PromptPlugin(BasePlugin):
             local_hash = compute_hash(local_content) if local_content else "-"
             remote_hash = compute_hash(remote_content) if remote_content else "-"
 
-            click.echo(f"Local:  {local_hash if local_content else '(not found)'}")
-            click.echo(f"SSM:    {remote_hash if remote_content else '(not found)'}")
+            console.print(f"Local:  {local_hash if local_content else '(not found)'}")
+            console.print(f"SSM:    {remote_hash if remote_content else '(not found)'}")
 
             if last_modified:
-                click.echo(f"SSM Last Modified: {last_modified}")
+                console.print(f"SSM Last Modified: {last_modified}")
 
-            click.echo("")
+            console.print("")
 
             if status == "both_missing":
-                click.echo("Neither local file nor SSM parameter exists.")
+                console.print("Neither local file nor SSM parameter exists.")
                 return
 
             if status == "identical":
-                click.echo("✓ Files are identical. No action needed.")
+                console.print(f"✓ Files are identical. No action needed.", style="bold green")
                 return
 
             # Show diff if both exist and different
             if status == "different":
-                click.echo("Differences found:")
-                click.echo("-" * 40)
+                console.print("Differences found:")
+                console.print("-" * 40)
                 diff_lines = show_diff(local_content, remote_content)
                 for line in diff_lines[:50]:  # Limit output
                     if line.startswith("+") and not line.startswith("+++"):
@@ -345,23 +348,23 @@ class PromptPlugin(BasePlugin):
                     elif line.startswith("-") and not line.startswith("---"):
                         click.secho(line.rstrip(), fg="red")
                     else:
-                        click.echo(line.rstrip())
+                        console.print(line.rstrip())
                 if len(diff_lines) > 50:
-                    click.echo(f"... ({len(diff_lines) - 50} more lines)")
-                click.echo("-" * 40)
+                    console.print(f"... ({len(diff_lines) - 50} more lines)")
+                console.print("-" * 40)
             elif status == "local_only":
-                click.echo("Local file exists, but SSM parameter does not.")
+                console.print("Local file exists, but SSM parameter does not.")
             elif status == "remote_only":
-                click.echo("SSM parameter exists, but local file does not.")
+                console.print("SSM parameter exists, but local file does not.")
 
-            click.echo("")
+            console.print("")
 
             # Let user choose action
             action = select_sync_action(status, ".prompt.md")
 
             if action == "upload":
                 # Upload local to SSM
-                click.echo(f"Uploading .prompt.md to SSM...")
+                console.print(f"Uploading .prompt.md to SSM...")
                 temp_file_path = os.path.expanduser("~/toast_temp_prompt.txt")
                 with open(temp_file_path, "w") as temp_file:
                     temp_file.write(local_content)
@@ -385,16 +388,16 @@ class PromptPlugin(BasePlugin):
                 os.remove(temp_file_path)
 
                 if result.returncode == 0:
-                    click.echo(f"✓ Successfully uploaded to {ssm_path}")
+                    console.print(f"✓ Successfully uploaded to {ssm_path}", style="bold green")
                 else:
-                    click.echo(f"Error uploading: {result.stderr}")
+                    console.print(f"Error uploading: {result.stderr}")
 
             elif action == "download":
                 # Download SSM to local
-                click.echo(f"Downloading from SSM to .prompt.md...")
+                console.print(f"Downloading from SSM to .prompt.md...")
                 with open(local_prompt_path, "w") as file:
                     file.write(remote_content)
-                click.echo(f"✓ Successfully downloaded to {local_prompt_path}")
+                console.print(f"✓ Successfully downloaded to {local_prompt_path}", style="bold green")
 
             else:
-                click.echo("Operation cancelled.")
+                console.print("Operation cancelled.")

@@ -4,10 +4,11 @@ import os
 import configparser
 import subprocess
 import json
-import click
 from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.utils import select_from_list
+
+console = Console()
 
 
 class EnvPlugin(BasePlugin):
@@ -24,7 +25,7 @@ class EnvPlugin(BasePlugin):
 
             # Check if file exists
             if not os.path.exists(credentials_path):
-                click.echo(f"AWS credentials file not found: {credentials_path}")
+                console.print(f"✗ AWS credentials file not found: {credentials_path}", style="bold red")
                 return
 
             # Parse credentials file using configparser
@@ -35,7 +36,7 @@ class EnvPlugin(BasePlugin):
             profiles = config.sections()
 
             if not profiles:
-                click.echo("No profiles found in AWS credentials file.")
+                console.print("✗ No profiles found in AWS credentials file.", style="bold red")
                 return
 
             # Get current default profile
@@ -45,14 +46,14 @@ class EnvPlugin(BasePlugin):
 
             # Display current default profile if exists
             if current_default:
-                click.echo(f"Current default profile: {current_default}")
+                console.print(f"Current default profile: {current_default}", style="bold cyan")
 
             # User selects profile
             selected_profile = select_from_list(profiles, "Select AWS Profile")
 
             if selected_profile:
                 if selected_profile == "default":
-                    click.echo("Already the default profile.")
+                    console.print("Already the default profile.", style="yellow")
                     return
 
                 # Get credentials from selected profile
@@ -84,7 +85,7 @@ class EnvPlugin(BasePlugin):
                 with open(credentials_path, "w") as configfile:
                     config.write(configfile)
 
-                click.echo(f"Set '{selected_profile}' as default profile.")
+                console.print(f"✓ Set '{selected_profile}' as default profile.", style="bold green")
 
                 try:
                     result = subprocess.run(
@@ -95,13 +96,12 @@ class EnvPlugin(BasePlugin):
                     if result.returncode == 0:
                         # Parse JSON and print with rich
                         json_data = json.loads(result.stdout)
-                        console = Console()
                         console.print_json(json.dumps(json_data))
                     else:
-                        click.echo("Error fetching AWS caller identity.")
+                        console.print("✗ Error fetching AWS caller identity.", style="bold red")
                 except Exception as e:
-                    click.echo(f"Error fetching AWS caller identity: {e}")
+                    console.print(f"✗ Error fetching AWS caller identity: {e}", style="bold red")
             else:
-                click.echo("No profile selected.")
+                console.print("No profile selected.", style="yellow")
         except Exception as e:
-            click.echo(f"Error while managing AWS profiles: {e}")
+            console.print(f"✗ Error while managing AWS profiles: {e}", style="bold red")

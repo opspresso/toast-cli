@@ -3,7 +3,10 @@
 import click
 import subprocess
 import json
+from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
+
+console = Console()
 from toast.plugins.utils import check_aws_cli, select_from_list
 
 
@@ -25,7 +28,7 @@ class SsmPlugin(BasePlugin):
     def execute(cls, command=None, name=None, value=None, region=None, **kwargs):
         # Check AWS CLI availability
         if not check_aws_cli():
-            click.echo("Error: AWS CLI not found. Please install it to use this feature.")
+            console.print(f"✗ Error: AWS CLI not found. Please install it to use this feature.", style="bold red")
             return
 
         # Build base AWS command with optional region
@@ -57,38 +60,38 @@ class SsmPlugin(BasePlugin):
             if command and command.startswith("/"):
                 cls._get_parameter(command, aws_cmd)
             else:
-                click.echo(f"Unknown command: {command}")
-                click.echo()
+                console.print(f"Unknown command: {command}")
+                console.print()
                 cls._show_usage()
 
     @classmethod
     def _show_usage(cls):
         """Show usage information."""
-        click.echo("Usage: toast ssm <command> [args...]")
-        click.echo()
-        click.echo("Commands:")
-        click.echo("  (none)                    - Interactive mode: browse and select parameters")
-        click.echo("  ls [path]                 - List parameters (optionally filter by path)")
-        click.echo("  g|get <name>              - Get parameter value (decrypted)")
-        click.echo("  p|put <name> <value>      - Put parameter as SecureString")
-        click.echo("  d|delete|rm <name>        - Delete parameter")
-        click.echo()
-        click.echo("Options:")
-        click.echo("  -r, --region <region>     - Specify AWS region")
-        click.echo()
-        click.echo("Examples:")
-        click.echo("  toast ssm                           # Interactive browse")
-        click.echo("  toast ssm ls /toast/                # List parameters under /toast/")
-        click.echo("  toast ssm get /my/param             # Get parameter value")
-        click.echo("  toast ssm put /my/param 'secret'    # Store as SecureString")
-        click.echo("  toast ssm rm /my/param              # Delete parameter")
+        console.print("Usage: toast ssm <command> [args...]")
+        console.print()
+        console.print("Commands:")
+        console.print("  (none)                    - Interactive mode: browse and select parameters")
+        console.print("  ls [path]                 - List parameters (optionally filter by path)")
+        console.print("  g|get <name>              - Get parameter value (decrypted)")
+        console.print("  p|put <name> <value>      - Put parameter as SecureString")
+        console.print("  d|delete|rm <name>        - Delete parameter")
+        console.print()
+        console.print("Options:")
+        console.print("  -r, --region <region>     - Specify AWS region")
+        console.print()
+        console.print("Examples:")
+        console.print("  toast ssm                           # Interactive browse")
+        console.print("  toast ssm ls /toast/                # List parameters under /toast/")
+        console.print("  toast ssm get /my/param             # Get parameter value")
+        console.print("  toast ssm put /my/param 'secret'    # Store as SecureString")
+        console.print("  toast ssm rm /my/param              # Delete parameter")
 
     @classmethod
     def _get_parameter(cls, name, aws_cmd):
         """Get parameter value with decryption."""
         if not name:
-            click.echo("Error: Parameter name is required.")
-            click.echo("Usage: toast ssm get <name>")
+            console.print(f"✗ Error: Parameter name is required.", style="bold red")
+            console.print("Usage: toast ssm get <name>")
             return
 
         try:
@@ -105,9 +108,9 @@ class SsmPlugin(BasePlugin):
 
             if result.returncode != 0:
                 if "ParameterNotFound" in result.stderr:
-                    click.echo(f"Error: Parameter '{name}' not found.")
+                    console.print(f"✗ Error: Parameter '{name}' not found.", style="bold red")
                 else:
-                    click.echo(f"Error: {result.stderr}")
+                    console.print(f"✗ Error: {result.stderr}", style="bold red")
                 return
 
             response = json.loads(result.stdout)
@@ -116,34 +119,34 @@ class SsmPlugin(BasePlugin):
             param_type = param.get("Type", "")
             last_modified = param.get("LastModifiedDate", "")
 
-            click.echo(f"Name: {name}")
-            click.echo(f"Type: {param_type}")
+            console.print(f"Name: {name}")
+            console.print(f"Type: {param_type}")
             if last_modified:
-                click.echo(f"Last Modified: {last_modified}")
-            click.echo("-" * 40)
-            click.echo(value)
+                console.print(f"Last Modified: {last_modified}")
+            console.print("-" * 40)
+            console.print(value)
 
         except json.JSONDecodeError:
-            click.echo("Error: Failed to parse AWS response.")
+            console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
-            click.echo(f"Error: {e}")
+            console.print(f"✗ Error: {e}", style="bold red")
 
     @classmethod
     def _put_parameter(cls, name, value, aws_cmd):
         """Put parameter as SecureString."""
         if not name:
-            click.echo("Error: Parameter name is required.")
-            click.echo("Usage: toast ssm put <name> <value>")
+            console.print(f"✗ Error: Parameter name is required.", style="bold red")
+            console.print("Usage: toast ssm put <name> <value>")
             return
 
         if not value:
-            click.echo("Error: Parameter value is required.")
-            click.echo("Usage: toast ssm put <name> <value>")
+            console.print(f"✗ Error: Parameter value is required.", style="bold red")
+            console.print("Usage: toast ssm put <name> <value>")
             return
 
         # Confirm before overwriting
         if not click.confirm(f"Store '{name}' as SecureString?"):
-            click.echo("Operation cancelled.")
+            console.print("Operation cancelled.")
             return
 
         try:
@@ -161,29 +164,29 @@ class SsmPlugin(BasePlugin):
             )
 
             if result.returncode != 0:
-                click.echo(f"Error: {result.stderr}")
+                console.print(f"✗ Error: {result.stderr}", style="bold red")
                 return
 
             response = json.loads(result.stdout)
             version = response.get("Version", "")
-            click.echo(f"Successfully stored '{name}' (Version: {version})")
+            console.print(f"✓ Successfully stored '{name}' (Version: {version})", style="bold green")
 
         except json.JSONDecodeError:
-            click.echo("Error: Failed to parse AWS response.")
+            console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
-            click.echo(f"Error: {e}")
+            console.print(f"✗ Error: {e}", style="bold red")
 
     @classmethod
     def _delete_parameter(cls, name, aws_cmd):
         """Delete parameter."""
         if not name:
-            click.echo("Error: Parameter name is required.")
-            click.echo("Usage: toast ssm delete <name>")
+            console.print(f"✗ Error: Parameter name is required.", style="bold red")
+            console.print("Usage: toast ssm delete <name>")
             return
 
         # Confirm before deleting
         if not click.confirm(f"Delete parameter '{name}'? This cannot be undone."):
-            click.echo("Operation cancelled.")
+            console.print("Operation cancelled.")
             return
 
         try:
@@ -198,15 +201,15 @@ class SsmPlugin(BasePlugin):
 
             if result.returncode != 0:
                 if "ParameterNotFound" in result.stderr:
-                    click.echo(f"Error: Parameter '{name}' not found.")
+                    console.print(f"✗ Error: Parameter '{name}' not found.", style="bold red")
                 else:
-                    click.echo(f"Error: {result.stderr}")
+                    console.print(f"✗ Error: {result.stderr}", style="bold red")
                 return
 
-            click.echo(f"Successfully deleted '{name}'")
+            console.print(f"✓ Successfully deleted '{name}'", style="bold green")
 
         except Exception as e:
-            click.echo(f"Error: {e}")
+            console.print(f"✗ Error: {e}", style="bold red")
 
     @classmethod
     def _list_parameters(cls, path, aws_cmd):
@@ -236,7 +239,7 @@ class SsmPlugin(BasePlugin):
                 )
 
             if result.returncode != 0:
-                click.echo(f"Error: {result.stderr}")
+                console.print(f"✗ Error: {result.stderr}", style="bold red")
                 return
 
             response = json.loads(result.stdout)
@@ -247,11 +250,11 @@ class SsmPlugin(BasePlugin):
                 parameters = response.get("Parameters", [])
 
             if not parameters:
-                click.echo("No parameters found.")
+                console.print(f"No parameters found.", style="yellow")
                 return
 
-            click.echo(f"\nAWS SSM Parameters{' under ' + path if path else ''}:")
-            click.echo("=" * 60)
+            console.print(f"\nAWS SSM Parameters{' under ' + path if path else ''}:")
+            console.print("=" * 60)
 
             for param in parameters:
                 param_name = param.get("Name", "")
@@ -262,18 +265,18 @@ class SsmPlugin(BasePlugin):
                     from datetime import datetime
                     last_modified = datetime.fromtimestamp(last_modified).strftime("%Y-%m-%d %H:%M:%S")
 
-                click.echo(f"{param_name}")
-                click.echo(f"  Type: {param_type}, Modified: {last_modified}")
+                console.print(f"{param_name}")
+                console.print(f"  Type: {param_type}, Modified: {last_modified}")
 
         except json.JSONDecodeError:
-            click.echo("Error: Failed to parse AWS response.")
+            console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
-            click.echo(f"Error: {e}")
+            console.print(f"✗ Error: {e}", style="bold red")
 
     @classmethod
     def _interactive_mode(cls, aws_cmd):
         """Interactive mode: browse and select parameters."""
-        click.echo("Loading parameters from AWS SSM...")
+        console.print("Loading parameters from AWS SSM...")
 
         try:
             # Get all parameters
@@ -287,14 +290,14 @@ class SsmPlugin(BasePlugin):
             )
 
             if result.returncode != 0:
-                click.echo(f"Error: {result.stderr}")
+                console.print(f"✗ Error: {result.stderr}", style="bold red")
                 return
 
             response = json.loads(result.stdout)
             parameters = response.get("Parameters", [])
 
             if not parameters:
-                click.echo("No parameters found.")
+                console.print(f"No parameters found.", style="yellow")
                 return
 
             # Build list for fzf
@@ -307,7 +310,7 @@ class SsmPlugin(BasePlugin):
             selected = select_from_list(options, "Select parameter")
 
             if not selected:
-                click.echo("No selection made.")
+                console.print(f"No selection made.", style="yellow")
                 return
 
             if selected == "[New] Create new parameter...":
@@ -318,21 +321,21 @@ class SsmPlugin(BasePlugin):
                 cls._parameter_actions(selected, aws_cmd)
 
         except json.JSONDecodeError:
-            click.echo("Error: Failed to parse AWS response.")
+            console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
-            click.echo(f"Error: {e}")
+            console.print(f"✗ Error: {e}", style="bold red")
 
     @classmethod
     def _create_new_parameter(cls, aws_cmd):
         """Create a new parameter interactively."""
         name = click.prompt("Parameter name (e.g., /my/secret)")
         if not name:
-            click.echo("Operation cancelled.")
+            console.print("Operation cancelled.")
             return
 
         value = click.prompt("Parameter value", hide_input=True)
         if not value:
-            click.echo("Operation cancelled.")
+            console.print("Operation cancelled.")
             return
 
         cls._put_parameter(name, value, aws_cmd)
@@ -354,7 +357,7 @@ class SsmPlugin(BasePlugin):
             )
 
             if result.returncode != 0:
-                click.echo(f"Error: {result.stderr}")
+                console.print(f"✗ Error: {result.stderr}", style="bold red")
                 return
 
             response = json.loads(result.stdout)
@@ -363,15 +366,15 @@ class SsmPlugin(BasePlugin):
             param_type = param.get("Type", "")
             last_modified = param.get("LastModifiedDate", "")
 
-            click.echo()
-            click.echo(f"Name: {name}")
-            click.echo(f"Type: {param_type}")
+            console.print()
+            console.print(f"Name: {name}")
+            console.print(f"Type: {param_type}")
             if last_modified:
-                click.echo(f"Last Modified: {last_modified}")
-            click.echo("-" * 40)
-            click.echo(current_value)
-            click.echo("-" * 40)
-            click.echo()
+                console.print(f"Last Modified: {last_modified}")
+            console.print("-" * 40)
+            console.print(current_value)
+            console.print("-" * 40)
+            console.print()
 
             # Offer actions
             actions = [
@@ -390,11 +393,11 @@ class SsmPlugin(BasePlugin):
             elif selected == "Delete parameter":
                 cls._delete_parameter(name, aws_cmd)
             elif selected == "Copy value (print only)":
-                click.echo(current_value)
+                console.print(current_value)
             else:
-                click.echo("Operation cancelled.")
+                console.print("Operation cancelled.")
 
         except json.JSONDecodeError:
-            click.echo("Error: Failed to parse AWS response.")
+            console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
-            click.echo(f"Error: {e}")
+            console.print(f"✗ Error: {e}", style="bold red")

@@ -1,6 +1,6 @@
 # Toast-cli Architecture
 
-[![Website](https://img.shields.io/badge/Website-Visit-blue)](https://toast.sh/)
+[![Website](https://img.shields.io/badge/Website-Visit-blue)](https://cli.toast.sh/)
 [![PyPI](https://img.shields.io/pypi/v/toast-cli)](https://pypi.org/project/toast-cli/)
 [![Python](https://img.shields.io/badge/Python-3.9+-blue)](https://www.python.org/)
 

@@ -6,12 +6,13 @@
 | __/ _ \ / _` / __| __|__ / __| | |
 | || (_) | (_| \__ \ ||___| (__| | |
  \__\___/ \__,_|___/\__|   \___|_|_|
+
 ```
 
 [![build](https://img.shields.io/github/actions/workflow/status/opspresso/toast-cli/push.yml?branch=main&style=for-the-badge&logo=github)](https://github.com/opspresso/toast-cli/actions/workflows/push.yml)
 [![release](https://img.shields.io/github/v/release/opspresso/toast-cli?style=for-the-badge&logo=github)](https://github.com/opspresso/toast-cli/releases)
 [![PyPI](https://img.shields.io/pypi/v/toast-cli?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/toast-cli/)
-[![website](https://img.shields.io/badge/website-toast--cli-blue?style=for-the-badge&logo=github)](https://toast.sh/)
+[![website](https://img.shields.io/badge/website-toast--cli-blue?style=for-the-badge&logo=github)](https://cli.toast.sh/)
 
 Python-based CLI utility with plugin architecture for AWS, Kubernetes, and Git operations.
 
@@ -228,4 +229,4 @@ alias s='toast ssm'          # SSM Parameter Store
 * **Development**: See [CLAUDE.md](CLAUDE.md) for guidelines
 * **License**: [GNU GPL v3.0](LICENSE)
 * **Contributing**: Via [GitHub repository](https://github.com/opspresso/toast-cli)
-* **Documentation**: [ARCHITECTURE.md](ARCHITECTURE.md) and [toast.sh](https://toast.sh/)
+* **Documentation**: [ARCHITECTURE.md](ARCHITECTURE.md) and [toast.sh](https://cli.toast.sh/)

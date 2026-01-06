@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-import click
 import subprocess
 import json
 from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
+
+console = Console()
 
 
 class AmPlugin(BasePlugin):
@@ -22,9 +23,8 @@ class AmPlugin(BasePlugin):
             if result.returncode == 0:
                 # Parse JSON and print with rich
                 json_data = json.loads(result.stdout)
-                console = Console()
                 console.print_json(json.dumps(json_data))
             else:
-                click.echo("Error fetching AWS caller identity.")
+                console.print("✗ Error fetching AWS caller identity.", style="bold red")
         except Exception as e:
-            click.echo(f"Error fetching AWS caller identity: {e}")
+            console.print(f"✗ Error fetching AWS caller identity: {e}", style="bold red")

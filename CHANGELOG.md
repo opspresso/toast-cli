@@ -29,12 +29,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Logo displayed in bold yellow using Rich Console
   - Version number shown in bold cyan
   - Improved visual appeal and readability
-- **Enhanced terminal output**
-  - Leveraged Rich library for syntax highlighting disabled where needed
-  - Consistent color scheme across help displays
+- **Enhanced terminal output with Rich Console colors**
+  - Success messages: Green with ✓ checkmark (e.g., "✓ Created workspace directory")
+  - Error messages: Red with ✗ cross mark (e.g., "✗ Error fetching AWS caller identity")
+  - Info messages: Cyan for headers and current status
+  - Warning messages: Yellow for informational warnings
+  - Examples and paths: Dimmed or yellow for emphasis
+  - Applied to ALL plugins: cdw, am, env, region, ctx, git, dot, prompt, ssm
+  - Consistent color scheme across all commands and operations
 - **Automatic workspace directory initialization**
   - `toast cdw` now automatically creates `~/workspace` and `~/workspace/github.com` directories
-  - Displays helpful instructions for first-time users
+  - Displays helpful instructions for first-time users with colored formatting
   - Eliminates manual directory setup for new installations
 
 ### Fixed

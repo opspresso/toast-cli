@@ -6,7 +6,10 @@ import re
 import subprocess
 import json
 from datetime import datetime
+from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
+
+console = Console()
 from toast.plugins.utils import (
     check_aws_cli,
     get_ssm_parameter,
@@ -49,12 +52,12 @@ class DotPlugin(BasePlugin):
                     ["aws", "--version"], capture_output=True, text=True
                 )
                 if result.returncode != 0:
-                    click.echo(
+                    console.print(
                         "Error: AWS CLI not found. Please install it to use this feature."
                     )
                     return
 
-                click.echo(
+                console.print(
                     "Listing all .env.local parameters in AWS SSM Parameter Store..."
                 )
 
@@ -75,7 +78,7 @@ class DotPlugin(BasePlugin):
                 )
 
                 if result.returncode != 0:
-                    click.echo(f"Error listing parameters: {result.stderr}")
+                    console.print(f"Error listing parameters: {result.stderr}")
                     return
 
                 try:
@@ -83,11 +86,11 @@ class DotPlugin(BasePlugin):
                     parameters = response.get("Parameters", [])
 
                     if not parameters:
-                        click.echo("No parameters found under /toast/local/ path.")
+                        console.print(f"No parameters found under /toast/local/ path.", style="yellow")
                         return
 
-                    click.echo("\nAWS SSM Parameters:")
-                    click.echo("=" * 50)
+                    console.print("\nAWS SSM Parameters:")
+                    console.print("=" * 50)
 
                     # Filter parameters containing env-local
                     env_params = [
@@ -104,23 +107,23 @@ class DotPlugin(BasePlugin):
                                 last_modified
                             ).strftime("%Y-%m-%d %H:%M:%S")
 
-                        click.echo(f"{param_name} (Last Modified: {last_modified})")
+                        console.print(f"{param_name} (Last Modified: {last_modified})")
 
                     # We no longer list local files stored in ~/toast/ directory
 
                 except json.JSONDecodeError:
-                    click.echo("Error parsing AWS SSM response.")
+                    console.print("Error parsing AWS SSM response.")
             except Exception as e:
-                click.echo(f"Error: {e}")
+                console.print(f"✗ Error: {e}", style="bold red")
 
         elif command == "up":
             # Upload local .env file to AWS SSM Parameter Store
             if not os.path.exists(local_env_path):
-                click.echo("Error: .env.local not found in current directory.")
+                console.print(f"✗ Error: .env.local not found in current directory.", style="bold red")
                 return
 
             if not match:
-                click.echo(
+                console.print(
                     "Error: Current directory is not in a recognized workspace structure."
                 )
                 return
@@ -135,7 +138,7 @@ class DotPlugin(BasePlugin):
 
             # Ask for confirmation before proceeding
             if not click.confirm(f"Upload .env.local to AWS SSM at {ssm_path}?"):
-                click.echo("Operation cancelled.")
+                console.print("Operation cancelled.")
                 return
 
             # Read the local .env file
@@ -149,13 +152,13 @@ class DotPlugin(BasePlugin):
                     ["aws", "--version"], capture_output=True, text=True
                 )
                 if result.returncode != 0:
-                    click.echo(
+                    console.print(
                         "Error: AWS CLI not found. Please install it to use this feature."
                     )
                     return
 
                 # Upload to SSM
-                click.echo(
+                console.print(
                     f"Uploading .env.local to AWS SSM Parameter Store at {ssm_path}..."
                 )
 
@@ -186,18 +189,18 @@ class DotPlugin(BasePlugin):
                 os.remove(temp_file_path)
 
                 if result.returncode == 0:
-                    click.echo(
+                    console.print(
                         f"Successfully uploaded .env.local to AWS SSM at {ssm_path}"
                     )
                 else:
-                    click.echo(f"Error uploading to AWS SSM: {result.stderr}")
+                    console.print(f"Error uploading to AWS SSM: {result.stderr}")
             except Exception as e:
-                click.echo(f"Error: {e}")
+                console.print(f"✗ Error: {e}", style="bold red")
 
         elif command == "down" or command == "dn":
             # Download .env file from AWS SSM Parameter Store
             if not match:
-                click.echo(
+                console.print(
                     "Error: Current directory is not in a recognized workspace structure."
                 )
                 return
@@ -219,7 +222,7 @@ class DotPlugin(BasePlugin):
             if not click.confirm(
                 f"Download .env.local from AWS SSM at {ssm_path}{overwrite_msg}?"
             ):
-                click.echo("Operation cancelled.")
+                console.print("Operation cancelled.")
                 return
 
             # Download from SSM
@@ -229,13 +232,13 @@ class DotPlugin(BasePlugin):
                     ["aws", "--version"], capture_output=True, text=True
                 )
                 if result.returncode != 0:
-                    click.echo(
+                    console.print(
                         "Error: AWS CLI not found. Please install it to use this feature."
                     )
                     return
 
                 # Try to get the parameter
-                click.echo(f"Downloading from AWS SSM Parameter Store at {ssm_path}...")
+                console.print(f"Downloading from AWS SSM Parameter Store at {ssm_path}...")
                 result = subprocess.run(
                     [
                         "aws",
@@ -252,7 +255,7 @@ class DotPlugin(BasePlugin):
                 )
 
                 if result.returncode != 0:
-                    click.echo(
+                    console.print(
                         f"Error: Parameter not found in AWS SSM or access denied."
                     )
                     return
@@ -263,31 +266,31 @@ class DotPlugin(BasePlugin):
                     parameter_value = response.get("Parameter", {}).get("Value", "")
 
                     if not parameter_value:
-                        click.echo("Error: Retrieved parameter has no value.")
+                        console.print(f"✗ Error: Retrieved parameter has no value.", style="bold red")
                         return
 
                     # Write to local .env.local file
                     with open(local_env_path, "w") as file:
                         file.write(parameter_value)
 
-                    click.echo(
+                    console.print(
                         f"Successfully downloaded .env.local from AWS SSM and saved to {local_env_path}"
                     )
                 except json.JSONDecodeError:
-                    click.echo("Error parsing AWS SSM response.")
+                    console.print("Error parsing AWS SSM response.")
             except Exception as e:
-                click.echo(f"Error: {e}")
+                console.print(f"✗ Error: {e}", style="bold red")
 
         elif command == "sync" or command is None:
             # Compare local and SSM, then choose action (default behavior)
             if not match:
-                click.echo(
+                console.print(
                     "Error: Current directory is not in a recognized workspace structure."
                 )
                 return
 
             if not check_aws_cli():
-                click.echo(
+                console.print(
                     "Error: AWS CLI not found. Please install it to use this feature."
                 )
                 return
@@ -298,8 +301,8 @@ class DotPlugin(BasePlugin):
             org_name = os.path.basename(os.path.dirname(project_root))
             ssm_path = f"/toast/local/{org_name}/{project_name}/env-local"
 
-            click.echo(f"Comparing .env.local with SSM: {ssm_path}")
-            click.echo("=" * 60)
+            console.print(f"Comparing .env.local with SSM: {ssm_path}")
+            console.print("=" * 60)
 
             # Get local content
             local_content = None
@@ -310,7 +313,7 @@ class DotPlugin(BasePlugin):
             # Get SSM content
             remote_content, last_modified, error = get_ssm_parameter(ssm_path)
             if error:
-                click.echo(f"Error fetching SSM parameter: {error}")
+                console.print(f"Error fetching SSM parameter: {error}")
                 return
 
             # Compare
@@ -320,26 +323,26 @@ class DotPlugin(BasePlugin):
             local_hash = compute_hash(local_content) if local_content else "-"
             remote_hash = compute_hash(remote_content) if remote_content else "-"
 
-            click.echo(f"Local:  {local_hash if local_content else '(not found)'}")
-            click.echo(f"SSM:    {remote_hash if remote_content else '(not found)'}")
+            console.print(f"Local:  {local_hash if local_content else '(not found)'}")
+            console.print(f"SSM:    {remote_hash if remote_content else '(not found)'}")
 
             if last_modified:
-                click.echo(f"SSM Last Modified: {last_modified}")
+                console.print(f"SSM Last Modified: {last_modified}")
 
-            click.echo("")
+            console.print("")
 
             if status == "both_missing":
-                click.echo("Neither local file nor SSM parameter exists.")
+                console.print("Neither local file nor SSM parameter exists.")
                 return
 
             if status == "identical":
-                click.echo("✓ Files are identical. No action needed.")
+                console.print(f"✓ Files are identical. No action needed.", style="bold green")
                 return
 
             # Show diff if both exist and different
             if status == "different":
-                click.echo("Differences found:")
-                click.echo("-" * 40)
+                console.print("Differences found:")
+                console.print("-" * 40)
                 diff_lines = show_diff(local_content, remote_content)
                 for line in diff_lines[:50]:  # Limit output
                     if line.startswith("+") and not line.startswith("+++"):
@@ -347,23 +350,23 @@ class DotPlugin(BasePlugin):
                     elif line.startswith("-") and not line.startswith("---"):
                         click.secho(line.rstrip(), fg="red")
                     else:
-                        click.echo(line.rstrip())
+                        console.print(line.rstrip())
                 if len(diff_lines) > 50:
-                    click.echo(f"... ({len(diff_lines) - 50} more lines)")
-                click.echo("-" * 40)
+                    console.print(f"... ({len(diff_lines) - 50} more lines)")
+                console.print("-" * 40)
             elif status == "local_only":
-                click.echo("Local file exists, but SSM parameter does not.")
+                console.print("Local file exists, but SSM parameter does not.")
             elif status == "remote_only":
-                click.echo("SSM parameter exists, but local file does not.")
+                console.print("SSM parameter exists, but local file does not.")
 
-            click.echo("")
+            console.print("")
 
             # Let user choose action
             action = select_sync_action(status, ".env.local")
 
             if action == "upload":
                 # Upload local to SSM
-                click.echo(f"Uploading .env.local to SSM...")
+                console.print(f"Uploading .env.local to SSM...")
                 temp_file_path = os.path.expanduser("~/toast_temp_content.txt")
                 with open(temp_file_path, "w") as temp_file:
                     temp_file.write(local_content)
@@ -387,16 +390,16 @@ class DotPlugin(BasePlugin):
                 os.remove(temp_file_path)
 
                 if result.returncode == 0:
-                    click.echo(f"✓ Successfully uploaded to {ssm_path}")
+                    console.print(f"✓ Successfully uploaded to {ssm_path}", style="bold green")
                 else:
-                    click.echo(f"Error uploading: {result.stderr}")
+                    console.print(f"Error uploading: {result.stderr}")
 
             elif action == "download":
                 # Download SSM to local
-                click.echo(f"Downloading from SSM to .env.local...")
+                console.print(f"Downloading from SSM to .env.local...")
                 with open(local_env_path, "w") as file:
                     file.write(remote_content)
-                click.echo(f"✓ Successfully downloaded to {local_env_path}")
+                console.print(f"✓ Successfully downloaded to {local_env_path}", style="bold green")
 
             else:
-                click.echo("Operation cancelled.")
+                console.print("Operation cancelled.")

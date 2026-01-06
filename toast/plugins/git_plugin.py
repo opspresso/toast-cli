@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
-import click
 import os
 import subprocess
 import re
+from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
+
+console = Console()
 
 
 def get_github_host():
@@ -47,7 +49,7 @@ def get_github_host():
                             host = line.split("=", 1)[1].strip()
                             return host
             except Exception as e:
-                click.echo(f"Warning: Could not read {config_file}: {e}")
+                console.print(f"Warning: Could not read {config_file}: {e}", style="yellow")
 
     return default_host
 
@@ -146,8 +148,9 @@ class GitPlugin(BasePlugin):
         repo_name = sanitize_repo_name(repo_name)
 
         if original_repo_name != repo_name:
-            click.echo(
-                f"Repository name sanitized: '{original_repo_name}' -> '{repo_name}'"
+            console.print(
+                f"Repository name sanitized: '{original_repo_name}' -> '{repo_name}'",
+                style="yellow"
             )
 
         # Get the current path
@@ -158,8 +161,9 @@ class GitPlugin(BasePlugin):
         match = re.match(pattern, current_path)
 
         if not match:
-            click.echo(
-                "Error: Current directory must be in ~/workspace/{github-host}/{username} format"
+            console.print(
+                "✗ Error: Current directory must be in ~/workspace/{github-host}/{username} format",
+                style="bold red"
             )
             return
 
@@ -181,11 +185,11 @@ class GitPlugin(BasePlugin):
 
             # Check if the target directory already exists
             if os.path.exists(target_path):
-                click.echo(f"Error: Target directory '{target_dir}' already exists")
+                console.print(f"✗ Error: Target directory '{target_dir}' already exists", style="bold red")
                 return
 
             # Clone the repository
-            click.echo(f"Cloning {repo_url} into {target_path}...")
+            console.print(f"Cloning {repo_url} into {target_path}...", style="cyan")
             try:
                 result = subprocess.run(
                     ["git", "clone", repo_url, target_path],
@@ -194,11 +198,11 @@ class GitPlugin(BasePlugin):
                 )
 
                 if result.returncode == 0:
-                    click.echo(f"Successfully cloned {repo_name} to {target_path}")
+                    console.print(f"✓ Successfully cloned {repo_name} to {target_path}", style="bold green")
                 else:
-                    click.echo(f"Error cloning repository: {result.stderr}")
+                    console.print(f"✗ Error cloning repository: {result.stderr}", style="bold red")
             except Exception as e:
-                click.echo(f"Error executing git command: {e}")
+                console.print(f"✗ Error executing git command: {e}", style="bold red")
 
         elif command == "rm":
             # Path to the repository
@@ -206,15 +210,15 @@ class GitPlugin(BasePlugin):
 
             # Check if the repository exists
             if not os.path.exists(repo_path):
-                click.echo(f"Error: Repository directory '{repo_name}' does not exist")
+                console.print(f"✗ Error: Repository directory '{repo_name}' does not exist", style="bold red")
                 return
 
             try:
                 # Remove the repository
                 subprocess.run(["rm", "-rf", repo_path], check=True)
-                click.echo(f"Successfully removed {repo_path}")
+                console.print(f"✓ Successfully removed {repo_path}", style="bold green")
             except Exception as e:
-                click.echo(f"Error removing repository: {e}")
+                console.print(f"✗ Error removing repository: {e}", style="bold red")
 
         elif command == "branch" or command == "b":
             # Path to the repository
@@ -222,12 +226,12 @@ class GitPlugin(BasePlugin):
 
             # Check if the repository exists
             if not os.path.exists(repo_path):
-                click.echo(f"Error: Repository directory '{repo_name}' does not exist")
+                console.print(f"✗ Error: Repository directory '{repo_name}' does not exist", style="bold red")
                 return
 
             # Check if branch name is provided
             if not branch:
-                click.echo("Error: Branch name is required for branch command")
+                console.print("✗ Error: Branch name is required for branch command", style="bold red")
                 return
 
             try:
@@ -242,16 +246,16 @@ class GitPlugin(BasePlugin):
                 )
 
                 if result.returncode == 0:
-                    click.echo(f"Successfully created branch '{branch}' in {repo_name}")
+                    console.print(f"✓ Successfully created branch '{branch}' in {repo_name}", style="bold green")
                 else:
-                    click.echo(f"Error creating branch: {result.stderr}")
+                    console.print(f"✗ Error creating branch: {result.stderr}", style="bold red")
 
                 # Return to the original directory
                 os.chdir(current_path)
             except Exception as e:
                 # Return to the original directory in case of error
                 os.chdir(current_path)
-                click.echo(f"Error executing git command: {e}")
+                console.print(f"✗ Error executing git command: {e}", style="bold red")
 
         elif command == "pull" or command == "p":
             # Path to the repository
@@ -259,7 +263,7 @@ class GitPlugin(BasePlugin):
 
             # Check if the repository exists
             if not os.path.exists(repo_path):
-                click.echo(f"Error: Repository directory '{repo_name}' does not exist")
+                console.print(f"✗ Error: Repository directory '{repo_name}' does not exist", style="bold red")
                 return
 
             try:
@@ -267,7 +271,7 @@ class GitPlugin(BasePlugin):
                 os.chdir(repo_path)
 
                 # Execute git pull with or without rebase option
-                click.echo(f"Pulling latest changes for {repo_name}...")
+                console.print(f"Pulling latest changes for {repo_name}...", style="cyan")
 
                 # Set up command with or without --rebase flag
                 git_command = ["git", "pull", "--rebase"] if rebase else ["git", "pull"]
@@ -280,18 +284,19 @@ class GitPlugin(BasePlugin):
 
                 if result.returncode == 0:
                     rebase_msg = "with rebase " if rebase else ""
-                    click.echo(
-                        f"Successfully pulled {rebase_msg}latest changes for {repo_name}"
+                    console.print(
+                        f"✓ Successfully pulled {rebase_msg}latest changes for {repo_name}",
+                        style="bold green"
                     )
                 else:
-                    click.echo(f"Error pulling repository: {result.stderr}")
+                    console.print(f"✗ Error pulling repository: {result.stderr}", style="bold red")
 
                 # Return to the original directory
                 os.chdir(current_path)
             except Exception as e:
                 # Return to the original directory in case of error
                 os.chdir(current_path)
-                click.echo(f"Error executing git command: {e}")
+                console.print(f"✗ Error executing git command: {e}", style="bold red")
 
         elif command == "push" or command == "ps":
             # Path to the repository
@@ -299,7 +304,7 @@ class GitPlugin(BasePlugin):
 
             # Check if the repository exists
             if not os.path.exists(repo_path):
-                click.echo(f"Error: Repository directory '{repo_name}' does not exist")
+                console.print(f"✗ Error: Repository directory '{repo_name}' does not exist", style="bold red")
                 return
 
             try:
@@ -314,7 +319,7 @@ class GitPlugin(BasePlugin):
                     # Construct the repository URL using the same logic as clone
                     repo_url = f"git@{github_host}:{username}/{repo_name}.git"
 
-                    click.echo(f"Mirror pushing {repo_name} to {repo_url}...")
+                    console.print(f"Mirror pushing {repo_name} to {repo_url}...", style="cyan")
 
                     # Add new remote for mirror push
                     subprocess.run(
@@ -330,7 +335,7 @@ class GitPlugin(BasePlugin):
                     )
 
                     if result.returncode != 0:
-                        click.echo(f"Error adding mirror remote: {result.stderr}")
+                        console.print(f"✗ Error adding mirror remote: {result.stderr}", style="bold red")
                         os.chdir(current_path)
                         return
 
@@ -342,12 +347,12 @@ class GitPlugin(BasePlugin):
                     )
 
                     if result.returncode == 0:
-                        click.echo(f"Successfully mirror pushed {repo_name}")
+                        console.print(f"✓ Successfully mirror pushed {repo_name}", style="bold green")
                     else:
-                        click.echo(f"Error mirror pushing repository: {result.stderr}")
+                        console.print(f"✗ Error mirror pushing repository: {result.stderr}", style="bold red")
                 else:
                     # Regular push
-                    click.echo(f"Pushing {repo_name}...")
+                    console.print(f"Pushing {repo_name}...", style="cyan")
 
                     result = subprocess.run(
                         ["git", "push"],
@@ -356,19 +361,20 @@ class GitPlugin(BasePlugin):
                     )
 
                     if result.returncode == 0:
-                        click.echo(f"Successfully pushed {repo_name}")
+                        console.print(f"✓ Successfully pushed {repo_name}", style="bold green")
                     else:
-                        click.echo(f"Error pushing repository: {result.stderr}")
+                        console.print(f"✗ Error pushing repository: {result.stderr}", style="bold red")
 
                 # Return to the original directory
                 os.chdir(current_path)
             except Exception as e:
                 # Return to the original directory in case of error
                 os.chdir(current_path)
-                click.echo(f"Error executing git command: {e}")
+                console.print(f"✗ Error executing git command: {e}", style="bold red")
 
         else:
-            click.echo(f"Unknown command: {command}")
-            click.echo(
-                "Available commands: clone (cl), rm, branch (b), pull (p), push (ps)"
+            console.print(f"✗ Unknown command: {command}", style="bold red")
+            console.print(
+                "Available commands: clone (cl), rm, branch (b), pull (p), push (ps)",
+                style="yellow"
             )
