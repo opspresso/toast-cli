@@ -7,7 +7,34 @@ import os
 import pkgutil
 import sys
 from typing import List, Type
+from rich.console import Console
 from toast.helpers import CustomHelpGroup
+
+console = Console()
+
+# Monkey patch Click's echo to add colors to error messages
+_original_click_echo = click.echo
+
+def _colored_click_echo(message=None, file=None, nl=True, err=False, color=None):
+    """Override click.echo to add colors to error messages"""
+    if message and isinstance(message, str):
+        # Check if it's an error message
+        if message.startswith("Error:"):
+            console.print(f"✗ {message}", style="bold red", err=err)
+            return
+    # Fall back to original echo
+    _original_click_echo(message, file, nl, err, color)
+
+click.echo = _colored_click_echo
+
+# Also monkey patch Click's ClickException to use colored output
+_original_click_exception_show = click.ClickException.show
+
+def _colored_click_exception_show(self, file=None):
+    """Override Click's error display with colored version"""
+    console.print(f"✗ Error: {self.format_message()}", style="bold red", stderr=True)
+
+click.ClickException.show = _colored_click_exception_show
 
 
 def discover_and_load_plugins(
@@ -51,11 +78,11 @@ def discover_and_load_plugins(
                     ):
                         discovered_plugins.append(item)
             except ImportError as e:
-                click.echo(f"Error loading plugin module {module_name}: {e}", err=True)
+                console.print(f"✗ Error loading plugin module {module_name}: {e}", style="bold red", stderr=True)
 
     except ImportError as e:
-        click.echo(
-            f"Error loading plugins package {plugins_package_name}: {e}", err=True
+        console.print(
+            f"✗ Error loading plugins package {plugins_package_name}: {e}", style="bold red", err=True
         )
 
     return discovered_plugins
@@ -74,7 +101,7 @@ def version():
     """Display the current version of toast-cli."""
     from toast.helpers import get_version
 
-    click.echo(f"toast-cli version: {get_version()}")
+    console.print(f"toast-cli version: {get_version()}", style="bold cyan")
 
 
 def main():
@@ -82,7 +109,7 @@ def main():
     plugins = discover_and_load_plugins()
 
     if not plugins:
-        click.echo("No plugins were discovered", err=True)
+        console.print("✗ No plugins were discovered", style="bold red", stderr=True)
         sys.exit(1)
 
     # Register each plugin with the CLI
@@ -90,8 +117,8 @@ def main():
         try:
             plugin_class.register(toast_cli)
         except Exception as e:
-            click.echo(
-                f"Error registering plugin {plugin_class.__name__}: {e}", err=True
+            console.print(
+                f"✗ Error registering plugin {plugin_class.__name__}: {e}", style="bold red", err=True
             )
 
     # Run the CLI

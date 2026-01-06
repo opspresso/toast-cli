@@ -52,4 +52,4 @@ class CdwPlugin(BasePlugin):
         if selected_dir:
             click.echo(selected_dir)
         else:
-            console.print("No directory selected.", style="bold red", err=True)
+            console.print("No directory selected.", style="bold red", stderr=True)

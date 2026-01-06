@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import click
+from toast.helpers import CustomHelpCommand
 
 
 class BasePlugin:
@@ -15,8 +16,8 @@ class BasePlugin:
         if not cls.name:
             raise ValueError(f"Plugin {cls.__name__} must define a name")
 
-        # Use regular Command class to avoid showing logo for subcommands
-        @cli_group.command(name=cls.name, help=cls.help, cls=click.Command)
+        # Use CustomHelpCommand for colored error messages
+        @cli_group.command(name=cls.name, help=cls.help, cls=CustomHelpCommand)
         @cls.get_arguments
         def command(**kwargs):
             return cls.execute(**kwargs)

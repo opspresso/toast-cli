@@ -48,8 +48,32 @@ class CustomHelpCommand(click.Command):
         display_logo()
         return super().get_help(ctx)
 
+    def main(self, *args, **kwargs):
+        try:
+            return super().main(*args, **kwargs)
+        except click.ClickException as e:
+            # Override Click's default error display with colored version
+            console.print(f"✗ Error: {e.format_message()}", style="bold red", stderr=True)
+            ctx = click.get_current_context(silent=True)
+            if ctx is not None:
+                ctx.exit(e.exit_code)
+            else:
+                raise SystemExit(e.exit_code)
+
 
 class CustomHelpGroup(click.Group):
     def get_help(self, ctx):
         display_logo()
         return super().get_help(ctx)
+
+    def main(self, *args, **kwargs):
+        try:
+            return super().main(*args, **kwargs)
+        except click.ClickException as e:
+            # Override Click's default error display with colored version
+            console.print(f"✗ Error: {e.format_message()}", style="bold red", stderr=True)
+            ctx = click.get_current_context(silent=True)
+            if ctx is not None:
+                ctx.exit(e.exit_code)
+            else:
+                raise SystemExit(e.exit_code)
