@@ -103,4 +103,10 @@ dist/
 .env*.local
 .env*.production
 
+# claude
+.claude/
+.prompt-*.md
 .prompt.md
+prompt-*.md
+prompt.md
+docs/plans/
