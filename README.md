@@ -40,11 +40,21 @@ Python-based CLI utility with plugin architecture for AWS, Kubernetes, and Git o
 * External tools: fzf, aws-cli, kubectl
 * Python packages: click, rich
 
-### Install
 ```bash
-# From PyPI
-pip install toast-cli
+pyenv install 3.12
+pyenv global 3.12.12
+pyenv versions
+```
 
+### Install
+
+### From PyPI
+```bash
+pip install toast-cli
+```
+
+### Or...
+```bash
 # From GitHub
 pip install git+https://github.com/opspresso/toast-cli.git
 
