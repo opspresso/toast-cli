@@ -6,6 +6,7 @@ from importlib.metadata import version
 from rich.console import Console
 
 console = Console()
+console_err = Console(stderr=True)
 
 
 def display_logo():
@@ -53,7 +54,7 @@ class CustomHelpCommand(click.Command):
             return super().main(*args, **kwargs)
         except click.ClickException as e:
             # Override Click's default error display with colored version
-            console.print(f"✗ Error: {e.format_message()}", style="bold red", stderr=True)
+            console_err.print(f"✗ Error: {e.format_message()}", style="bold red")
             ctx = click.get_current_context(silent=True)
             if ctx is not None:
                 ctx.exit(e.exit_code)
@@ -71,7 +72,7 @@ class CustomHelpGroup(click.Group):
             return super().main(*args, **kwargs)
         except click.ClickException as e:
             # Override Click's default error display with colored version
-            console.print(f"✗ Error: {e.format_message()}", style="bold red", stderr=True)
+            console_err.print(f"✗ Error: {e.format_message()}", style="bold red")
             ctx = click.get_current_context(silent=True)
             if ctx is not None:
                 ctx.exit(e.exit_code)
