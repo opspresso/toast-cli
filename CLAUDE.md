@@ -31,7 +31,7 @@ toast cdw          # Navigate workspace
 toast ctx          # Kubernetes contexts
 toast dot          # Environment file management (.env.local)
 toast env          # AWS profiles
-toast git          # Git operations (clone, branch, pull, push)
+toast git          # Git operations (clone, branch, pull, push, rm)
 toast prompt       # Prompt file management (.prompt.md)
 toast region       # AWS region
 toast ssm          # AWS SSM Parameter Store operations
@@ -78,7 +78,7 @@ class MyPlugin(BasePlugin):
 ### Plugin Categories
 - **AWS plugins**: `am_plugin.py` (identity), `env_plugin.py` (profiles), `region_plugin.py` (regions), `ssm_plugin.py` (SSM Parameter Store)
 - **Kubernetes**: `ctx_plugin.py` (context management)
-- **Git**: `git_plugin.py` (repository operations: clone, branch, pull, push)
+- **Git**: `git_plugin.py` (repository operations: clone, branch, pull, push, rm)
 - **Environment**: `dot_plugin.py` (SSM integration for .env.local files), `prompt_plugin.py` (SSM integration for .prompt.md files)
 - **Navigation**: `cdw_plugin.py` (workspace directory navigation)
 
@@ -116,7 +116,7 @@ GITHUB_HOST=custom-host.com
 - Automatic repository name sanitization (removes invalid characters like `/`, `:`, etc.)
 - Mirror push support for repository migration
 - Works with SSH config for different accounts/keys
-- Supports both regular push and force push operations
+- Supports both regular push and mirror push operations
 
 ### Development Notes for Git Plugin
 
@@ -125,7 +125,7 @@ When working on git_plugin.py:
 - Use `get_github_host()` for host detection with organization support
 - Follow the simple pattern used by other commands (clone, pull, etc.)
 - Handle subprocess calls properly - avoid mixing `capture_output=True` with explicit `stdout`/`stderr`
-- Supported commands: `clone`, `branch`, `pull`, `push` (with optional flags like `-r`, `-f`, `--mirror`)
+- Supported commands: `clone` (cl), `rm`, `branch` (b), `pull` (p), `push` (ps) (with optional flags like `-b`, `-t`, `-r`, `-m`/`--mirror`)
 
 ### SSM Parameter Store Integration
 

@@ -104,7 +104,7 @@ Each plugin:
 | ctx | Manage Kubernetes contexts (switch, add EKS clusters, delete) |
 | dot | Manage .env.local files with AWS SSM integration |
 | env | Manage AWS profiles |
-| git | Manage Git repositories (clone, branch, pull, push, mirror) |
+| git | Manage Git repositories (clone, branch, pull, push, rm, mirror) |
 | prompt | Manage .prompt.md files with AWS SSM integration |
 | region | Set AWS region |
 | ssm | AWS SSM Parameter Store operations (get, put, delete, list) |
@@ -165,7 +165,9 @@ Each plugin:
 
 #### GitPlugin (git)
 - Handles Git repository operations
-- Supports cloning, branch creation, pulling, pushing
+- Supports cloning, branch creation, pulling, pushing, removing
+- Commands: `clone` (cl), `branch` (b), `pull` (p), `push` (ps), `rm`
+- Clone into a custom directory with `--target`/`-t`
 - Repository name sanitization (removes invalid characters)
 - Mirror push for repository migration
 - Organization-specific GitHub host configuration via `.toast-config`

@@ -21,7 +21,7 @@ Python-based CLI utility with plugin architecture for AWS, Kubernetes, and Git o
 * **Plugin Architecture**: Modular design with dynamic command discovery
 * **AWS Integration**: Identity checking, profile management, region selection, SSM Parameter Store integration
 * **Kubernetes**: Context switching, EKS cluster discovery and integration, context deletion
-* **Git**: Repository management (clone, branch, pull, push, mirror), organization-specific GitHub hosts
+* **Git**: Repository management (clone, branch, pull, push, rm, mirror), organization-specific GitHub hosts
 * **Workspace**: Directory navigation, environment file management (.env.local, .prompt.md)
 * **Interface**: FZF-powered interactive menus, formatted output with Rich
 * **Security**: AWS SSM SecureString storage for sensitive files
@@ -114,13 +114,14 @@ toast ssm put /my/param 'value'  # Store as SecureString (alias: p)
 toast ssm rm /my/param     # Delete parameter (alias: d, delete)
 
 # Git Operations
-toast git repo-name clone                    # Clone repository
-toast git repo-name branch -b branch-name    # Create branch
-toast git repo-name pull                     # Pull changes
+toast git repo-name clone                    # Clone repository (alias: cl)
+toast git repo-name clone -t target-dir      # Clone into a custom directory
+toast git repo-name branch -b branch-name    # Create branch (alias: b)
+toast git repo-name pull                     # Pull changes (alias: p)
 toast git repo-name pull -r                  # Pull with rebase
-toast git repo-name push                     # Push to remote
-toast git repo-name push -f                  # Force push
+toast git repo-name push                     # Push to remote (alias: ps)
 toast git repo-name push --mirror            # Mirror push for migration
+toast git repo-name rm                       # Remove local repository
 ```
 
 ## Workspace Structure
