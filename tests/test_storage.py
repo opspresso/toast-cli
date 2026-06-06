@@ -68,6 +68,12 @@ class DefaultsTests(unittest.TestCase):
 
 
 class ConfigTests(unittest.TestCase):
+    def setUp(self):
+        # Isolate the `aws configure get region` lookup from the environment.
+        p = mock.patch.object(storage, "_profile_region", return_value=None)
+        p.start()
+        self.addCleanup(p.stop)
+
     def test_defaults_no_file(self):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "config")
@@ -79,6 +85,15 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(c.bucket, "env-store-111122223333")
             self.assertIsNone(c.kms_key)
             self.assertIsNone(c.region)
+
+    def test_region_from_profile(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "config")
+            with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(
+                storage, "_profile_region", return_value="ap-northeast-2"
+            ), mock.patch.object(storage, "get_account_id", return_value="111122223333"):
+                c = storage.resolve_config(config_path=path, create=False)
+            self.assertEqual(c.region, "ap-northeast-2")
 
     def test_bucket_none_on_sts_failure(self):
         with tempfile.TemporaryDirectory() as d:
@@ -230,6 +245,11 @@ class AwsCommandTests(unittest.TestCase):
         cmd = storage._aws(cfg, ["ssm", "get-parameter"])
         self.assertEqual(cmd[cmd.index("--region") + 1], "us-west-2")
 
+    def test_region_override_takes_precedence(self):
+        cfg = storage.StoreConfig("b", "p", None, None)
+        cmd = storage._aws(cfg, ["ssm", "x"], region="ap-northeast-2")
+        self.assertEqual(cmd[cmd.index("--region") + 1], "ap-northeast-2")
+
     def test_s3_put_uses_kms_server_side_encryption(self):
         cfg = storage.StoreConfig("b", "p", None, None)
         captured = {}
@@ -257,6 +277,26 @@ class AwsCommandTests(unittest.TestCase):
         m.assert_called_once_with(
             "/toast/local/o/p/env-local", profile="myprofile", region="eu-west-1"
         )
+
+    def test_ssm_get_falls_back_to_default_region(self):
+        cfg = storage.StoreConfig("b", "myprofile", None, None)
+        with mock.patch.object(
+            storage, "get_ssm_parameter", return_value=("v", "t", None)
+        ) as m:
+            storage.ssm_get(cfg, "/toast/local/o/p/env-local")
+        m.assert_called_once_with(
+            "/toast/local/o/p/env-local",
+            profile="myprofile",
+            region=storage.DEFAULT_REGION,
+        )
+
+    def test_profile_region_lookup(self):
+        ok = mock.Mock(returncode=0, stdout="ap-northeast-2\n", stderr="")
+        with mock.patch.object(storage.subprocess, "run", return_value=ok):
+            self.assertEqual(storage._profile_region("p"), "ap-northeast-2")
+        empty = mock.Mock(returncode=0, stdout="\n", stderr="")
+        with mock.patch.object(storage.subprocess, "run", return_value=empty):
+            self.assertIsNone(storage._profile_region("p"))
 
 
 class StoreReadTests(unittest.TestCase):

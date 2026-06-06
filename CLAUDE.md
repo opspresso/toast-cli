@@ -159,7 +159,7 @@ s3://{bucket}/local/{org}/{project}/prompt-md    # PromptPlugin (kind=prompt-md)
 | `TOAST_ENV_STORE_PROFILE` | `ENV_STORE_PROFILE` | `{username}-admin` (`default_profile`) |
 | `TOAST_ENV_STORE_BUCKET` | `ENV_STORE_BUCKET` | `env-store-{account-id}` of the profile (`default_bucket`, via STS) |
 | `TOAST_ENV_STORE_KMS_KEY` | `ENV_STORE_KMS_KEY` | bucket/account default KMS key |
-| `TOAST_ENV_STORE_REGION` | `ENV_STORE_REGION` | profile's region |
+| `TOAST_ENV_STORE_REGION` | `ENV_STORE_REGION` | profile's region (SSM reads fall back to `us-east-1`) |
 
 **Commands**:
 | Command | Description |

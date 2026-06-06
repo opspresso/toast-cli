@@ -40,6 +40,11 @@ console = Console()
 PROFILE_SUFFIX = "-admin"
 BUCKET_PREFIX = "env-store-"
 
+# SSM get-parameter requires a region. When none is configured (env/file/profile)
+# this fallback keeps SSM reads from failing with NoRegion; a missing parameter
+# then returns ParameterNotFound (treated as absent) instead of an error.
+DEFAULT_REGION = "us-east-1"
+
 
 class StoreConfig:
     """Resolved env-store configuration."""
@@ -154,6 +159,21 @@ def default_profile():
     return f"{_current_username()}{PROFILE_SUFFIX}"
 
 
+def _profile_region(profile):
+    """Region configured for a profile via `aws configure get region`, or None."""
+    try:
+        result = subprocess.run(
+            ["aws", "configure", "get", "region", "--profile", profile],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() or None
+    except Exception:
+        return None
+
+
 def get_account_id(profile, region=None):
     """Return the AWS account id for a profile via STS, or None on failure."""
     cmd = [
@@ -205,7 +225,11 @@ def resolve_config(config_path=None, create=True):
         return os.environ.get(env_key) or file_cfg.get(file_key) or default
 
     profile = pick("TOAST_ENV_STORE_PROFILE", "ENV_STORE_PROFILE", default_profile())
-    region = pick("TOAST_ENV_STORE_REGION", "ENV_STORE_REGION", "") or None
+    region = (
+        pick("TOAST_ENV_STORE_REGION", "ENV_STORE_REGION", "")
+        or _profile_region(profile)
+        or None
+    )
     kms_key = pick("TOAST_ENV_STORE_KMS_KEY", "ENV_STORE_KMS_KEY", "") or None
     bucket = (
         os.environ.get("TOAST_ENV_STORE_BUCKET")
@@ -278,12 +302,22 @@ def parse_timestamp(value):
     return dt.astimezone(timezone.utc)
 
 
-def _aws(config, service_args):
-    """Build an aws CLI command with the env-store profile (and region) applied."""
+def _aws(config, service_args, region=None):
+    """Build an aws CLI command with the env-store profile (and region) applied.
+
+    A `region` override takes precedence over config.region (used for SSM, which
+    requires a region even when none is configured).
+    """
     cmd = ["aws"] + service_args + ["--profile", config.profile]
-    if config.region:
-        cmd += ["--region", config.region]
+    resolved = region or config.region
+    if resolved:
+        cmd += ["--region", resolved]
     return cmd
+
+
+def _ssm_region(config):
+    """Region for SSM calls: configured region, else a safe default."""
+    return config.region or DEFAULT_REGION
 
 
 def s3_get(config, key):
@@ -417,7 +451,7 @@ def s3_list(config, prefix="local/"):
 
 def ssm_get(config, path):
     """Get an SSM parameter value and LastModified using the env-store profile."""
-    return get_ssm_parameter(path, profile=config.profile, region=config.region)
+    return get_ssm_parameter(path, profile=config.profile, region=_ssm_region(config))
 
 
 def ssm_list(config, prefix="/toast/local/"):
@@ -438,6 +472,7 @@ def ssm_list(config, prefix="/toast/local/"):
                     "--output",
                     "json",
                 ],
+                region=_ssm_region(config),
             ),
             capture_output=True,
             text=True,

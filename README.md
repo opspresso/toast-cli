@@ -210,12 +210,14 @@ Environment variables:
 TOAST_ENV_STORE_PROFILE   # default: {username}-admin
 TOAST_ENV_STORE_BUCKET    # default: env-store-{account-id of the profile}
 TOAST_ENV_STORE_KMS_KEY   # default: bucket/account default KMS key
-TOAST_ENV_STORE_REGION    # default: profile's region
+TOAST_ENV_STORE_REGION    # default: profile's region (SSM reads fall back to us-east-1)
 ```
 
 The profile defaults to your OS username + `-admin`, and the bucket defaults to
 `env-store-` + the AWS account id of that profile (looked up via
-`aws sts get-caller-identity`).
+`aws sts get-caller-identity`). The region resolves to the configured value, else
+the profile's region; SSM reads (which require a region) fall back to `us-east-1`
+so a missing parameter is reported as absent rather than failing.
 
 Config file `~/.config/toast/config` (`KEY=VALUE` format). On first run, if it
 is missing, toast prompts for the values and saves them (interactive sessions
