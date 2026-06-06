@@ -5,7 +5,27 @@ All notable changes to toast-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.0.0] - Unreleased
+## [4.1.0] - 2026-06-06
+
+### Added
+- **`ssm` command** — AWS SSM Parameter Store operations
+  - Interactive mode (browse/select parameters via fzf) plus `ls`, `get`/`g`, `put`/`p`, `delete`/`rm`/`d`
+  - `--region`/`-r` option for cross-region operations
+  - Values stored as `SecureString`
+- **S3 env-store backend for `dot` and `prompt`**
+  - Sensitive files (`.env.local`, `.prompt.md`) stored in an S3 bucket with SSE-KMS
+  - Dual-backend transition from SSM: reads use whichever copy is newest (ties prefer S3), writes always go to S3
+  - Shared `storage.py` layer; `sync` (default), `up`, `down`/`dn`, `ls` commands
+  - Configurable via `TOAST_ENV_STORE_PROFILE`/`_BUCKET`/`_KMS_KEY`/`_REGION` env vars or `~/.config/toast/config` (env var > config file > default)
+- **Git `rm` command** — remove a local repository
+- **Git clone `--target`/`-t`** — clone into a custom directory name
+- **Unit tests for the env-store backend** (`tests/test_storage.py`)
+
+### Fixed
+- S3 `put-object` server-side encryption flag (`--server-side-encryption aws:kms`)
+- SSM reads fall back to `us-east-1` when no region is configured, so a missing parameter is reported as absent instead of failing
+
+## [4.0.0] - 2026-01-07
 
 ### Breaking Changes
 - **Minimum Python version raised to 3.9+** (previously 3.6+)

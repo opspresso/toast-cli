@@ -37,6 +37,12 @@ toast region       # AWS region
 toast ssm          # AWS SSM Parameter Store operations
 ```
 
+### Testing
+```bash
+# Run unit tests (env-store backend pure logic, no AWS access)
+python -m unittest discover -s tests
+```
+
 ## Architecture Overview
 
 Toast-cli is a plugin-based CLI tool built with Click. The core architecture consists of:
