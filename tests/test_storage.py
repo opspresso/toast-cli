@@ -230,6 +230,24 @@ class AwsCommandTests(unittest.TestCase):
         cmd = storage._aws(cfg, ["ssm", "get-parameter"])
         self.assertEqual(cmd[cmd.index("--region") + 1], "us-west-2")
 
+    def test_s3_put_uses_kms_server_side_encryption(self):
+        cfg = storage.StoreConfig("b", "p", None, None)
+        captured = {}
+
+        def fake_run(cmd, **kw):
+            captured["cmd"] = cmd
+            return mock.Mock(returncode=0, stdout="{}", stderr="")
+
+        with mock.patch.object(storage.subprocess, "run", side_effect=fake_run):
+            ok, err = storage.s3_put(cfg, "local/o/p/env-local", "data")
+
+        self.assertTrue(ok)
+        cmd = captured["cmd"]
+        self.assertIn("--server-side-encryption", cmd)
+        self.assertEqual(cmd[cmd.index("--server-side-encryption") + 1], "aws:kms")
+        # '--sse' is not a valid s3api option (it is the high-level `aws s3` shorthand)
+        self.assertNotIn("--sse", cmd)
+
     def test_ssm_get_passes_profile_and_region(self):
         cfg = storage.StoreConfig("b", "myprofile", None, "eu-west-1")
         with mock.patch.object(

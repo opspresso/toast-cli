@@ -353,7 +353,7 @@ def s3_put(config, key, content):
             key,
             "--body",
             tmp,
-            "--sse",
+            "--server-side-encryption",
             "aws:kms",
             "--output",
             "json",

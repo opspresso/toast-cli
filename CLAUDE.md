@@ -181,7 +181,7 @@ s3://{bucket}/local/{org}/{project}/prompt-md    # PromptPlugin (kind=prompt-md)
 **Common patterns**:
 - Validate workspace path: `workspace/github.com/{org}/{project}`
 - All AWS calls use the env-store profile via `storage._aws()`
-- Write S3 objects with `--sse aws:kms`
+- Write S3 objects with `--server-side-encryption aws:kms`
 - Use temporary files for content upload/download
 - Include confirmation prompts before overwriting files
 
