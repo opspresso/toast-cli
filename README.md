@@ -24,7 +24,7 @@ Python-based CLI utility with plugin architecture for AWS, Kubernetes, and Git o
 * **Git**: Repository management (clone, branch, pull, push, rm, mirror), organization-specific GitHub hosts
 * **Workspace**: Directory navigation, environment file management (.env.local, .prompt.md)
 * **Interface**: FZF-powered interactive menus, formatted output with Rich
-* **Security**: AWS SSM SecureString storage for sensitive files
+* **Security**: S3 env-store with SSE-KMS for sensitive files (SSM fallback during transition)
 
 ## Architecture
 
@@ -94,16 +94,16 @@ toast ctx                  # Switch contexts
 # Select [Del...] to delete contexts (individual or all)
 
 # Environment Files (.env.local)
-toast dot                  # Compare local and SSM, choose action (default: sync)
-toast dot up               # Upload .env.local to SSM
-toast dot down             # Download .env.local from SSM (alias: dn)
-toast dot ls               # List all .env.local files in SSM
+toast dot                  # Compare local and env-store, choose action (default: sync)
+toast dot up               # Upload .env.local to env-store (S3)
+toast dot down             # Download .env.local from env-store (alias: dn)
+toast dot ls               # List all .env.local files in env-store (S3 + SSM)
 
 # Prompt Files (.prompt.md)
-toast prompt               # Compare local and SSM, choose action (default: sync)
-toast prompt up            # Upload .prompt.md to SSM
-toast prompt down          # Download .prompt.md from SSM (alias: dn)
-toast prompt ls            # List all .prompt.md files in SSM
+toast prompt               # Compare local and env-store, choose action (default: sync)
+toast prompt up            # Upload .prompt.md to env-store (S3)
+toast prompt down          # Download .prompt.md from env-store (alias: dn)
+toast prompt ls            # List all .prompt.md files in env-store (S3 + SSM)
 
 # SSM Parameter Store
 toast ssm                  # Interactive mode: browse and select parameters
@@ -183,16 +183,50 @@ Host myorg-github.com
 - Automatic host detection based on workspace location
 - Seamless switching between GitHub accounts
 
-### AWS SSM Storage Paths
+### Env-store (S3) Storage Paths
 
-Toast-cli stores files in AWS SSM Parameter Store with the following structure:
+The `dot` and `prompt` plugins store files in the S3 env-store bucket. During
+the transition from AWS SSM Parameter Store, reads check both backends and use
+whichever copy is newest; writes always go to S3 (the bucket is the source of
+truth), and SSM copies become stale and are harvested into S3 on the next
+upload.
 
 ```
-/toast/local/{org}/{project}/env-local     # .env.local files
-/toast/local/{org}/{project}/prompt-md     # .prompt.md files
+s3://env-store-{account-id}/local/{org}/{project}/env-local   # .env.local files
+s3://env-store-{account-id}/local/{org}/{project}/prompt-md   # .prompt.md files
+
+/toast/local/{org}/{project}/env-local     # legacy SSM (read-only fallback)
+/toast/local/{org}/{project}/prompt-md     # legacy SSM (read-only fallback)
 ```
 
-Files are stored as SecureString type for encryption at rest.
+S3 objects are written with SSE-KMS encryption. All env-store access uses a
+dedicated AWS profile so it is decoupled from your current default profile.
+
+**Configuration** — precedence: environment variable > config file > default.
+
+Environment variables:
+
+```bash
+TOAST_ENV_STORE_PROFILE   # default: {username}-admin
+TOAST_ENV_STORE_BUCKET    # default: env-store-{account-id of the profile}
+TOAST_ENV_STORE_KMS_KEY   # default: bucket/account default KMS key
+TOAST_ENV_STORE_REGION    # default: profile's region
+```
+
+The profile defaults to your OS username + `-admin`, and the bucket defaults to
+`env-store-` + the AWS account id of that profile (looked up via
+`aws sts get-caller-identity`).
+
+Config file `~/.config/toast/config` (`KEY=VALUE` format). On first run, if it
+is missing, toast prompts for the values and saves them (interactive sessions
+only):
+
+```
+ENV_STORE_BUCKET=env-store-{account-id}
+ENV_STORE_PROFILE={username}-admin
+ENV_STORE_KMS_KEY=
+ENV_STORE_REGION=
+```
 
 ## Creating Plugins
 

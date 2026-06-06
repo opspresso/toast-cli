@@ -73,13 +73,14 @@ class MyPlugin(BasePlugin):
 ### Key Components
 - **Helpers** (`toast/helpers.py`): Version handling, custom Click classes for UI
 - **Plugin Utils** (`toast/plugins/utils.py`): Common utilities for subprocess execution, fzf integration
+- **Env-store** (`toast/plugins/storage.py`): S3/SSM dual-backend storage for dot/prompt (newest-wins reads, S3 writes)
 - **Dynamic Loading**: No hardcoded plugin imports - all plugins discovered at runtime
 
 ### Plugin Categories
 - **AWS plugins**: `am_plugin.py` (identity), `env_plugin.py` (profiles), `region_plugin.py` (regions), `ssm_plugin.py` (SSM Parameter Store)
 - **Kubernetes**: `ctx_plugin.py` (context management)
 - **Git**: `git_plugin.py` (repository operations: clone, branch, pull, push, rm)
-- **Environment**: `dot_plugin.py` (SSM integration for .env.local files), `prompt_plugin.py` (SSM integration for .prompt.md files)
+- **Environment**: `dot_plugin.py` (.env.local files), `prompt_plugin.py` (.prompt.md files), backed by `storage.py` (S3 env-store with SSM transition)
 - **Navigation**: `cdw_plugin.py` (workspace directory navigation)
 
 ## Adding New Plugins
@@ -127,36 +128,61 @@ When working on git_plugin.py:
 - Handle subprocess calls properly - avoid mixing `capture_output=True` with explicit `stdout`/`stderr`
 - Supported commands: `clone` (cl), `rm`, `branch` (b), `pull` (p), `push` (ps) (with optional flags like `-b`, `-t`, `-r`, `-m`/`--mirror`)
 
-### SSM Parameter Store Integration
+### Env-store Integration (S3 with SSM transition)
 
-The `dot` and `prompt` plugins use AWS SSM Parameter Store for secure file storage:
+The `dot` and `prompt` plugins store secure files in an S3 env-store bucket.
+The backend logic lives in `toast/plugins/storage.py`; the plugins themselves
+are thin wrappers that call `run_file_sync(kind, filename, command)`.
 
 **Storage structure**:
 ```
-/toast/local/{org}/{project}/env-local    # DotPlugin
-/toast/local/{org}/{project}/prompt-md    # PromptPlugin
+s3://{bucket}/local/{org}/{project}/env-local    # DotPlugin (kind=env-local)
+s3://{bucket}/local/{org}/{project}/prompt-md    # PromptPlugin (kind=prompt-md)
+
+/toast/local/{org}/{project}/{kind}              # legacy SSM (read-only fallback)
 ```
+
+**Transition semantics** (`storage.store_read` / `store_write`):
+- Reads check both S3 and SSM and use whichever copy is newest (by
+  `LastModified`); ties prefer S3
+- Writes always go to S3 (the bucket is the source of truth)
+- SSM copies are never written; they go stale and are harvested into S3 on the
+  next upload (`up`, or choosing upload in `sync`)
+
+**Configuration** (`storage.resolve_config`) — precedence: environment variable
+> config file > built-in default. The config file `~/.config/toast/config`
+(`KEY=VALUE`) is created on first run by prompting the user for values
+(`prompt_and_create_config`); skipped in non-interactive sessions.
+
+| Env variable | Config key | Default |
+|--------------|------------|---------|
+| `TOAST_ENV_STORE_PROFILE` | `ENV_STORE_PROFILE` | `{username}-admin` (`default_profile`) |
+| `TOAST_ENV_STORE_BUCKET` | `ENV_STORE_BUCKET` | `env-store-{account-id}` of the profile (`default_bucket`, via STS) |
+| `TOAST_ENV_STORE_KMS_KEY` | `ENV_STORE_KMS_KEY` | bucket/account default KMS key |
+| `TOAST_ENV_STORE_REGION` | `ENV_STORE_REGION` | profile's region |
 
 **Commands**:
 | Command | Description |
 |---------|-------------|
 | (none) | Default: same as `sync` |
-| `sync` | Compare local and SSM, then choose action (upload/download) |
-| `up` | Upload local file to SSM |
-| `down`/`dn` | Download from SSM to local |
-| `ls` | List all parameters in SSM |
+| `sync` | Compare local and env-store (newest), then choose action |
+| `up` | Upload local file to env-store (S3) |
+| `down`/`dn` | Download newest from env-store to local |
+| `ls` | List entries across S3 + SSM with current source |
 
 **Sync command features**:
-- Compares local file content with SSM parameter value
-- Displays SHA256 hash (first 12 chars) for both versions
+- Compares local file content with the newest env-store copy
+- Displays SHA256 hash (first 12 chars) for local, S3, and SSM, plus the
+  current (newest) source
 - Shows unified diff when contents differ
 - Interactive selection via fzf: Upload / Download / Cancel
 - Handles cases: identical, different, local_only, remote_only
 
 **Common patterns**:
 - Validate workspace path: `workspace/github.com/{org}/{project}`
-- Store as SecureString type for encryption
-- Use temporary files for large content uploads
+- All AWS calls use the env-store profile via `storage._aws()`
+- Write S3 objects with `--sse aws:kms`
+- Use temporary files for content upload/download
 - Include confirmation prompts before overwriting files
 
 ## Project Code Guidelines

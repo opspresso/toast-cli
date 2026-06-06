@@ -38,6 +38,7 @@ toast-cli/
           ├── prompt_plugin.py
           ├── region_plugin.py
           ├── ssm_plugin.py
+          ├── storage.py
           └── utils.py
 ```
 
@@ -102,10 +103,10 @@ Each plugin:
 | am | Show AWS caller identity |
 | cdw | Navigate to workspace directories |
 | ctx | Manage Kubernetes contexts (switch, add EKS clusters, delete) |
-| dot | Manage .env.local files with AWS SSM integration |
+| dot | Manage .env.local files with S3 env-store (SSM transition) |
 | env | Manage AWS profiles |
 | git | Manage Git repositories (clone, branch, pull, push, rm, mirror) |
-| prompt | Manage .prompt.md files with AWS SSM integration |
+| prompt | Manage .prompt.md files with S3 env-store (SSM transition) |
 | region | Set AWS region |
 | ssm | AWS SSM Parameter Store operations (get, put, delete, list) |
 
@@ -127,20 +128,33 @@ Each plugin:
 - Interactive selection of contexts and clusters
 
 #### DotPlugin (dot)
-- Manages .env.local files with AWS SSM Parameter Store
-- Default behavior: `sync` (compare local/remote, show diff, choose upload/download)
+- Manages .env.local files via the S3 env-store (`storage.py`)
+- Default behavior: `sync` (compare local/store, show diff, choose upload/download)
 - Commands: `sync` (default), `up` (upload), `down`/`dn` (download), `ls` (list)
-- Uploads/downloads environment variables as SecureString
-- SSM path: `/toast/local/{org}/{project}/env-local`
+- S3 key: `local/{org}/{project}/env-local` (SSE-KMS)
 - Validates workspace path structure (`workspace/github.com/{org}/{project}`)
 
 #### PromptPlugin (prompt)
-- Manages .prompt.md files with AWS SSM Parameter Store
-- Default behavior: `sync` (compare local/remote, show diff, choose upload/download)
+- Manages .prompt.md files via the S3 env-store (`storage.py`)
+- Default behavior: `sync` (compare local/store, show diff, choose upload/download)
 - Commands: `sync` (default), `up` (upload), `down`/`dn` (download), `ls` (list)
-- Uploads/downloads prompt files as SecureString
-- SSM path: `/toast/local/{org}/{project}/prompt-md`
+- S3 key: `local/{org}/{project}/prompt-md` (SSE-KMS)
 - Validates workspace path structure (`workspace/github.com/{org}/{project}`)
+
+#### Env-store backend (storage.py)
+- Shared storage layer for the dot/prompt plugins
+- Dual-backend during SSM → S3 transition: reads check both S3 and SSM and use
+  the newest copy (ties prefer S3); writes always go to S3
+- SSM is a read-only fallback and is harvested into S3 on the next upload
+- All access uses a dedicated AWS profile (`TOAST_ENV_STORE_PROFILE`, default
+  `{username}-admin`)
+- Profile defaults to the OS username + `-admin`; bucket defaults to
+  `env-store-{account-id}` of that profile (account id via
+  `aws sts get-caller-identity`)
+- Configurable via env vars (`TOAST_ENV_STORE_PROFILE`, `TOAST_ENV_STORE_BUCKET`,
+  `TOAST_ENV_STORE_KMS_KEY`, `TOAST_ENV_STORE_REGION`) or the config file
+  `~/.config/toast/config` (`KEY=VALUE`, created on first run by prompting the
+  user); precedence: env var > config file > default
 
 #### EnvPlugin (env)
 - Manages AWS profiles from `~/.aws/credentials`

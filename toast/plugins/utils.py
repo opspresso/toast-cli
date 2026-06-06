@@ -27,9 +27,14 @@ def check_aws_cli():
     return result.returncode == 0
 
 
-def get_ssm_parameter(ssm_path):
+def get_ssm_parameter(ssm_path, profile=None, region=None):
     """
     Get parameter value from AWS SSM.
+
+    Args:
+        ssm_path: SSM parameter name
+        profile: Optional AWS profile to use
+        region: Optional AWS region to use
 
     Returns:
         tuple: (value, last_modified, error_message)
@@ -38,17 +43,23 @@ def get_ssm_parameter(ssm_path):
         - error_message: Error message or None if successful
     """
     try:
+        cmd = [
+            "aws",
+            "ssm",
+            "get-parameter",
+            "--name",
+            ssm_path,
+            "--with-decryption",
+            "--output",
+            "json",
+        ]
+        if profile:
+            cmd += ["--profile", profile]
+        if region:
+            cmd += ["--region", region]
+
         result = subprocess.run(
-            [
-                "aws",
-                "ssm",
-                "get-parameter",
-                "--name",
-                ssm_path,
-                "--with-decryption",
-                "--output",
-                "json",
-            ],
+            cmd,
             capture_output=True,
             text=True,
         )
