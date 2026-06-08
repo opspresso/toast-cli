@@ -236,26 +236,19 @@ class GitPlugin(BasePlugin):
                 return
 
             try:
-                # Change to the repository directory
-                os.chdir(repo_path)
-
-                # Create the new branch
+                # Create the new branch in the repository directory
                 result = subprocess.run(
                     ["git", "checkout", "-b", branch],
                     capture_output=True,
                     text=True,
+                    cwd=repo_path,
                 )
 
                 if result.returncode == 0:
                     console.print(f"✓ Successfully created branch '{branch}' in {repo_name}", style="bold green")
                 else:
                     console.print(f"✗ Error creating branch: {result.stderr}", style="bold red")
-
-                # Return to the original directory
-                os.chdir(current_path)
             except Exception as e:
-                # Return to the original directory in case of error
-                os.chdir(current_path)
                 console.print(f"✗ Error executing git command: {e}", style="bold red")
 
         elif command == "pull" or command == "p":
@@ -268,9 +261,6 @@ class GitPlugin(BasePlugin):
                 return
 
             try:
-                # Change to the repository directory
-                os.chdir(repo_path)
-
                 # Execute git pull with or without rebase option
                 console.print(f"Pulling latest changes for {repo_name}...", style="cyan")
 
@@ -281,6 +271,7 @@ class GitPlugin(BasePlugin):
                     git_command,
                     capture_output=True,
                     text=True,
+                    cwd=repo_path,
                 )
 
                 if result.returncode == 0:
@@ -291,12 +282,7 @@ class GitPlugin(BasePlugin):
                     )
                 else:
                     console.print(f"✗ Error pulling repository: {result.stderr}", style="bold red")
-
-                # Return to the original directory
-                os.chdir(current_path)
             except Exception as e:
-                # Return to the original directory in case of error
-                os.chdir(current_path)
                 console.print(f"✗ Error executing git command: {e}", style="bold red")
 
         elif command == "push" or command == "ps":
@@ -309,9 +295,6 @@ class GitPlugin(BasePlugin):
                 return
 
             try:
-                # Change to the repository directory
-                os.chdir(repo_path)
-
                 if mirror:
                     # Mirror push for repository migration
                     # Get GitHub host from config or use default
@@ -327,17 +310,18 @@ class GitPlugin(BasePlugin):
                         ["git", "remote", "remove", "mirror-origin"],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
+                        cwd=repo_path,
                     )
 
                     result = subprocess.run(
                         ["git", "remote", "add", "mirror-origin", repo_url],
                         capture_output=True,
                         text=True,
+                        cwd=repo_path,
                     )
 
                     if result.returncode != 0:
                         console.print(f"✗ Error adding mirror remote: {result.stderr}", style="bold red")
-                        os.chdir(current_path)
                         return
 
                     # Execute mirror push
@@ -345,6 +329,7 @@ class GitPlugin(BasePlugin):
                         ["git", "push", "--mirror", "mirror-origin"],
                         capture_output=True,
                         text=True,
+                        cwd=repo_path,
                     )
 
                     if result.returncode == 0:
@@ -359,18 +344,14 @@ class GitPlugin(BasePlugin):
                         ["git", "push"],
                         capture_output=True,
                         text=True,
+                        cwd=repo_path,
                     )
 
                     if result.returncode == 0:
                         console.print(f"✓ Successfully pushed {repo_name}", style="bold green")
                     else:
                         console.print(f"✗ Error pushing repository: {result.stderr}", style="bold red")
-
-                # Return to the original directory
-                os.chdir(current_path)
             except Exception as e:
-                # Return to the original directory in case of error
-                os.chdir(current_path)
                 console.print(f"✗ Error executing git command: {e}", style="bold red")
 
         else:

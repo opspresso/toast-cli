@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import click
 from toast.helpers import CustomHelpCommand
 
 

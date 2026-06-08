@@ -160,6 +160,19 @@ def show_diff(local_content, remote_content, local_name="LOCAL", remote_name="RE
     return diff
 
 
+def print_unified_diff(diff_lines, limit=50):
+    """Print unified-diff lines with +/- colored, capped at `limit` lines."""
+    for line in diff_lines[:limit]:
+        if line.startswith("+") and not line.startswith("+++"):
+            click.secho(line.rstrip(), fg="green")
+        elif line.startswith("-") and not line.startswith("---"):
+            click.secho(line.rstrip(), fg="red")
+        else:
+            click.echo(line.rstrip())
+    if len(diff_lines) > limit:
+        click.echo(f"... ({len(diff_lines) - limit} more lines)")
+
+
 def compare_contents(local_content, remote_content):
     """
     Compare local and remote contents.

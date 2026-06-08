@@ -5,15 +5,16 @@ import subprocess
 import json
 from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
-
-console = Console()
 from toast.plugins.utils import (
     check_aws_cli,
     select_from_list,
     mask_secret,
     mask_lines,
     show_diff,
+    print_unified_diff,
 )
+
+console = Console()
 
 
 class SsmPlugin(BasePlugin):
@@ -39,7 +40,7 @@ class SsmPlugin(BasePlugin):
     ):
         # Check AWS CLI availability
         if not check_aws_cli():
-            console.print(f"✗ Error: AWS CLI not found. Please install it to use this feature.", style="bold red")
+            console.print("✗ Error: AWS CLI not found. Please install it to use this feature.", style="bold red")
             return
 
         # Build base AWS command with optional region
@@ -102,7 +103,7 @@ class SsmPlugin(BasePlugin):
     def _get_parameter(cls, name, aws_cmd, reveal=False):
         """Get parameter value with decryption."""
         if not name:
-            console.print(f"✗ Error: Parameter name is required.", style="bold red")
+            console.print("✗ Error: Parameter name is required.", style="bold red")
             console.print("Usage: toast ssm get <name>")
             return
 
@@ -145,7 +146,7 @@ class SsmPlugin(BasePlugin):
                 )
 
         except json.JSONDecodeError:
-            console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
+            console.print("✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
             console.print(f"✗ Error: {e}", style="bold red")
 
@@ -185,12 +186,12 @@ class SsmPlugin(BasePlugin):
     def _put_parameter(cls, name, value, aws_cmd):
         """Put parameter as SecureString."""
         if not name:
-            console.print(f"✗ Error: Parameter name is required.", style="bold red")
+            console.print("✗ Error: Parameter name is required.", style="bold red")
             console.print("Usage: toast ssm put <name> <value>")
             return
 
         if not value:
-            console.print(f"✗ Error: Parameter value is required.", style="bold red")
+            console.print("✗ Error: Parameter value is required.", style="bold red")
             console.print("Usage: toast ssm put <name> <value>")
             return
 
@@ -213,15 +214,7 @@ class SsmPlugin(BasePlugin):
                 local_name="NEW",
                 remote_name="CURRENT",
             )
-            for line in diff_lines[:50]:
-                if line.startswith("+") and not line.startswith("+++"):
-                    click.secho(line.rstrip(), fg="green")
-                elif line.startswith("-") and not line.startswith("---"):
-                    click.secho(line.rstrip(), fg="red")
-                else:
-                    console.print(line.rstrip())
-            if len(diff_lines) > 50:
-                console.print(f"... ({len(diff_lines) - 50} more lines)")
+            print_unified_diff(diff_lines)
             console.print("-" * 40)
 
         # Confirm before overwriting
@@ -253,7 +246,7 @@ class SsmPlugin(BasePlugin):
             console.print(f"✓ Successfully stored '{name}' (Version: {version})", style="bold green")
 
         except json.JSONDecodeError:
-            console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
+            console.print("✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
             console.print(f"✗ Error: {e}", style="bold red")
 
@@ -261,7 +254,7 @@ class SsmPlugin(BasePlugin):
     def _delete_parameter(cls, name, aws_cmd):
         """Delete parameter."""
         if not name:
-            console.print(f"✗ Error: Parameter name is required.", style="bold red")
+            console.print("✗ Error: Parameter name is required.", style="bold red")
             console.print("Usage: toast ssm delete <name>")
             return
 
@@ -331,7 +324,7 @@ class SsmPlugin(BasePlugin):
                 parameters = response.get("Parameters", [])
 
             if not parameters:
-                console.print(f"No parameters found.", style="yellow")
+                console.print("No parameters found.", style="yellow")
                 return
 
             console.print(f"\nAWS SSM Parameters{' under ' + path if path else ''}:")
@@ -350,7 +343,7 @@ class SsmPlugin(BasePlugin):
                 console.print(f"  Type: {param_type}, Modified: {last_modified}")
 
         except json.JSONDecodeError:
-            console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
+            console.print("✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
             console.print(f"✗ Error: {e}", style="bold red")
 
@@ -378,7 +371,7 @@ class SsmPlugin(BasePlugin):
             parameters = response.get("Parameters", [])
 
             if not parameters:
-                console.print(f"No parameters found.", style="yellow")
+                console.print("No parameters found.", style="yellow")
                 return
 
             # Build list for fzf
@@ -391,7 +384,7 @@ class SsmPlugin(BasePlugin):
             selected = select_from_list(options, "Select parameter")
 
             if not selected:
-                console.print(f"No selection made.", style="yellow")
+                console.print("No selection made.", style="yellow")
                 return
 
             if selected == "[New] Create new parameter...":
@@ -402,7 +395,7 @@ class SsmPlugin(BasePlugin):
                 cls._parameter_actions(selected, aws_cmd, reveal)
 
         except json.JSONDecodeError:
-            console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
+            console.print("✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
             console.print(f"✗ Error: {e}", style="bold red")
 
@@ -486,6 +479,6 @@ class SsmPlugin(BasePlugin):
                 console.print("Operation cancelled.")
 
         except json.JSONDecodeError:
-            console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
+            console.print("✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
             console.print(f"✗ Error: {e}", style="bold red")
