@@ -39,9 +39,16 @@ toast ssm          # AWS SSM Parameter Store operations
 
 ### Testing
 ```bash
-# Run unit tests (env-store backend pure logic, no AWS access)
+# Run unit tests (pure logic: env-store backend, masking, git helpers — no AWS access)
 python -m unittest discover -s tests
+
+# Lint (ruff config in pyproject.toml: E, F, W; E501 ignored)
+ruff check .
 ```
+
+CI (`.github/workflows/push.yml`) runs `ruff check .` and the unittest suite on
+push and pull requests; the build/publish job runs only on push and only after
+the `test` job passes.
 
 ## Architecture Overview
 
@@ -185,10 +192,12 @@ s3://{bucket}/local/{org}/{project}/prompt-md    # PromptPlugin (kind=prompt-md)
 - Handles cases: identical, different, local_only, remote_only
 
 **Diff on up/down**:
-- `up`/`down` fetch the env-store copy first and compare it against local:
-  identical → report and exit (no prompt, no-op); different → show the masked
-  diff, then confirm before overwriting. (local-only `up` / remote-only `down`
-  just confirm.)
+- `up`/`down` call `store_read` first (so both S3 and SSM are queried) and
+  compare against local; when both sides exist and differ, the masked diff is
+  shown and a confirm is required before overwriting.
+- `down` no-op when local already equals the newest copy. `up` no-op is decided
+  against the **S3** copy (the write target): if local matches the newest SSM
+  parameter but S3 is stale/missing, `up` still uploads to migrate into S3.
 - Secret masking applies to `.env.local` only (`KEY=VALUE` values become
   `KEY=ab****yz`); `.prompt.md` is regular markdown and shown as-is
 - identical/different is decided on the real content; masking is display-only
@@ -206,7 +215,8 @@ s3://{bucket}/local/{org}/{project}/prompt-md    # PromptPlugin (kind=prompt-md)
 The `ssm` plugin masks SecureString values for safe terminal display:
 - `put` fetches the current value first; if it exists and differs, a masked diff
   (NEW vs CURRENT) is shown before the overwrite confirm. Identical values are a
-  no-op.
+  no-op. (This means `put` needs `ssm:GetParameter`; if the read is denied it
+  warns and proceeds as a blind overwrite.)
 - `get` and the interactive preview mask the value by default. Use `--reveal`
   (or the interactive "Copy value" action) to print the full plaintext — these
   are the explicit value-retrieval paths.
@@ -220,7 +230,10 @@ The `ssm` plugin masks SecureString values for safe terminal display:
 - **Solve the right problem**: Avoid unnecessary complexity or scope creep
 - **Favor standard solutions**: Use well-known libraries and documented patterns before writing custom code
 - **Keep code clean and readable**: Use clear naming, logical structure, and avoid deeply nested logic
-- **Handle errors thoughtfully**: Consider edge cases and fail gracefully
+- **Handle errors thoughtfully**: Consider edge cases and fail gracefully. Plugin
+  `execute()` entry points intentionally use a top-level `except Exception` to
+  turn unexpected failures into a clean `✗ Error:` line instead of a traceback —
+  this is the one sanctioned broad catch; deeper code should still be specific.
 - **Design for change**: Structure code to be modular and adaptable to future changes
 - **Keep dependencies shallow**: Minimize tight coupling between modules. Maintain clear boundaries
 - **Fail fast and visibly**: Surface errors early with meaningful messages or logs

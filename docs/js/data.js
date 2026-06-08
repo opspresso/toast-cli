@@ -7,7 +7,7 @@ const diagramElements = {
     type: 'title',
     content: [
       { type: 'text', x: 500, y: 50, fontFamily: 'Arial', fontSize: 28, textAnchor: 'middle', fontWeight: 'bold', text: 'Toast-cli Architecture' },
-      { type: 'text', x: 500, y: 90, fontFamily: 'Arial', fontSize: 18, textAnchor: 'middle', fill: '#6c757d', text: 'Plugin-based Design Pattern v3.6.0' }
+      { type: 'text', x: 500, y: 90, fontFamily: 'Arial', fontSize: 18, textAnchor: 'middle', fill: '#6c757d', text: 'Plugin-based Design Pattern' }
     ]
   },
   // 메인 CLI 박스
@@ -135,7 +135,7 @@ const diagramElements = {
     rect: { x: 770, y: 490, width: 180, height: 60, rx: 6, fill: '#f8f9fa', stroke: '#28a745', strokeWidth: 1 },
     content: [
       { type: 'text', x: 860, y: 520, fontFamily: 'Arial', fontSize: 16, textAnchor: 'middle', fill: '#28a745', text: 'AWS Integration' },
-      { type: 'text', x: 860, y: 540, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#28a745', text: '(SSM, EKS, STS)' }
+      { type: 'text', x: 860, y: 540, fontFamily: 'Arial', fontSize: 12, textAnchor: 'middle', fill: '#28a745', text: '(S3, SSM, EKS, STS)' }
     ]
   },
   // 플러그인 명령 박스
@@ -199,8 +199,8 @@ const diagramConnectors = [
   { from: 'ctx-plugin', to: 'dot-plugin', stroke: '#0056b3', strokeWidth: 1.5, fill: 'none' },
   { from: 'env-plugin', to: 'region-plugin', stroke: '#0056b3', strokeWidth: 1.5, fill: 'none' },
 
-  // 외부 통합 연결 (점선)
-  { from: 'git-plugin', to: 'aws-integration', stroke: '#28a745', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
+  // 외부 통합 연결 (점선) - SSM/S3 등 AWS 연동은 ssm 플러그인이 대표
+  { from: 'ssm-plugin', to: 'aws-integration', stroke: '#28a745', strokeWidth: 1.5, strokeDasharray: '5,3', fill: 'none' },
 
   // 명령 연결 (회색 점선)
   // 플러그인에서 명령으로 연결

@@ -2,6 +2,6 @@ include README.md
 include LICENSE
 include VERSION
 include ARCHITECTURE.md
-include CNAME
-include favicon.ico
+include docs/CNAME
+include docs/favicon.ico
 include .mergify.yml
