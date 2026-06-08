@@ -137,7 +137,7 @@ def mask_lines(content, visible=2):
     )
 
 
-def show_diff(local_content, remote_content, local_name="LOCAL", remote_name="SSM"):
+def show_diff(local_content, remote_content, local_name="LOCAL", remote_name="REMOTE"):
     """
     Show diff between local and remote content.
 
@@ -191,7 +191,7 @@ def select_sync_action(status, file_name):
         str: Selected action ('upload', 'download', 'cancel', or None)
     """
     if status == "identical":
-        click.echo(f"'{file_name}' is identical between local and SSM.")
+        click.echo(f"'{file_name}' is identical between local and env-store.")
         return None
 
     options = []
@@ -199,31 +199,31 @@ def select_sync_action(status, file_name):
 
     if status == "different":
         options = [
-            "⬆ Upload (local → SSM)",
-            "⬇ Download (SSM → local)",
+            "⬆ Upload (local → env-store)",
+            "⬇ Download (env-store → local)",
             "✗ Cancel",
         ]
         descriptions = {
-            "⬆ Upload (local → SSM)": "upload",
-            "⬇ Download (SSM → local)": "download",
+            "⬆ Upload (local → env-store)": "upload",
+            "⬇ Download (env-store → local)": "download",
             "✗ Cancel": "cancel",
         }
     elif status == "local_only":
         options = [
-            "⬆ Upload (local → SSM)",
+            "⬆ Upload (local → env-store)",
             "✗ Cancel",
         ]
         descriptions = {
-            "⬆ Upload (local → SSM)": "upload",
+            "⬆ Upload (local → env-store)": "upload",
             "✗ Cancel": "cancel",
         }
     elif status == "remote_only":
         options = [
-            "⬇ Download (SSM → local)",
+            "⬇ Download (env-store → local)",
             "✗ Cancel",
         ]
         descriptions = {
-            "⬇ Download (SSM → local)": "download",
+            "⬇ Download (env-store → local)": "download",
             "✗ Cancel": "cancel",
         }
 

@@ -131,6 +131,8 @@ Each plugin:
 - Manages .env.local files via the S3 env-store (`storage.py`)
 - Default behavior: `sync` (compare local/store, show diff, choose upload/download)
 - Commands: `sync` (default), `up` (upload), `down`/`dn` (download), `ls` (list)
+- `up`/`down` compare against env-store first: identical → no-op, different →
+  masked diff (secret values masked) + confirm before overwriting
 - S3 key: `local/{org}/{project}/env-local` (SSE-KMS)
 - Validates workspace path structure (`workspace/github.com/{org}/{project}`)
 
@@ -138,6 +140,8 @@ Each plugin:
 - Manages .prompt.md files via the S3 env-store (`storage.py`)
 - Default behavior: `sync` (compare local/store, show diff, choose upload/download)
 - Commands: `sync` (default), `up` (upload), `down`/`dn` (download), `ls` (list)
+- `up`/`down` compare against env-store first: identical → no-op, different →
+  diff + confirm before overwriting (`.prompt.md` is markdown, shown as-is)
 - S3 key: `local/{org}/{project}/prompt-md` (SSE-KMS)
 - Validates workspace path structure (`workspace/github.com/{org}/{project}`)
 
@@ -175,6 +179,10 @@ Each plugin:
 - Commands: `ls` (list), `get`/`g` (retrieve), `put`/`p` (store), `delete`/`rm`/`d` (remove)
 - Supports `--region` option for cross-region operations
 - Stores values as SecureString type for encryption
+- Secret masking: `get` and the interactive preview mask values by default;
+  `--reveal` (or the interactive "Copy value" action) prints plaintext
+- `put` shows a masked NEW-vs-CURRENT diff before overwriting an existing value
+  (identical values are a no-op)
 - Interactive parameter creation and update
 
 #### GitPlugin (git)

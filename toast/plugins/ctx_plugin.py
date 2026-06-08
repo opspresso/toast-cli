@@ -39,7 +39,7 @@ class CtxPlugin(BasePlugin):
             region = subprocess.run(
                 ["aws", "configure", "get", "region"], capture_output=True, text=True
             )
-            if result.returncode != 0:
+            if region.returncode != 0:
                 console.print("✗ Error fetching AWS region.", style="bold red")
                 return
 

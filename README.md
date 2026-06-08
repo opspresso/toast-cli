@@ -24,7 +24,7 @@ Python-based CLI utility with plugin architecture for AWS, Kubernetes, and Git o
 * **Git**: Repository management (clone, branch, pull, push, rm, mirror), organization-specific GitHub hosts
 * **Workspace**: Directory navigation, environment file management (.env.local, .prompt.md)
 * **Interface**: FZF-powered interactive menus, formatted output with Rich
-* **Security**: S3 env-store with SSE-KMS for sensitive files (SSM fallback during transition)
+* **Security**: S3 env-store with SSE-KMS for sensitive files (SSM fallback during transition); secret values masked in diffs and SSM previews
 
 ## Architecture
 
@@ -98,6 +98,8 @@ toast dot                  # Compare local and env-store, choose action (default
 toast dot up               # Upload .env.local to env-store (S3)
 toast dot down             # Download .env.local from env-store (alias: dn)
 toast dot ls               # List all .env.local files in env-store (S3 + SSM)
+# up/down show a masked diff and confirm when local and env-store differ;
+# identical content is a no-op. Secret values are masked (KEY=ab****yz).
 
 # Prompt Files (.prompt.md)
 toast prompt               # Compare local and env-store, choose action (default: sync)
@@ -109,8 +111,9 @@ toast prompt ls            # List all .prompt.md files in env-store (S3 + SSM)
 toast ssm                  # Interactive mode: browse and select parameters
 toast ssm ls               # List all parameters
 toast ssm ls /toast/       # List parameters under path
-toast ssm get /my/param    # Get parameter value (alias: g)
-toast ssm put /my/param 'value'  # Store as SecureString (alias: p)
+toast ssm get /my/param    # Get parameter value, masked by default (alias: g)
+toast ssm get /my/param --reveal  # Get parameter value in plaintext
+toast ssm put /my/param 'value'  # Store as SecureString; shows masked diff if it exists (alias: p)
 toast ssm rm /my/param     # Delete parameter (alias: d, delete)
 
 # Git Operations

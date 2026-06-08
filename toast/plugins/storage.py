@@ -643,6 +643,8 @@ def _print_masked_diff(local_content, remote_content, kind):
     diff_lines = show_diff(
         _mask_for_display(local_content, kind),
         _mask_for_display(remote_content, kind),
+        local_name="LOCAL",
+        remote_name="ENV-STORE",
     )
     for line in diff_lines[:50]:
         if line.startswith("+") and not line.startswith("+++"):
