@@ -15,7 +15,9 @@ import os
 import re
 import sys
 import json
+import shutil
 import getpass
+import tempfile
 import subprocess
 from datetime import datetime, timezone
 
@@ -30,6 +32,7 @@ from toast.plugins.utils import (
     compare_contents,
     select_sync_action,
     mask_env_content,
+    print_unified_diff,
 )
 
 console = Console()
@@ -327,7 +330,10 @@ def s3_get(config, key):
     Returns (value, last_modified, error). A missing object returns
     (None, None, None); a hard failure returns (None, None, error).
     """
-    tmp = os.path.expanduser("~/.toast_s3_get.tmp")
+    # Write the (decrypted) object into a private 0700 temp dir so the plaintext
+    # is never world-readable and concurrent invocations never collide.
+    tmp_dir = tempfile.mkdtemp(prefix="toast-")
+    tmp = os.path.join(tmp_dir, "object")
     try:
         result = subprocess.run(
             _aws(
@@ -365,8 +371,7 @@ def s3_get(config, key):
     except Exception as e:
         return None, None, str(e)
     finally:
-        if os.path.exists(tmp):
-            os.remove(tmp)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def s3_put(config, key, content):
@@ -374,9 +379,11 @@ def s3_put(config, key, content):
 
     Returns (ok, error).
     """
-    tmp = os.path.expanduser("~/.toast_s3_put.tmp")
+    # mkstemp creates the file with 0600 perms and a unique name, so the
+    # plaintext body is not world-readable and concurrent puts never collide.
+    fd, tmp = tempfile.mkstemp(prefix="toast-", suffix=".tmp")
     try:
-        with open(tmp, "w") as f:
+        with os.fdopen(fd, "w") as f:
             f.write(content)
 
         args = [
@@ -646,15 +653,7 @@ def _print_masked_diff(local_content, remote_content, kind):
         local_name="LOCAL",
         remote_name="ENV-STORE",
     )
-    for line in diff_lines[:50]:
-        if line.startswith("+") and not line.startswith("+++"):
-            click.secho(line.rstrip(), fg="green")
-        elif line.startswith("-") and not line.startswith("---"):
-            click.secho(line.rstrip(), fg="red")
-        else:
-            console.print(line.rstrip())
-    if len(diff_lines) > 50:
-        console.print(f"... ({len(diff_lines) - 50} more lines)")
+    print_unified_diff(diff_lines)
     console.print("-" * 40)
 
 
@@ -733,20 +732,29 @@ def _cmd_up(config, org, project, kind, filename, local_path):
     for src, e in result.errors:
         console.print(f"⚠ Warning: {src.upper()} read error: {e}", style="yellow")
 
+    # The upload target is S3, so the no-op decision is made against the S3 copy
+    # (not the newest copy): when the newest copy is a stale SSM parameter, an
+    # `up` still needs to migrate the content into the bucket.
+    if result.s3_value is not None and content == result.s3_value:
+        console.print(
+            "✓ S3 already matches local. No upload needed.", style="bold green"
+        )
+        return
+
     overwrite_msg = ""
     if result.value is not None:
-        status = compare_contents(content, result.value)
-        if status == "identical":
+        if compare_contents(content, result.value) == "different":
             console.print(
-                "✓ Local already matches env-store (newest). No upload needed.",
-                style="bold green",
+                f"env-store newest ({result.source.upper()}) differs from local."
             )
-            return
-        console.print(
-            f"env-store already has {filename} (newest: {result.source.upper()})."
-        )
-        _print_masked_diff(content, result.value, kind)
-        overwrite_msg = " (overwrites env-store)"
+            _print_masked_diff(content, result.value, kind)
+            overwrite_msg = " (overwrites env-store)"
+        else:
+            # Local matches the newest copy (SSM) but S3 is stale/missing.
+            console.print(
+                "ℹ Local matches SSM (newest); uploading to migrate it into S3."
+            )
+            overwrite_msg = " (migrate to S3)"
 
     if not click.confirm(f"Upload {filename} to {target}{overwrite_msg}?"):
         console.print("Operation cancelled.")
