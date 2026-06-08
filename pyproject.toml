@@ -1,3 +1,13 @@
 [build-system]
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 200
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+# E501 (line too long) is intentionally not enforced — the CLI has many long
+# console.print lines and reflowing them would be noise.
+ignore = ["E501"]
