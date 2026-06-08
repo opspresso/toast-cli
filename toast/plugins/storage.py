@@ -734,14 +734,17 @@ def _cmd_up(config, org, project, kind, filename, local_path):
     overwrite_msg = ""
     if result.value is not None:
         status = compare_contents(content, result.value)
-        if status == "different":
+        if status == "identical":
             console.print(
-                f"env-store already has {filename} (newest: {result.source.upper()})."
+                "✓ Local already matches env-store (newest). No upload needed.",
+                style="bold green",
             )
-            _print_masked_diff(content, result.value, kind)
-            overwrite_msg = " (overwrites env-store)"
-        elif status == "identical":
-            console.print("ℹ Local already matches env-store (newest).")
+            return
+        console.print(
+            f"env-store already has {filename} (newest: {result.source.upper()})."
+        )
+        _print_masked_diff(content, result.value, kind)
+        overwrite_msg = " (overwrites env-store)"
 
     if not click.confirm(f"Upload {filename} to {target}{overwrite_msg}?"):
         console.print("Operation cancelled.")
@@ -779,12 +782,15 @@ def _cmd_down(config, org, project, kind, filename, local_path):
         with open(local_path, "r") as f:
             local_content = f.read()
         status = compare_contents(local_content, result.value)
-        if status == "different":
-            console.print("Local file differs from env-store (newest).")
-            _print_masked_diff(local_content, result.value, kind)
-            overwrite_msg = " (will overwrite existing file)"
-        elif status == "identical":
-            console.print("ℹ Local already matches env-store (newest).")
+        if status == "identical":
+            console.print(
+                "✓ Local already matches env-store (newest). No download needed.",
+                style="bold green",
+            )
+            return
+        console.print("Local file differs from env-store (newest).")
+        _print_masked_diff(local_content, result.value, kind)
+        overwrite_msg = " (will overwrite existing file)"
 
     src_label = result.source.upper()
     if not click.confirm(

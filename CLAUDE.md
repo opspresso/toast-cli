@@ -185,8 +185,10 @@ s3://{bucket}/local/{org}/{project}/prompt-md    # PromptPlugin (kind=prompt-md)
 - Handles cases: identical, different, local_only, remote_only
 
 **Diff on up/down**:
-- `up`/`down` also show the masked diff (and a confirm prompt) when local and
-  env-store both exist and differ, so you see what changes before overwriting
+- `up`/`down` fetch the env-store copy first and compare it against local:
+  identical → report and exit (no prompt, no-op); different → show the masked
+  diff, then confirm before overwriting. (local-only `up` / remote-only `down`
+  just confirm.)
 - Secret masking applies to `.env.local` only (`KEY=VALUE` values become
   `KEY=ab****yz`); `.prompt.md` is regular markdown and shown as-is
 - identical/different is decided on the real content; masking is display-only
