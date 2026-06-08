@@ -29,6 +29,7 @@ from toast.plugins.utils import (
     show_diff,
     compare_contents,
     select_sync_action,
+    mask_env_content,
 )
 
 console = Console()
@@ -623,6 +624,38 @@ def store_list(config, kind):
 # ---------------------------------------------------------------------------
 
 
+def _mask_for_display(content, kind):
+    """Mask secret values for on-screen diffs. Only env-local is masked;
+    prompt-md is regular markdown and shown as-is."""
+    if kind == "env-local":
+        return mask_env_content(content)
+    return content
+
+
+def _print_masked_diff(local_content, remote_content, kind):
+    """Print a colored unified diff of local vs remote with secrets masked.
+
+    The identical/different decision is made by the caller on the real
+    content; only this display is masked.
+    """
+    console.print("Differences found:")
+    console.print("-" * 40)
+    diff_lines = show_diff(
+        _mask_for_display(local_content, kind),
+        _mask_for_display(remote_content, kind),
+    )
+    for line in diff_lines[:50]:
+        if line.startswith("+") and not line.startswith("+++"):
+            click.secho(line.rstrip(), fg="green")
+        elif line.startswith("-") and not line.startswith("---"):
+            click.secho(line.rstrip(), fg="red")
+        else:
+            console.print(line.rstrip())
+    if len(diff_lines) > 50:
+        console.print(f"... ({len(diff_lines) - 50} more lines)")
+    console.print("-" * 40)
+
+
 def run_file_sync(kind, filename, command):
     """Shared entry point for the dot/prompt plugins.
 
@@ -691,12 +724,28 @@ def _cmd_up(config, org, project, kind, filename, local_path):
     key = s3_key(org, project, kind)
     target = f"s3://{config.bucket}/{key}"
 
-    if not click.confirm(f"Upload {filename} to {target}?"):
-        console.print("Operation cancelled.")
-        return
-
     with open(local_path, "r") as f:
         content = f.read()
+
+    result = store_read(config, org, project, kind)
+    for src, e in result.errors:
+        console.print(f"⚠ Warning: {src.upper()} read error: {e}", style="yellow")
+
+    overwrite_msg = ""
+    if result.value is not None:
+        status = compare_contents(content, result.value)
+        if status == "different":
+            console.print(
+                f"env-store already has {filename} (newest: {result.source.upper()})."
+            )
+            _print_masked_diff(content, result.value, kind)
+            overwrite_msg = " (overwrites env-store)"
+        elif status == "identical":
+            console.print("ℹ Local already matches env-store (newest).")
+
+    if not click.confirm(f"Upload {filename} to {target}{overwrite_msg}?"):
+        console.print("Operation cancelled.")
+        return
 
     console.print(f"Uploading {filename} to {target}...")
     ok, err = store_write(config, org, project, kind, content)
@@ -725,9 +774,18 @@ def _cmd_down(config, org, project, kind, filename, local_path):
     for src, e in result.errors:
         console.print(f"⚠ Warning: {src.upper()} read error: {e}", style="yellow")
 
-    overwrite_msg = (
-        " (will overwrite existing file)" if os.path.exists(local_path) else ""
-    )
+    overwrite_msg = ""
+    if os.path.exists(local_path):
+        with open(local_path, "r") as f:
+            local_content = f.read()
+        status = compare_contents(local_content, result.value)
+        if status == "different":
+            console.print("Local file differs from env-store (newest).")
+            _print_masked_diff(local_content, result.value, kind)
+            overwrite_msg = " (will overwrite existing file)"
+        elif status == "identical":
+            console.print("ℹ Local already matches env-store (newest).")
+
     src_label = result.source.upper()
     if not click.confirm(
         f"Download {filename} from {src_label} (newest){overwrite_msg}?"
@@ -799,19 +857,7 @@ def _cmd_sync(config, org, project, kind, filename, local_path):
         return
 
     if status == "different":
-        console.print("Differences found:")
-        console.print("-" * 40)
-        diff_lines = show_diff(local_content, remote_content)
-        for line in diff_lines[:50]:
-            if line.startswith("+") and not line.startswith("+++"):
-                click.secho(line.rstrip(), fg="green")
-            elif line.startswith("-") and not line.startswith("---"):
-                click.secho(line.rstrip(), fg="red")
-            else:
-                console.print(line.rstrip())
-        if len(diff_lines) > 50:
-            console.print(f"... ({len(diff_lines) - 50} more lines)")
-        console.print("-" * 40)
+        _print_masked_diff(local_content, remote_content, kind)
     elif status == "local_only":
         console.print("Local file exists, but env-store does not.")
     elif status == "remote_only":

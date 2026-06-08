@@ -184,12 +184,31 @@ s3://{bucket}/local/{org}/{project}/prompt-md    # PromptPlugin (kind=prompt-md)
 - Interactive selection via fzf: Upload / Download / Cancel
 - Handles cases: identical, different, local_only, remote_only
 
+**Diff on up/down**:
+- `up`/`down` also show the masked diff (and a confirm prompt) when local and
+  env-store both exist and differ, so you see what changes before overwriting
+- Secret masking applies to `.env.local` only (`KEY=VALUE` values become
+  `KEY=ab****yz`); `.prompt.md` is regular markdown and shown as-is
+- identical/different is decided on the real content; masking is display-only
+  (see `mask_secret`/`mask_env_content` in `plugins/utils.py`)
+
 **Common patterns**:
 - Validate workspace path: `workspace/github.com/{org}/{project}`
 - All AWS calls use the env-store profile via `storage._aws()`
 - Write S3 objects with `--server-side-encryption aws:kms`
 - Use temporary files for content upload/download
 - Include confirmation prompts before overwriting files
+
+### SSM Plugin Secret Handling
+
+The `ssm` plugin masks SecureString values for safe terminal display:
+- `put` fetches the current value first; if it exists and differs, a masked diff
+  (NEW vs CURRENT) is shown before the overwrite confirm. Identical values are a
+  no-op.
+- `get` and the interactive preview mask the value by default. Use `--reveal`
+  (or the interactive "Copy value" action) to print the full plaintext — these
+  are the explicit value-retrieval paths.
+- Masking uses `mask_secret`/`mask_lines` from `plugins/utils.py`.
 
 ## Project Code Guidelines
 

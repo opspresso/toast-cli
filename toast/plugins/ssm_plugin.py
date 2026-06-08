@@ -7,7 +7,13 @@ from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
 
 console = Console()
-from toast.plugins.utils import check_aws_cli, select_from_list
+from toast.plugins.utils import (
+    check_aws_cli,
+    select_from_list,
+    mask_secret,
+    mask_lines,
+    show_diff,
+)
 
 
 class SsmPlugin(BasePlugin):
@@ -22,10 +28,15 @@ class SsmPlugin(BasePlugin):
         func = click.argument("name", required=False)(func)
         func = click.argument("value", required=False)(func)
         func = click.option("--region", "-r", help="AWS region")(func)
+        func = click.option(
+            "--reveal", is_flag=True, help="Show secret values in plaintext"
+        )(func)
         return func
 
     @classmethod
-    def execute(cls, command=None, name=None, value=None, region=None, **kwargs):
+    def execute(
+        cls, command=None, name=None, value=None, region=None, reveal=False, **kwargs
+    ):
         # Check AWS CLI availability
         if not check_aws_cli():
             console.print(f"✗ Error: AWS CLI not found. Please install it to use this feature.", style="bold red")
@@ -40,7 +51,7 @@ class SsmPlugin(BasePlugin):
 
         # Handle commands
         if command in ("g", "get"):
-            cls._get_parameter(name, aws_cmd)
+            cls._get_parameter(name, aws_cmd, reveal)
 
         elif command in ("p", "put"):
             cls._put_parameter(name, value, aws_cmd)
@@ -53,12 +64,12 @@ class SsmPlugin(BasePlugin):
 
         elif command is None:
             # Default: interactive mode - list and select parameter
-            cls._interactive_mode(aws_cmd)
+            cls._interactive_mode(aws_cmd, reveal)
 
         else:
             # If command looks like a parameter name (starts with /), treat as get
             if command and command.startswith("/"):
-                cls._get_parameter(command, aws_cmd)
+                cls._get_parameter(command, aws_cmd, reveal)
             else:
                 console.print(f"Unknown command: {command}")
                 console.print()
@@ -78,6 +89,7 @@ class SsmPlugin(BasePlugin):
         console.print()
         console.print("Options:")
         console.print("  -r, --region <region>     - Specify AWS region")
+        console.print("  --reveal                  - Show secret values in plaintext (get/interactive)")
         console.print()
         console.print("Examples:")
         console.print("  toast ssm                           # Interactive browse")
@@ -87,7 +99,7 @@ class SsmPlugin(BasePlugin):
         console.print("  toast ssm rm /my/param              # Delete parameter")
 
     @classmethod
-    def _get_parameter(cls, name, aws_cmd):
+    def _get_parameter(cls, name, aws_cmd, reveal=False):
         """Get parameter value with decryption."""
         if not name:
             console.print(f"✗ Error: Parameter name is required.", style="bold red")
@@ -124,12 +136,50 @@ class SsmPlugin(BasePlugin):
             if last_modified:
                 console.print(f"Last Modified: {last_modified}")
             console.print("-" * 40)
-            console.print(value)
+            if reveal:
+                console.print(value)
+            else:
+                console.print(mask_secret(value))
+                console.print(
+                    "(masked — use --reveal to show full value)", style="yellow"
+                )
 
         except json.JSONDecodeError:
             console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
             console.print(f"✗ Error: {e}", style="bold red")
+
+    @classmethod
+    def _fetch_parameter_value(cls, name, aws_cmd):
+        """Return the current parameter value (decrypted), or None if absent.
+
+        Returns (value, error). error is set only on a hard failure; a missing
+        parameter returns (None, None).
+        """
+        try:
+            result = subprocess.run(
+                aws_cmd([
+                    "get-parameter",
+                    "--name", name,
+                    "--with-decryption",
+                    "--output", "json"
+                ]),
+                capture_output=True,
+                text=True,
+            )
+
+            if result.returncode != 0:
+                if "ParameterNotFound" in result.stderr:
+                    return None, None
+                return None, result.stderr
+
+            response = json.loads(result.stdout)
+            return response.get("Parameter", {}).get("Value", ""), None
+
+        except json.JSONDecodeError:
+            return None, "Error parsing AWS response"
+        except Exception as e:
+            return None, str(e)
 
     @classmethod
     def _put_parameter(cls, name, value, aws_cmd):
@@ -144,8 +194,39 @@ class SsmPlugin(BasePlugin):
             console.print("Usage: toast ssm put <name> <value>")
             return
 
+        # Compare against the existing value (if any) before overwriting.
+        existing, fetch_err = cls._fetch_parameter_value(name, aws_cmd)
+        if fetch_err:
+            console.print(f"⚠ Warning: could not read current value: {fetch_err}", style="yellow")
+        if existing is not None:
+            if existing == value:
+                console.print(
+                    f"ℹ '{name}' already has this value. Nothing to do.",
+                    style="bold green",
+                )
+                return
+            console.print(f"'{name}' already exists. Differences (masked):")
+            console.print("-" * 40)
+            diff_lines = show_diff(
+                mask_lines(value),
+                mask_lines(existing),
+                local_name="NEW",
+                remote_name="CURRENT",
+            )
+            for line in diff_lines[:50]:
+                if line.startswith("+") and not line.startswith("+++"):
+                    click.secho(line.rstrip(), fg="green")
+                elif line.startswith("-") and not line.startswith("---"):
+                    click.secho(line.rstrip(), fg="red")
+                else:
+                    console.print(line.rstrip())
+            if len(diff_lines) > 50:
+                console.print(f"... ({len(diff_lines) - 50} more lines)")
+            console.print("-" * 40)
+
         # Confirm before overwriting
-        if not click.confirm(f"Store '{name}' as SecureString?"):
+        overwrite_msg = " (overwrites current value)" if existing is not None else ""
+        if not click.confirm(f"Store '{name}' as SecureString{overwrite_msg}?"):
             console.print("Operation cancelled.")
             return
 
@@ -274,7 +355,7 @@ class SsmPlugin(BasePlugin):
             console.print(f"✗ Error: {e}", style="bold red")
 
     @classmethod
-    def _interactive_mode(cls, aws_cmd):
+    def _interactive_mode(cls, aws_cmd, reveal=False):
         """Interactive mode: browse and select parameters."""
         console.print("Loading parameters from AWS SSM...")
 
@@ -318,7 +399,7 @@ class SsmPlugin(BasePlugin):
                 cls._create_new_parameter(aws_cmd)
             else:
                 # Show parameter and offer actions
-                cls._parameter_actions(selected, aws_cmd)
+                cls._parameter_actions(selected, aws_cmd, reveal)
 
         except json.JSONDecodeError:
             console.print(f"✗ Error: Failed to parse AWS response.", style="bold red")
@@ -341,7 +422,7 @@ class SsmPlugin(BasePlugin):
         cls._put_parameter(name, value, aws_cmd)
 
     @classmethod
-    def _parameter_actions(cls, name, aws_cmd):
+    def _parameter_actions(cls, name, aws_cmd, reveal=False):
         """Show parameter value and offer actions."""
         # First, get and display the parameter
         try:
@@ -372,7 +453,14 @@ class SsmPlugin(BasePlugin):
             if last_modified:
                 console.print(f"Last Modified: {last_modified}")
             console.print("-" * 40)
-            console.print(current_value)
+            if reveal:
+                console.print(current_value)
+            else:
+                console.print(mask_secret(current_value))
+                console.print(
+                    "(masked — choose 'Copy value' to print the full value)",
+                    style="yellow",
+                )
             console.print("-" * 40)
             console.print()
 

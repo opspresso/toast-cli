@@ -89,6 +89,54 @@ def compute_hash(content):
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
 
 
+def mask_secret(value, visible=2):
+    """Partially mask a secret string, revealing only the first/last chars.
+
+    Values no longer than 2*visible are fully masked. Longer values reveal the
+    first and last `visible` characters; the middle is replaced with stars
+    capped at 12 so very long secrets do not leak their exact length.
+    """
+    if value is None:
+        return None
+    n = len(value)
+    if n == 0:
+        return value
+    if n <= visible * 2:
+        return "*" * n
+    middle = n - visible * 2
+    return value[:visible] + "*" * min(middle, 12) + value[-visible:]
+
+
+def mask_env_content(content, visible=2):
+    """Mask the value of each KEY=VALUE line in dotenv content.
+
+    Keys are preserved so a diff still shows which entry changed. Blank lines,
+    comments, and lines without '=' pass through unchanged. The first '=' is the
+    separator, so values containing '=' (e.g. base64 padding) stay intact.
+    """
+    if content is None:
+        return None
+    out = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            out.append(line)
+            continue
+        key, sep, val = line.partition("=")
+        out.append(f"{key}{sep}{mask_secret(val, visible)}")
+    return "\n".join(out)
+
+
+def mask_lines(content, visible=2):
+    """Mask each non-blank line of content via mask_secret (blank lines kept)."""
+    if content is None:
+        return None
+    return "\n".join(
+        mask_secret(line, visible) if line.strip() else line
+        for line in content.splitlines()
+    )
+
+
 def show_diff(local_content, remote_content, local_name="LOCAL", remote_name="SSM"):
     """
     Show diff between local and remote content.
