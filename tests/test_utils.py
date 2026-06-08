@@ -2,9 +2,17 @@
 
 """Unit tests for the secret-masking helpers (pure logic, no AWS access)."""
 
+import contextlib
+import io
 import unittest
 
-from toast.plugins.utils import mask_secret, mask_env_content, mask_lines
+from toast.plugins.utils import (
+    mask_secret,
+    mask_env_content,
+    mask_lines,
+    compare_contents,
+    print_unified_diff,
+)
 
 
 class MaskSecretTests(unittest.TestCase):
@@ -70,6 +78,34 @@ class MaskLinesTests(unittest.TestCase):
         self.assertEqual(lines[1], "")
         self.assertEqual(lines[0], mask_secret("tokenvalue"))
         self.assertEqual(lines[2], mask_secret("othertoken"))
+
+
+class CompareContentsTests(unittest.TestCase):
+    def test_both_missing(self):
+        self.assertEqual(compare_contents(None, None), "both_missing")
+
+    def test_remote_only(self):
+        self.assertEqual(compare_contents(None, "x"), "remote_only")
+
+    def test_local_only(self):
+        self.assertEqual(compare_contents("x", None), "local_only")
+
+    def test_identical(self):
+        self.assertEqual(compare_contents("x", "x"), "identical")
+
+    def test_different(self):
+        self.assertEqual(compare_contents("x", "y"), "different")
+
+
+class PrintUnifiedDiffTests(unittest.TestCase):
+    def test_does_not_raise_and_caps(self):
+        # 60 lines with limit 50 -> prints a "more lines" trailer, no exception
+        lines = [f"+line{i}" for i in range(60)]
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                print_unified_diff(lines, limit=50)
+        except Exception as e:  # noqa: BLE001 - test guard
+            self.fail(f"print_unified_diff raised: {e}")
 
 
 if __name__ == "__main__":

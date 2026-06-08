@@ -370,6 +370,56 @@ class StoreReadTests(unittest.TestCase):
             self.assertTrue(any(src == "s3" for src, _ in r.errors))
 
 
+class CmdUpTests(unittest.TestCase):
+    """Regression tests for _cmd_up's S3-based no-op decision."""
+
+    def _cfg(self):
+        return storage.StoreConfig("b", "p", None, None)
+
+    def _read_result(self, value, source, s3_value, ssm_value, status):
+        return storage.ReadResult(
+            value, source, s3_value, "ts", ssm_value, "ts", status, []
+        )
+
+    def _run_up(self, content, read_result):
+        """Call _cmd_up with a real local file and mocked store I/O.
+
+        Returns the store_write mock so callers can assert upload happened.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            local_path = os.path.join(d, ".env.local")
+            with open(local_path, "w") as f:
+                f.write(content)
+            with mock.patch.object(
+                storage, "store_read", return_value=read_result
+            ), mock.patch.object(
+                storage, "store_write", return_value=(True, None)
+            ) as write_mock, mock.patch.object(
+                storage.click, "confirm", return_value=True
+            ):
+                storage._cmd_up(
+                    self._cfg(), "o", "p", "env-local", ".env.local", local_path
+                )
+            return write_mock
+
+    def test_s3_identical_is_noop(self):
+        # S3 already has the same content -> no upload, even though SSM also matches
+        rr = self._read_result("abc", "s3", "abc", "abc", "both")
+        write_mock = self._run_up("abc", rr)
+        write_mock.assert_not_called()
+
+    def test_ssm_only_identical_migrates_to_s3(self):
+        # Newest (SSM) matches local but S3 is missing -> upload to migrate
+        rr = self._read_result("abc", "ssm", None, "abc", "ssm_only")
+        write_mock = self._run_up("abc", rr)
+        write_mock.assert_called_once()
+
+    def test_s3_different_uploads(self):
+        rr = self._read_result("xyz", "s3", "xyz", None, "s3_only")
+        write_mock = self._run_up("abc", rr)
+        write_mock.assert_called_once()
+
+
 class StoreListTests(unittest.TestCase):
     def _cfg(self):
         return storage.StoreConfig("b", "p", None, None)
