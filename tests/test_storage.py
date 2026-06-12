@@ -420,6 +420,57 @@ class CmdUpTests(unittest.TestCase):
         write_mock.assert_called_once()
 
 
+class CmdDiffTests(unittest.TestCase):
+    def _cfg(self):
+        return storage.StoreConfig("b", "p", None, None)
+
+    def _read_result(self, value, source, status):
+        return storage.ReadResult(
+            value,
+            source,
+            value if source == "s3" else None,
+            "ts",
+            value if source == "ssm" else None,
+            "ts",
+            status,
+            [],
+        )
+
+    def _run_diff(self, local_content, read_result):
+        with tempfile.TemporaryDirectory() as d:
+            local_path = os.path.join(d, ".env.local")
+            if local_content is not None:
+                with open(local_path, "w") as f:
+                    f.write(local_content)
+            with mock.patch.object(
+                storage, "store_read", return_value=read_result
+            ), mock.patch.object(storage, "_print_masked_diff") as diff_mock:
+                storage._cmd_diff(
+                    self._cfg(), "o", "p", "env-local", ".env.local", local_path
+                )
+            return diff_mock
+
+    def test_identical_does_not_print_diff(self):
+        rr = self._read_result("abc", "s3", "s3_only")
+        diff_mock = self._run_diff("abc", rr)
+        diff_mock.assert_not_called()
+
+    def test_different_prints_diff(self):
+        rr = self._read_result("xyz", "s3", "s3_only")
+        diff_mock = self._run_diff("abc", rr)
+        diff_mock.assert_called_once_with("abc", "xyz", "env-local")
+
+    def test_local_only_does_not_print_diff(self):
+        rr = self._read_result(None, None, "none")
+        diff_mock = self._run_diff("abc", rr)
+        diff_mock.assert_not_called()
+
+    def test_remote_only_does_not_print_diff(self):
+        rr = self._read_result("xyz", "ssm", "ssm_only")
+        diff_mock = self._run_diff(None, rr)
+        diff_mock.assert_not_called()
+
+
 class StoreListTests(unittest.TestCase):
     def _cfg(self):
         return storage.StoreConfig("b", "p", None, None)

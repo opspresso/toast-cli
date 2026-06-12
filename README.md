@@ -97,6 +97,7 @@ toast ctx                  # Switch contexts
 toast dot                  # Compare local and env-store, choose action (default: sync)
 toast dot up               # Upload .env.local to env-store (S3)
 toast dot down             # Download .env.local from env-store (alias: dn)
+toast dot diff             # Show local vs env-store diff without changing files
 toast dot ls               # List all .env.local files in env-store (S3 + SSM)
 # up/down show a masked diff and confirm when local and env-store differ;
 # identical content is a no-op. Secret values are masked (KEY=ab****yz).
@@ -105,6 +106,7 @@ toast dot ls               # List all .env.local files in env-store (S3 + SSM)
 toast prompt               # Compare local and env-store, choose action (default: sync)
 toast prompt up            # Upload .prompt.md to env-store (S3)
 toast prompt down          # Download .prompt.md from env-store (alias: dn)
+toast prompt diff          # Show local vs env-store diff without changing files
 toast prompt ls            # List all .prompt.md files in env-store (S3 + SSM)
 
 # SSM Parameter Store
@@ -114,6 +116,7 @@ toast ssm ls /toast/       # List parameters under path
 toast ssm get /my/param    # Get parameter value, masked by default (alias: g)
 toast ssm get /my/param --reveal  # Get parameter value in plaintext
 toast ssm put /my/param 'value'  # Store as SecureString; shows masked diff if it exists (alias: p)
+toast ssm diff /my/param 'value' # Show masked diff without writing
 toast ssm rm /my/param     # Delete parameter (alias: d, delete)
 
 # Git Operations

@@ -57,6 +57,9 @@ class SsmPlugin(BasePlugin):
         elif command in ("p", "put"):
             cls._put_parameter(name, value, aws_cmd)
 
+        elif command == "diff":
+            cls._diff_parameter(name, value, aws_cmd)
+
         elif command in ("d", "delete", "rm"):
             cls._delete_parameter(name, aws_cmd)
 
@@ -86,6 +89,7 @@ class SsmPlugin(BasePlugin):
         console.print("  ls [path]                 - List parameters (optionally filter by path)")
         console.print("  g|get <name>              - Get parameter value (decrypted)")
         console.print("  p|put <name> <value>      - Put parameter as SecureString")
+        console.print("  diff <name> <value>       - Show masked diff without writing")
         console.print("  d|delete|rm <name>        - Delete parameter")
         console.print()
         console.print("Options:")
@@ -97,6 +101,7 @@ class SsmPlugin(BasePlugin):
         console.print("  toast ssm ls /toast/                # List parameters under /toast/")
         console.print("  toast ssm get /my/param             # Get parameter value")
         console.print("  toast ssm put /my/param 'secret'    # Store as SecureString")
+        console.print("  toast ssm diff /my/param 'secret'   # Preview value changes")
         console.print("  toast ssm rm /my/param              # Delete parameter")
 
     @classmethod
@@ -249,6 +254,46 @@ class SsmPlugin(BasePlugin):
             console.print("✗ Error: Failed to parse AWS response.", style="bold red")
         except Exception as e:
             console.print(f"✗ Error: {e}", style="bold red")
+
+    @classmethod
+    def _diff_parameter(cls, name, value, aws_cmd):
+        """Show a masked diff between the current parameter and a new value."""
+        if not name:
+            console.print("✗ Error: Parameter name is required.", style="bold red")
+            console.print("Usage: toast ssm diff <name> <value>")
+            return
+
+        if not value:
+            console.print("✗ Error: Parameter value is required.", style="bold red")
+            console.print("Usage: toast ssm diff <name> <value>")
+            return
+
+        existing, fetch_err = cls._fetch_parameter_value(name, aws_cmd)
+        if fetch_err:
+            console.print(f"✗ Error: could not read current value: {fetch_err}", style="bold red")
+            return
+
+        if existing is None:
+            console.print(f"'{name}' does not exist. New value would create it.")
+            return
+
+        if existing == value:
+            console.print(
+                f"✓ '{name}' already has this value. No differences.",
+                style="bold green",
+            )
+            return
+
+        console.print(f"'{name}' differences (masked):")
+        console.print("-" * 40)
+        diff_lines = show_diff(
+            mask_lines(value),
+            mask_lines(existing),
+            local_name="NEW",
+            remote_name="CURRENT",
+        )
+        print_unified_diff(diff_lines)
+        console.print("-" * 40)
 
     @classmethod
     def _delete_parameter(cls, name, aws_cmd):

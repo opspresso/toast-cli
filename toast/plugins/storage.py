@@ -703,11 +703,13 @@ def run_file_sync(kind, filename, command):
         _cmd_up(config, org_name, project_name, kind, filename, local_path)
     elif command in ("down", "dn"):
         _cmd_down(config, org_name, project_name, kind, filename, local_path)
+    elif command == "diff":
+        _cmd_diff(config, org_name, project_name, kind, filename, local_path)
     elif command in (None, "sync"):
         _cmd_sync(config, org_name, project_name, kind, filename, local_path)
     else:
         console.print(f"Unknown command: {command}", style="yellow")
-        console.print(f"Usage: toast {filename_to_cmd(filename)} [sync|up|down|dn|ls]")
+        console.print(f"Usage: toast {filename_to_cmd(filename)} [sync|up|down|dn|diff|ls]")
 
 
 def filename_to_cmd(filename):
@@ -815,6 +817,43 @@ def _cmd_down(config, org, project, kind, filename, local_path):
         f"✓ Successfully downloaded {filename} from {src_label} to {local_path}",
         style="bold green",
     )
+
+
+def _cmd_diff(config, org, project, kind, filename, local_path):
+    local_content = None
+    if os.path.exists(local_path):
+        with open(local_path, "r") as f:
+            local_content = f.read()
+
+    result = store_read(config, org, project, kind)
+    for src, e in result.errors:
+        console.print(f"⚠ Warning: {src.upper()} read error: {e}", style="yellow")
+
+    remote_content = result.value
+    status = compare_contents(local_content, remote_content)
+
+    if status == "both_missing":
+        console.print("Neither local file nor env-store has this file.")
+        return
+
+    if status == "identical":
+        console.print(
+            "✓ Local matches env-store (newest). No differences.",
+            style="bold green",
+        )
+        return
+
+    if status == "different":
+        console.print(
+            f"Local {filename} differs from env-store (newest: {result.source.upper()})."
+        )
+        _print_masked_diff(local_content, remote_content, kind)
+    elif status == "local_only":
+        console.print("Local file exists, but env-store does not.")
+    elif status == "remote_only":
+        console.print(
+            f"env-store has this file (newest: {result.source.upper()}), but local does not."
+        )
 
 
 def _cmd_sync(config, org, project, kind, filename, local_path):

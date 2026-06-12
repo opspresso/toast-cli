@@ -130,7 +130,7 @@ Each plugin:
 #### DotPlugin (dot)
 - Manages .env.local files via the S3 env-store (`storage.py`)
 - Default behavior: `sync` (compare local/store, show diff, choose upload/download)
-- Commands: `sync` (default), `up` (upload), `down`/`dn` (download), `ls` (list)
+- Commands: `sync` (default), `up` (upload), `down`/`dn` (download), `diff`, `ls` (list)
 - `up`/`down` compare against env-store first: identical → no-op, different →
   masked diff (secret values masked) + confirm before overwriting
 - S3 key: `local/{org}/{project}/env-local` (SSE-KMS)
@@ -139,7 +139,7 @@ Each plugin:
 #### PromptPlugin (prompt)
 - Manages .prompt.md files via the S3 env-store (`storage.py`)
 - Default behavior: `sync` (compare local/store, show diff, choose upload/download)
-- Commands: `sync` (default), `up` (upload), `down`/`dn` (download), `ls` (list)
+- Commands: `sync` (default), `up` (upload), `down`/`dn` (download), `diff`, `ls` (list)
 - `up`/`down` compare against env-store first: identical → no-op, different →
   diff + confirm before overwriting (`.prompt.md` is markdown, shown as-is)
 - S3 key: `local/{org}/{project}/prompt-md` (SSE-KMS)
@@ -176,13 +176,13 @@ Each plugin:
 #### SsmPlugin (ssm)
 - Direct AWS SSM Parameter Store operations
 - Default behavior: Interactive mode (browse and select parameters via fzf)
-- Commands: `ls` (list), `get`/`g` (retrieve), `put`/`p` (store), `delete`/`rm`/`d` (remove)
+- Commands: `ls` (list), `get`/`g` (retrieve), `put`/`p` (store), `diff`, `delete`/`rm`/`d` (remove)
 - Supports `--region` option for cross-region operations
 - Stores values as SecureString type for encryption
 - Secret masking: `get` and the interactive preview mask values by default;
   `--reveal` (or the interactive "Copy value" action) prints plaintext
 - `put` shows a masked NEW-vs-CURRENT diff before overwriting an existing value
-  (identical values are a no-op)
+  (identical values are a no-op); `diff` shows the same preview without writing
 - Interactive parameter creation and update
 
 #### GitPlugin (git)
