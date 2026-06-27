@@ -195,6 +195,9 @@ s3://{bucket}/local/{org}/{project}/prompt-md    # PromptPlugin (kind=prompt-md)
 - `up`/`down` call `store_read` first (so both S3 and SSM are queried) and
   compare against local; when both sides exist and differ, the masked diff is
   shown and a confirm is required before overwriting.
+- The confirm gates overwrites only. When the destination has no copy yet
+  (`up` with no S3 object, `down` with no local file) the transfer runs
+  immediately without prompting.
 - `down` no-op when local already equals the newest copy. `up` no-op is decided
   against the **S3** copy (the write target): if local matches the newest SSM
   parameter but S3 is stale/missing, `up` still uploads to migrate into S3.
@@ -215,8 +218,9 @@ s3://{bucket}/local/{org}/{project}/prompt-md    # PromptPlugin (kind=prompt-md)
 The `ssm` plugin masks SecureString values for safe terminal display:
 - `put` fetches the current value first; if it exists and differs, a masked diff
   (NEW vs CURRENT) is shown before the overwrite confirm. Identical values are a
-  no-op. (This means `put` needs `ssm:GetParameter`; if the read is denied it
-  warns and proceeds as a blind overwrite.)
+  no-op. A parameter that does not yet exist is created immediately without a
+  confirm prompt. (This means `put` needs `ssm:GetParameter`; if the read is
+  denied it warns and proceeds as a blind overwrite.)
 - `get` and the interactive preview mask the value by default. Use `--reveal`
   (or the interactive "Copy value" action) to print the full plaintext — these
   are the explicit value-retrieval paths.

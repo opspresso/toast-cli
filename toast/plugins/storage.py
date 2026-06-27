@@ -758,7 +758,11 @@ def _cmd_up(config, org, project, kind, filename, local_path):
             )
             overwrite_msg = " (migrate to S3)"
 
-    if not click.confirm(f"Upload {filename} to {target}{overwrite_msg}?"):
+    # Confirm only when the upload target (S3) already holds a copy; a brand-new
+    # destination is uploaded immediately without asking.
+    if result.s3_value is not None and not click.confirm(
+        f"Upload {filename} to {target}{overwrite_msg}?"
+    ):
         console.print("Operation cancelled.")
         return
 
@@ -789,8 +793,9 @@ def _cmd_down(config, org, project, kind, filename, local_path):
     for src, e in result.errors:
         console.print(f"⚠ Warning: {src.upper()} read error: {e}", style="yellow")
 
+    local_exists = os.path.exists(local_path)
     overwrite_msg = ""
-    if os.path.exists(local_path):
+    if local_exists:
         with open(local_path, "r") as f:
             local_content = f.read()
         status = compare_contents(local_content, result.value)
@@ -805,7 +810,9 @@ def _cmd_down(config, org, project, kind, filename, local_path):
         overwrite_msg = " (will overwrite existing file)"
 
     src_label = result.source.upper()
-    if not click.confirm(
+    # Confirm only when a local file already exists; a brand-new destination is
+    # downloaded immediately without asking.
+    if local_exists and not click.confirm(
         f"Download {filename} from {src_label} (newest){overwrite_msg}?"
     ):
         console.print("Operation cancelled.")

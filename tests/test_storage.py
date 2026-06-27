@@ -384,7 +384,8 @@ class CmdUpTests(unittest.TestCase):
     def _run_up(self, content, read_result):
         """Call _cmd_up with a real local file and mocked store I/O.
 
-        Returns the store_write mock so callers can assert upload happened.
+        Returns (write_mock, confirm_mock) so callers can assert whether the
+        upload happened and whether a confirm prompt was shown.
         """
         with tempfile.TemporaryDirectory() as d:
             local_path = os.path.join(d, ".env.local")
@@ -396,28 +397,93 @@ class CmdUpTests(unittest.TestCase):
                 storage, "store_write", return_value=(True, None)
             ) as write_mock, mock.patch.object(
                 storage.click, "confirm", return_value=True
-            ):
+            ) as confirm_mock:
                 storage._cmd_up(
                     self._cfg(), "o", "p", "env-local", ".env.local", local_path
                 )
-            return write_mock
+            return write_mock, confirm_mock
 
     def test_s3_identical_is_noop(self):
         # S3 already has the same content -> no upload, even though SSM also matches
         rr = self._read_result("abc", "s3", "abc", "abc", "both")
-        write_mock = self._run_up("abc", rr)
+        write_mock, _ = self._run_up("abc", rr)
         write_mock.assert_not_called()
 
     def test_ssm_only_identical_migrates_to_s3(self):
         # Newest (SSM) matches local but S3 is missing -> upload to migrate
         rr = self._read_result("abc", "ssm", None, "abc", "ssm_only")
-        write_mock = self._run_up("abc", rr)
+        write_mock, _ = self._run_up("abc", rr)
         write_mock.assert_called_once()
 
     def test_s3_different_uploads(self):
         rr = self._read_result("xyz", "s3", "xyz", None, "s3_only")
-        write_mock = self._run_up("abc", rr)
+        write_mock, _ = self._run_up("abc", rr)
         write_mock.assert_called_once()
+
+    def test_s3_absent_uploads_without_confirm(self):
+        # Destination (S3) has no copy -> upload immediately, no confirm prompt.
+        rr = self._read_result(None, None, None, None, "none")
+        write_mock, confirm_mock = self._run_up("abc", rr)
+        write_mock.assert_called_once()
+        confirm_mock.assert_not_called()
+
+    def test_s3_present_requires_confirm(self):
+        rr = self._read_result("xyz", "s3", "xyz", None, "s3_only")
+        _, confirm_mock = self._run_up("abc", rr)
+        confirm_mock.assert_called_once()
+
+
+class CmdDownTests(unittest.TestCase):
+    """Tests for _cmd_down's confirm-only-on-overwrite behavior."""
+
+    def _cfg(self):
+        return storage.StoreConfig("b", "p", None, None)
+
+    def _read_result(self, value, source):
+        return storage.ReadResult(
+            value,
+            source,
+            value if source == "s3" else None,
+            "ts",
+            value if source == "ssm" else None,
+            "ts",
+            f"{source}_only",
+            [],
+        )
+
+    def _run_down(self, local_content, read_result):
+        """Call _cmd_down; returns (confirm_mock, final local file content)."""
+        with tempfile.TemporaryDirectory() as d:
+            local_path = os.path.join(d, ".env.local")
+            if local_content is not None:
+                with open(local_path, "w") as f:
+                    f.write(local_content)
+            with mock.patch.object(
+                storage, "store_read", return_value=read_result
+            ), mock.patch.object(
+                storage.click, "confirm", return_value=True
+            ) as confirm_mock:
+                storage._cmd_down(
+                    self._cfg(), "o", "p", "env-local", ".env.local", local_path
+                )
+            written = None
+            if os.path.exists(local_path):
+                with open(local_path, "r") as f:
+                    written = f.read()
+            return confirm_mock, written
+
+    def test_local_absent_downloads_without_confirm(self):
+        # Destination (local file) does not exist -> download immediately.
+        rr = self._read_result("abc", "s3")
+        confirm_mock, written = self._run_down(None, rr)
+        confirm_mock.assert_not_called()
+        self.assertEqual(written, "abc")
+
+    def test_local_present_requires_confirm(self):
+        rr = self._read_result("xyz", "s3")
+        confirm_mock, written = self._run_down("abc", rr)
+        confirm_mock.assert_called_once()
+        self.assertEqual(written, "xyz")
 
 
 class CmdDiffTests(unittest.TestCase):

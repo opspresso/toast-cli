@@ -40,5 +40,41 @@ class SsmDiffTests(unittest.TestCase):
         print_diff.assert_called_once_with(["diff"])
 
 
+class SsmPutTests(unittest.TestCase):
+    def _fake_put_run(self):
+        result = mock.Mock()
+        result.returncode = 0
+        result.stdout = '{"Version": 1}'
+        result.stderr = ""
+        return result
+
+    def test_new_parameter_skips_confirm(self):
+        # Destination has no existing value -> store immediately without asking.
+        with mock.patch.object(
+            SsmPlugin, "_fetch_parameter_value", return_value=(None, None)
+        ), mock.patch(
+            "toast.plugins.ssm_plugin.subprocess.run",
+            return_value=self._fake_put_run(),
+        ) as run_mock, mock.patch(
+            "toast.plugins.ssm_plugin.click.confirm"
+        ) as confirm:
+            SsmPlugin._put_parameter("/x", "new", lambda args: args)
+        confirm.assert_not_called()
+        run_mock.assert_called_once()
+
+    def test_existing_parameter_requires_confirm(self):
+        with mock.patch.object(
+            SsmPlugin, "_fetch_parameter_value", return_value=("old", None)
+        ), mock.patch(
+            "toast.plugins.ssm_plugin.subprocess.run",
+            return_value=self._fake_put_run(),
+        ) as run_mock, mock.patch(
+            "toast.plugins.ssm_plugin.click.confirm", return_value=False
+        ) as confirm:
+            SsmPlugin._put_parameter("/x", "new", lambda args: args)
+        confirm.assert_called_once()
+        run_mock.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

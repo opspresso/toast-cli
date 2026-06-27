@@ -222,9 +222,11 @@ class SsmPlugin(BasePlugin):
             print_unified_diff(diff_lines)
             console.print("-" * 40)
 
-        # Confirm before overwriting
-        overwrite_msg = " (overwrites current value)" if existing is not None else ""
-        if not click.confirm(f"Store '{name}' as SecureString{overwrite_msg}?"):
+        # Confirm only when overwriting an existing parameter; a brand-new
+        # parameter is stored immediately without asking.
+        if existing is not None and not click.confirm(
+            f"Store '{name}' as SecureString (overwrites current value)?"
+        ):
             console.print("Operation cancelled.")
             return
 
