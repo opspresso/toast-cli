@@ -485,6 +485,32 @@ class CmdDownTests(unittest.TestCase):
         confirm_mock.assert_called_once()
         self.assertEqual(written, "xyz")
 
+    def test_diff_rendered_in_download_direction(self):
+        # down replaces local with the env-store copy, so the diff must run
+        # LOCAL -> ENV-STORE: incoming lines render as additions.
+        rr = self._read_result("abc\nnew\n", "s3")
+        with tempfile.TemporaryDirectory() as d:
+            local_path = os.path.join(d, ".env.local")
+            with open(local_path, "w") as f:
+                f.write("abc\n")
+            with mock.patch.object(
+                storage, "store_read", return_value=rr
+            ), mock.patch.object(
+                storage.click, "confirm", return_value=True
+            ), mock.patch.object(
+                storage, "show_diff", return_value=[]
+            ) as show_diff_mock:
+                storage._cmd_down(
+                    self._cfg(), "o", "p", "env-local", ".env.local", local_path
+                )
+        # mask_env_content drops the trailing newline, hence "abc\nnew"/"abc".
+        show_diff_mock.assert_called_once_with(
+            "abc\nnew",
+            "abc",
+            local_name="ENV-STORE",
+            remote_name="LOCAL",
+        )
+
 
 class CmdDiffTests(unittest.TestCase):
     def _cfg(self):

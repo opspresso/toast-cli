@@ -639,20 +639,34 @@ def _mask_for_display(content, kind):
     return content
 
 
-def _print_masked_diff(local_content, remote_content, kind):
+def _print_masked_diff(local_content, remote_content, kind, incoming=False):
     """Print a colored unified diff of local vs remote with secrets masked.
 
     The identical/different decision is made by the caller on the real
     content; only this display is masked.
+
+    The default direction is ENV-STORE -> LOCAL (upload: local overwrites the
+    store). Pass incoming=True for the download direction (LOCAL ->
+    ENV-STORE), so lines arriving from the env-store render as additions.
     """
     console.print("Differences found:")
     console.print("-" * 40)
-    diff_lines = show_diff(
-        _mask_for_display(local_content, kind),
-        _mask_for_display(remote_content, kind),
-        local_name="LOCAL",
-        remote_name="ENV-STORE",
-    )
+    local_masked = _mask_for_display(local_content, kind)
+    remote_masked = _mask_for_display(remote_content, kind)
+    if incoming:
+        diff_lines = show_diff(
+            remote_masked,
+            local_masked,
+            local_name="ENV-STORE",
+            remote_name="LOCAL",
+        )
+    else:
+        diff_lines = show_diff(
+            local_masked,
+            remote_masked,
+            local_name="LOCAL",
+            remote_name="ENV-STORE",
+        )
     print_unified_diff(diff_lines)
     console.print("-" * 40)
 
@@ -806,7 +820,7 @@ def _cmd_down(config, org, project, kind, filename, local_path):
             )
             return
         console.print("Local file differs from env-store (newest).")
-        _print_masked_diff(local_content, result.value, kind)
+        _print_masked_diff(local_content, result.value, kind, incoming=True)
         overwrite_msg = " (will overwrite existing file)"
 
     src_label = result.source.upper()
