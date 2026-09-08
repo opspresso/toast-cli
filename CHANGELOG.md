@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **GitLab clone support** — explicit HTTPS/SSH URLs (including custom SSH ports), workspace domain detection, and nested group paths for name-based clones
 - **Secret masking** for `dot`/`prompt`/`ssm`
   - `.env.local` values masked in diffs (`KEY=ab****yz`); `.prompt.md` shown as-is
   - `ssm get` and the interactive preview mask values by default; `--reveal` prints plaintext

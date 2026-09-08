@@ -4,6 +4,7 @@ import click
 import os
 import subprocess
 import re
+from urllib.parse import urlsplit
 from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
 
@@ -24,9 +25,7 @@ def get_github_host():
 
     if match:
         extracted_host = match.group(2)
-        # Use extracted host as default if it looks like a GitHub host
-        if "github" in extracted_host.lower() or extracted_host.endswith(".com"):
-            default_host = extracted_host
+        default_host = extracted_host
 
     config_locations = []
 
@@ -144,7 +143,19 @@ class GitPlugin(BasePlugin):
         mirror=False,
         **kwargs,
     ):
-        # Sanitize repository name
+        # Preserve explicit clone URLs, including SSH users and custom ports.
+        repo_url = None
+        if command in ("clone", "cl"):
+            if repo_name.startswith(("https://", "http://", "ssh://", "git://")):
+                repo_url = repo_name
+                repo_name = urlsplit(repo_url).path.rstrip("/").rsplit("/", 1)[-1]
+            elif re.match(r"^[^/@:]+@[^/:]+:.+", repo_name):
+                repo_url = repo_name
+                repo_name = repo_url.split(":", 1)[1].rstrip("/").rsplit("/", 1)[-1]
+            if repo_name.endswith(".git"):
+                repo_name = repo_name[:-4]
+
+        # Sanitize the local repository name, never the clone URL.
         original_repo_name = repo_name
         repo_name = sanitize_repo_name(repo_name)
 
@@ -158,12 +169,12 @@ class GitPlugin(BasePlugin):
         current_path = os.getcwd()
 
         # Check if the current path matches the expected pattern
-        pattern = r"^.*/workspace/([^/]+)/([^/]+)"
+        pattern = r"^.*/workspace/([^/]+)/([^/]+)(?:/(.*))?$"
         match = re.match(pattern, current_path)
 
         if not match:
             console.print(
-                "✗ Error: Current directory must be in ~/workspace/{github-host}/{username} format",
+                "✗ Error: Current directory must be in ~/workspace/{git-host}/{namespace} format",
                 style="bold red"
             )
             return
@@ -175,11 +186,10 @@ class GitPlugin(BasePlugin):
             # Determine the target directory name
             target_dir = target if target else repo_name
 
-            # Get GitHub host from config or use default
-            github_host = get_github_host()
-
-            # Construct the repository URL
-            repo_url = f"git@{github_host}:{username}/{repo_name}.git"
+            if repo_url is None:
+                git_host = get_github_host()
+                namespace = "/".join(part for part in match.groups()[1:] if part)
+                repo_url = f"git@{git_host}:{namespace}/{repo_name}.git"
 
             # Target path in the current directory
             target_path = os.path.join(current_path, target_dir)

@@ -21,7 +21,7 @@ Python-based CLI utility with plugin architecture for AWS, Kubernetes, and Git o
 * **Plugin Architecture**: Modular design with dynamic command discovery
 * **AWS Integration**: Identity checking, profile management, region selection, SSM Parameter Store integration
 * **Kubernetes**: Context switching, EKS cluster discovery and integration, context deletion
-* **Git**: Repository management (clone, branch, pull, push, rm, mirror), organization-specific GitHub hosts
+* **Git**: Repository management (clone, branch, pull, push, rm, mirror), GitHub and GitLab clone URLs and nested groups
 * **Workspace**: Directory navigation, environment file management (.env.local, .prompt.md)
 * **Interface**: FZF-powered interactive menus, formatted output with Rich
 * **Security**: S3 env-store with SSE-KMS for sensitive files (SSM fallback during transition); secret values masked in diffs and SSM previews
@@ -130,17 +130,35 @@ toast git repo-name push --mirror            # Mirror push for migration
 toast git repo-name rm                       # Remove local repository
 ```
 
+Clone accepts HTTPS, SSH (including custom ports), and SCP-style Git URLs.
+The repository is cloned into the current directory using its name, or `-t` for a custom name:
+
+```bash
+cd ~/workspace/gitlab.clush.net/apps/cdp/be
+toast git ssh://git@110.45.156.168:30022/apps/cdp/be/ws.git clone
+# Alternatively, use HTTPS:
+toast git https://gitlab.clush.net/apps/cdp/be/ws.git clone
+```
+
+With only a repository name, `toast git ws clone` in this directory uses
+`git@gitlab.clush.net:apps/cdp/be/ws.git`. All groups below the host directory
+form the namespace. Use an explicit URL when the SSH host or port differs.
+The existing `GITHUB_HOST` configuration also overrides the host for name-based clones.
+
 ## Workspace Structure
 
 Toast-cli uses a standardized workspace directory structure for organizing projects:
 
 ```
-~/workspace/{github-host}/{org}/{project}
+~/workspace/{git-host}/{namespace}/{project}
 ```
 
 **Examples**:
 - `~/workspace/github.com/opspresso/toast-cli`
 - `~/workspace/github.enterprise.com/myorg/myproject`
+- `~/workspace/gitlab.clush.net/apps/cdp/be/ws`
+
+The host directory is the Git server domain. The namespace can contain nested groups.
 
 **First-time Setup**:
 
@@ -156,7 +174,7 @@ mkdir -p ~/workspace/github.com/{org}/{project}
 
 **Benefits**:
 - Consistent project organization across all Git hosts
-- Automatic detection of GitHub host per organization
+- Automatic detection of the Git host from the workspace path
 - Seamless integration with other toast-cli commands (git, dot, prompt)
 
 ## Configuration

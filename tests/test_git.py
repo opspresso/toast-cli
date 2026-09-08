@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Unit tests for git_plugin pure helpers (no network/subprocess)."""
+"""Unit tests for git_plugin (no network or real subprocesses)."""
 
 import os
 import tempfile
@@ -62,6 +62,53 @@ class GetGithubHostTests(unittest.TestCase):
                 f.write("GITHUB_HOST=custom-host.com\n")
             with self._run_in(cwd):
                 self.assertEqual(git_plugin.get_github_host(), "custom-host.com")
+
+
+class CloneTests(unittest.TestCase):
+    def run_clone(self, source, cwd, expected_url, expected_target="ws", command="clone", **kwargs):
+        with mock.patch.object(git_plugin.os, "getcwd", return_value=cwd), mock.patch.object(
+            git_plugin.os.path, "exists", return_value=False
+        ), mock.patch.object(git_plugin.subprocess, "run") as run:
+            run.return_value.returncode = 0
+            git_plugin.GitPlugin.execute(command, source, **kwargs)
+            run.assert_called_once_with(
+                ["git", "clone", expected_url, os.path.join(cwd, expected_target)],
+                capture_output=True,
+                text=True,
+            )
+
+    def test_gitlab_explicit_urls(self):
+        cwd = "/home/nalbam/workspace/gitlab.clush.net/apps/cdp/be"
+        for url in (
+            "ssh://git@110.45.156.168:30022/apps/cdp/be/ws.git",
+            "https://gitlab.clush.net/apps/cdp/be/ws.git",
+            "git@gitlab.clush.net:apps/cdp/be/ws.git",
+        ):
+            with self.subTest(url=url):
+                self.run_clone(url, cwd, url)
+
+    def test_gitlab_name_uses_host_and_nested_namespace(self):
+        self.run_clone(
+            "ws", "/home/nalbam/workspace/gitlab.clush.net/apps/cdp/be",
+            "git@gitlab.clush.net:apps/cdp/be/ws.git",
+        )
+
+    def test_github_name(self):
+        self.run_clone("ws", "/home/user/workspace/github.com/org", "git@github.com:org/ws.git")
+
+    def test_alias_and_custom_target(self):
+        url = "https://gitlab.clush.net/apps/cdp/be/ws.git"
+        self.run_clone(
+            url, "/home/user/workspace/gitlab.clush.net/apps/cdp/be", url,
+            expected_target="custom", command="cl", target="custom",
+        )
+
+    def test_existing_target_is_not_cloned(self):
+        with mock.patch.object(git_plugin.os, "getcwd", return_value="/home/user/workspace/gitlab.clush.net/apps"), mock.patch.object(
+            git_plugin.os.path, "exists", return_value=True
+        ), mock.patch.object(git_plugin.subprocess, "run") as run:
+            git_plugin.GitPlugin.execute("clone", "https://gitlab.clush.net/apps/ws.git")
+            run.assert_not_called()
 
 
 if __name__ == "__main__":
