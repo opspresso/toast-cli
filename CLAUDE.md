@@ -25,7 +25,7 @@ calling `execute()` directly does not test argument order.
 
 CI checks the supported minimum and current Python versions on Linux and macOS.
 It builds source and wheel packages on PRs. Pushes to the release branch also
-bump the version, publish to PyPI, and create a release.
+bump the version, publish to PyPI, and create a release tagged at the built commit.
 
 ## Implementation rules
 
