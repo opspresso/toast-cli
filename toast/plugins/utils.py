@@ -7,23 +7,41 @@ import hashlib
 import difflib
 
 
+def run_command(args, **kwargs):
+    """Run a command and report failures without including its arguments."""
+    result = subprocess.run(args, capture_output=True, text=True, **kwargs)
+    if result.returncode:
+        detail = result.stderr.strip() or f"exit status {result.returncode}"
+        raise click.ClickException(f"{args[0]} failed: {detail}")
+    return result
+
+
 def select_from_list(options, prompt="Select an option"):
-    try:
-        fzf_proc = subprocess.run(
+    if not options:
+        return None
+    fzf_proc = subprocess.run(
             ["fzf", "--height=15", "--reverse", "--border", "--prompt", prompt + ": "],
             input="\n".join(options),
             capture_output=True,
             text=True,
         )
-        return fzf_proc.stdout.strip()
-    except Exception as e:
-        click.echo(f"Error selecting from list: {e}")
+    # fzf: 1 = no match, 130 = user cancellation; other failures are errors.
+    if fzf_proc.returncode in (1, 130):
         return None
+    if fzf_proc.returncode:
+        raise click.ClickException(f"fzf failed: {fzf_proc.stderr.strip()}")
+    selected = fzf_proc.stdout.rstrip("\n")
+    if selected and selected not in options:
+        raise click.ClickException("fzf returned an unknown selection")
+    return selected or None
 
 
 def check_aws_cli():
     """Check if AWS CLI is available."""
-    result = subprocess.run(["aws", "--version"], capture_output=True, text=True)
+    try:
+        result = subprocess.run(["aws", "--version"], capture_output=True, text=True)
+    except FileNotFoundError:
+        return False
     return result.returncode == 0
 
 

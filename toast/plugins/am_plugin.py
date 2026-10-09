@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 
-import subprocess
 import json
 from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
+from toast.plugins.utils import run_command
 
 console = Console()
+
+
+def show_identity(profile=None):
+    args = ["aws", "sts", "get-caller-identity", "--output", "json"]
+    if profile:
+        args += ["--profile", profile]
+    result = run_command(args)
+    console.print_json(data=json.loads(result.stdout))
 
 
 class AmPlugin(BasePlugin):
@@ -16,15 +24,4 @@ class AmPlugin(BasePlugin):
 
     @classmethod
     def execute(cls, **kwargs):
-        try:
-            result = subprocess.run(
-                ["aws", "sts", "get-caller-identity"], capture_output=True, text=True
-            )
-            if result.returncode == 0:
-                # Parse JSON and print with rich
-                json_data = json.loads(result.stdout)
-                console.print_json(json.dumps(json_data))
-            else:
-                console.print("✗ Error fetching AWS caller identity.", style="bold red")
-        except Exception as e:
-            console.print(f"✗ Error fetching AWS caller identity: {e}", style="bold red")
+        show_identity()

@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
 import click
-import subprocess
 import os
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.utils import select_from_list
 from rich.console import Console
 
-console = Console()
+console = Console(stderr=True)
 console_err = Console(stderr=True)
 
 
@@ -24,12 +23,15 @@ class CdwPlugin(BasePlugin):
             os.makedirs(workspace_dir)
             console.print(f"✓ Created workspace directory: {workspace_dir}", style="bold green")
 
-        result = subprocess.run(
-            ["find", workspace_dir, "-mindepth", "1", "-maxdepth", "2", "-type", "d"],
-            capture_output=True,
-            text=True,
-        )
-        directories = sorted(result.stdout.splitlines())
+        # Prune repository internals while supporting nested GitLab namespaces.
+        directories = []
+        for root, children, _ in os.walk(workspace_dir):
+            children[:] = sorted(name for name in children if not name.startswith("."))
+            if root != workspace_dir:
+                directories.append(root)
+            if os.path.exists(os.path.join(root, ".git")):
+                children.clear()
+        directories.sort()
 
         if not directories:
             # Create default github.com directory structure
