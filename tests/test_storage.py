@@ -490,11 +490,11 @@ class CmdDownTests(unittest.TestCase):
     def test_diff_rendered_in_download_direction(self):
         # down replaces local with the env-store copy, so the diff must run
         # LOCAL -> ENV-STORE: incoming lines render as additions.
-        rr = self._read_result("abc\nnew\n", "s3")
+        rr = self._read_result("KEY=abc\nNEW=new\n", "s3")
         with tempfile.TemporaryDirectory() as d:
             local_path = os.path.join(d, ".env.local")
             with open(local_path, "w") as f:
-                f.write("abc\n")
+                f.write("KEY=abc\n")
             with mock.patch.object(
                 storage, "store_read", return_value=rr
             ), mock.patch.object(
@@ -505,10 +505,10 @@ class CmdDownTests(unittest.TestCase):
                 storage._cmd_down(
                     self._cfg(), "o", "p", "env-local", ".env.local", local_path
                 )
-        # mask_env_content drops the trailing newline, hence "abc\nnew"/"abc".
+        # The incoming entry is still an addition after value masking.
         show_diff_mock.assert_called_once_with(
-            "abc\nnew",
-            "abc",
+            "KEY=***\nNEW=***",
+            "KEY=***",
             local_name="ENV-STORE",
             remote_name="LOCAL",
         )

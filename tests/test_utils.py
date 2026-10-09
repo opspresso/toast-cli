@@ -51,9 +51,9 @@ class MaskEnvContentTests(unittest.TestCase):
     def test_key_preserved_value_masked(self):
         self.assertEqual(mask_env_content("API_KEY=secret123"), "API_KEY=se*****23")
 
-    def test_comment_blank_and_no_equals_preserved(self):
+    def test_comments_and_blanks_preserved_but_unrecognized_lines_masked(self):
         content = "# comment\n\nPLAINLINE\nTOKEN=abcdef"
-        expected = "# comment\n\nPLAINLINE\nTOKEN=ab**ef"
+        expected = "# comment\n\nPL*****NE\nTOKEN=ab**ef"
         self.assertEqual(mask_env_content(content), expected)
 
     def test_value_with_equals_kept(self):
@@ -110,3 +110,22 @@ class PrintUnifiedDiffTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MultilineMaskTests(unittest.TestCase):
+    def test_quoted_continuations_never_expose_keys_or_comments(self):
+        content = 'PRIVATE_KEY="firstsecret\ncontinuation=secretbody\n#not-a-comment\nlastsecret"\n#safe-comment\nNEXT=nextsecret'
+        masked = mask_env_content(content)
+        for secret in ("firstsecret", "continuation", "secretbody", "#not-a-comment", "lastsecret", "nextsecret"):
+            self.assertNotIn(secret, masked)
+        self.assertIn("#safe-comment", masked)
+        self.assertIn("NEXT=", masked)
+
+    def test_single_quoted_and_exported_values(self):
+        masked = mask_env_content("export TOKEN='secret\nsecondline'\nNEXT=othersecret")
+        self.assertIn("export TOKEN=", masked)
+        self.assertIn("NEXT=", masked)
+        self.assertNotIn("secondline", masked)
+
+    def test_zero_visible_does_not_reveal_entire_value(self):
+        self.assertEqual(mask_secret("secret", visible=0), "******")

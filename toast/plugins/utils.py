@@ -51,15 +51,6 @@ def select_from_list(options, prompt="Select an option"):
     return selected or None
 
 
-def check_aws_cli():
-    """Check if AWS CLI is available."""
-    try:
-        result = subprocess.run(["aws", "--version"], capture_output=True, text=True)
-    except FileNotFoundError:
-        return False
-    return result.returncode == 0
-
-
 def aws_error_code(stderr):
     """Extract the service error code, without mistaking message text for a code."""
     match = re.search(r"An error occurred \(([^)]+)\)", stderr or "")
@@ -111,6 +102,8 @@ def mask_secret(value, visible=2):
     """
     if value is None:
         return None
+    if visible <= 0:
+        return "*" * min(len(value), 12)
     n = len(value)
     if n == 0:
         return value
@@ -121,22 +114,41 @@ def mask_secret(value, visible=2):
 
 
 def mask_env_content(content, visible=2):
-    """Mask the value of each KEY=VALUE line in dotenv content.
+    """Mask dotenv values, including quoted continuations and malformed lines.
 
-    Keys are preserved so a diff still shows which entry changed. Blank lines,
-    comments, and lines without '=' pass through unchanged. The first '=' is the
-    separator, so values containing '=' (e.g. base64 padding) stay intact.
+    Only assignment keys and comments outside values are safe to show verbatim.
     """
     if content is None:
         return None
+
+    def quote_remains_open(value, quote):
+        escaped = False
+        for char in value:
+            if char == quote and not escaped:
+                return False
+            escaped = char == "\\" and not escaped
+        return True
+
     out = []
+    quote = None
     for line in content.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in line:
+        if quote:
+            out.append(mask_secret(line, visible))
+            if not quote_remains_open(line, quote):
+                quote = None
+        elif not stripped or stripped.startswith("#"):
             out.append(line)
-            continue
-        key, sep, val = line.partition("=")
-        out.append(f"{key}{sep}{mask_secret(val, visible)}")
+        else:
+            assignment = re.match(r"([ \t]*(?:export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=)(.*)", line)
+            if assignment:
+                key, value = assignment.groups()
+                out.append(key + mask_secret(value, visible))
+                value = value.lstrip()
+                if value[:1] in ("'", '\"') and quote_remains_open(value[1:], value[0]):
+                    quote = value[0]
+            else:
+                out.append(mask_secret(line, visible))
     return "\n".join(out)
 
 
