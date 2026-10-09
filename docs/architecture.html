@@ -5,13 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Architecture - Toast-cli</title>
     <link rel="stylesheet" href="css/style.css">
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="icon" href="favicon.ico" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
     <header>
@@ -20,18 +18,18 @@
                 <div class="logo">
                     <h1><a href="index.html">Toast-cli</a></h1>
                 </div>
-                <ul class="nav-links">
+                <ul class="nav-links" id="navigation">
                     <li><a href="overview.html">Overview</a></li>
                     <li><a href="installation.html">Installation</a></li>
                     <li><a href="plugins.html">Plugins</a></li>
                     <li><a href="architecture.html" class="active">Architecture</a></li>
                     <li><a href="https://github.com/opspresso/toast-cli" target="_blank" class="github-link">GitHub</a></li>
                 </ul>
-                <div class="hamburger">
+                <button class="hamburger" type="button" aria-label="Toggle navigation" aria-controls="navigation" aria-expanded="false">
                     <span></span>
                     <span></span>
                     <span></span>
-                </div>
+                </button>
             </nav>
         </div>
     </header>
@@ -41,38 +39,25 @@
             <h2>Architecture</h2>
             <p>Toast-cli follows a plugin-based architecture that makes it easy to extend and maintain.</p>
 
-            <div class="architecture-diagram">
-                <div class="diagram-controls">
-                    <div class="view-toggle">
-                        <button id="toggle-2d" class="btn view-btn active">2D 보기</button>
-                        <button id="toggle-3d" class="btn view-btn">3D 보기</button>
-                    </div>
-                    <div class="controls-3d" style="display: none;">
-                        <button id="reset-camera" class="btn secondary">초기 뷰로 재설정</button>
-                        <label class="toggle-container">
-                            <input type="checkbox" id="toggle-rotation" checked>
-                            <span class="toggle-label">자동 회전</span>
-                        </label>
-                    </div>
-                </div>
-                <div id="diagram-2d">
-                    <svg width="1000" height="800" xmlns="http://www.w3.org/2000/svg" class="interactive-diagram">
-                        <rect width="1000" height="800" fill="#f8f9fa"/>
-                        <!-- 다이어그램 요소들은 JavaScript에서 동적으로 생성됩니다 -->
-                    </svg>
-                </div>
-                <div id="diagram-3d" class="interactive-diagram" style="display: none;"></div>
-                <p class="caption">Toast-cli Plugin Architecture (각 항목을 드래그하여 이동 가능)</p>
-            </div>
+            <figure class="architecture-diagram" aria-labelledby="architecture-caption">
+                <ol class="architecture-flow">
+                    <li><strong>Entry points</strong><br><code>toast</code> or <code>python -m toast</code></li>
+                    <li><strong>Click command group</strong><br><code>toast/__init__.py</code> discovers plugins; <code>helpers.py</code> supplies help and version output.</li>
+                    <li><strong>BasePlugin</strong><br>Registers command arguments and converts expected failures into nonzero CLI exits.</li>
+                    <li><strong>Plugins</strong><br><code>am · cdw · ctx · dot · env · git · prompt · region · ssm</code></li>
+                    <li><strong>Shared operations</strong><br><code>utils.py</code>: command execution, selection, secret masking, atomic file writes.<br><code>storage.py</code>: parallel S3 + SSM reads for dot and prompt; writes to S3.</li>
+                    <li><strong>External tools</strong><br>Git, fzf, kubectl, AWS CLI (STS, EC2, EKS, S3, SSM).</li>
+                </ol>
+                <figcaption id="architecture-caption">Commands flow through a shared plugin boundary. Each plugin calls only the tools it needs.</figcaption>
+            </figure>
 
             <div class="structure-details">
                 <h3>Package Structure</h3>
                 <pre><code>toast-cli/
   ├── setup.py            # Package setup script
-  ├── setup.cfg           # Package configuration
   ├── pyproject.toml      # Build system requirements
   ├── MANIFEST.in         # Additional files to include
-  ├── VERSION             # Version information (v3.2.0.dev0)
+  ├── VERSION             # Version information
   ├── README.md           # Project documentation
   ├── ARCHITECTURE.md     # Architecture documentation
   ├── LICENSE             # License information
@@ -81,7 +66,6 @@
   │   ├── favicon.ico     # Website favicon
   │   ├── index.html      # Main documentation page
   │   ├── css/            # Stylesheet files
-  │   ├── images/         # Documentation images
   │   └── js/             # JavaScript files
   └── toast/              # Main package
       ├── __init__.py     # Package initialization and CLI entry point
@@ -96,7 +80,10 @@
           ├── dot_plugin.py
           ├── env_plugin.py
           ├── git_plugin.py
+          ├── prompt_plugin.py
           ├── region_plugin.py
+          ├── ssm_plugin.py
+          ├── storage.py
           └── utils.py</code></pre>
             </div>
 
@@ -133,27 +120,7 @@ class MyPlugin(BasePlugin):
             click.echo(f"Executing with option: {option}")
         else:
             click.echo("My custom command execution")</code></pre>
-                    <button class="copy-btn" data-clipboard-text="from toast.plugins.base_plugin import BasePlugin
-import click
-
-class MyPlugin(BasePlugin):
-    name = &quot;mycommand&quot;
-    help = &quot;Description of my command&quot;
-
-    @classmethod
-    def get_arguments(cls, func):
-        # Optional: Define command arguments
-        func = click.option(&quot;--option&quot;, &quot;-o&quot;, help=&quot;An option for my command&quot;)(func)
-        return func
-
-    @classmethod
-    def execute(cls, **kwargs):
-        # Command implementation
-        option = kwargs.get(&quot;option&quot;)
-        if option:
-            click.echo(f&quot;Executing with option: {option}&quot;)
-        else:
-            click.echo(&quot;My custom command execution&quot;)">Copy</button>
+                    <button class="copy-btn" type="button" aria-live="polite">Copy</button>
                 </div>
             </div>
 
@@ -207,39 +174,6 @@ class MyPlugin(BasePlugin):
         </div>
     </footer>
 
-    <script src="js/data.js"></script>
-    <script src="js/diagram.js"></script>
-    <script src="js/diagram3d.js"></script>
     <script src="js/main.js"></script>
-    <script>
-        // 2D/3D 전환 기능
-        document.addEventListener('DOMContentLoaded', function() {
-            const toggle2dBtn = document.getElementById('toggle-2d');
-            const toggle3dBtn = document.getElementById('toggle-3d');
-            const container2d = document.getElementById('diagram-2d');
-            const container3d = document.getElementById('diagram-3d');
-            const controls3d = document.querySelector('.controls-3d');
-
-            // 2D 보기로 전환
-            toggle2dBtn.addEventListener('click', function() {
-                container2d.style.display = 'block';
-                container3d.style.display = 'none';
-                controls3d.style.display = 'none';
-                toggle2dBtn.classList.add('active');
-                toggle3dBtn.classList.remove('active');
-                document.querySelector('.caption').textContent = 'Toast-cli Plugin Architecture (각 항목을 드래그하여 이동 가능)';
-            });
-
-            // 3D 보기로 전환
-            toggle3dBtn.addEventListener('click', function() {
-                container2d.style.display = 'none';
-                container3d.style.display = 'block';
-                controls3d.style.display = 'flex';
-                toggle3dBtn.classList.add('active');
-                toggle2dBtn.classList.remove('active');
-                document.querySelector('.caption').textContent = 'Toast-cli Plugin Architecture (마우스로 회전, 확대/축소 가능)';
-            });
-        });
-    </script>
 </body>
 </html>

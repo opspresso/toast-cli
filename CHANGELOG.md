@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ruff`** linter configuration (`pyproject.toml`)
 
 ### Fixed
+- SSM argument order now matches `toast ssm <command> [name] [value]` and aliases.
+- CLI failures return nonzero status; Click globals are no longer patched.
+- Git validates existing repository names, preserves nested mirror namespaces, and leaves remotes unchanged.
+- Env-store operations stop on incomplete reads and use the project root file from subdirectories.
+- Dotenv masking covers multiline values; downloads are atomic mode 0600 files with preserved line endings.
+- Workspace navigation returns only the selected path on stdout and prunes repository contents.
+- Documentation copy buttons use the displayed code and report copy failures.
 - `ctx` add-context flow checked the wrong subprocess result when reading the AWS region
 - Logo string used invalid escape sequences (Python 3.12+ `SyntaxWarning`)
 - Stale `SSM` labels in env-store sync UI corrected to `env-store`
@@ -34,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `~/.aws/credentials` is written atomically (temp file + `os.replace`, mode 0600)
 
 ### Changed
+- Env-store reads/listings run in parallel and require a configured SSM region instead of assuming `us-east-1`.
+- SSM writes require a successful read and use private JSON payload files.
+- Architecture documentation uses a responsive HTML diagram; removed duplicate renderers and Three.js dependencies.
 - Removed the stale, contradictory `setup.cfg` (build metadata now lives solely in `setup.py`)
 - `git` branch/pull/push no longer mutate the process working directory (`subprocess(cwd=...)`)
 

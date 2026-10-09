@@ -37,16 +37,8 @@ Python-based CLI utility with plugin architecture for AWS, Kubernetes, and Git o
 
 ### Requirements
 * Python 3.9+
-* External tools: fzf, aws-cli, kubectl
+* External tools: git, fzf, aws-cli, kubectl (install those required by your commands)
 * Python packages: click, rich
-
-```bash
-pyenv install 3.12
-pyenv global 3.12.12
-pyenv versions
-```
-
-### Install
 
 ### From PyPI
 ```bash
@@ -100,7 +92,8 @@ toast dot down             # Download .env.local from env-store (alias: dn)
 toast dot diff             # Show local vs env-store diff without changing files
 toast dot ls               # List all .env.local files in env-store (S3 + SSM)
 # up/down show a masked diff and confirm when local and env-store differ;
-# identical content is a no-op. Secret values are masked (KEY=ab****yz).
+# down is a no-op when local matches the newest copy; up compares against S3.
+# Secret values are masked, including multiline dotenv values (KEY=ab****yz).
 
 # Prompt Files (.prompt.md)
 toast prompt               # Compare local and env-store, choose action (default: sync)
@@ -175,7 +168,7 @@ mkdir -p ~/workspace/github.com/{org}/{project}
 **Benefits**:
 - Consistent project organization across all Git hosts
 - Automatic detection of the Git host from the workspace path
-- Seamless integration with other toast-cli commands (git, dot, prompt)
+- Git operations across hosts; dot/prompt currently use GitHub project paths
 
 ## Configuration
 
@@ -223,6 +216,16 @@ s3://env-store-{account-id}/local/{org}/{project}/prompt-md   # .prompt.md files
 /toast/local/{org}/{project}/prompt-md     # legacy SSM (read-only fallback)
 ```
 
+Run `dot` and `prompt` under `~/workspace/github.com/{org}/{project}`. A call
+from a subdirectory still uses the project root's file. `ls` works anywhere.
+GitLab workspace paths are supported by `git` and `cdw`, but are not mapped to
+env-store keys.
+
+Both S3 and SSM reads must succeed before comparison or transfer. On an access,
+network, or region error, fix the reported cause and run the command again.
+Downloads replace the local file atomically with mode 0600, preserving UTF-8
+content and line endings. Empty files count as existing files.
+
 S3 objects are written with SSE-KMS encryption. All env-store access uses a
 dedicated AWS profile so it is decoupled from your current default profile.
 
@@ -234,14 +237,15 @@ Environment variables:
 TOAST_ENV_STORE_PROFILE   # default: {username}-admin
 TOAST_ENV_STORE_BUCKET    # default: env-store-{account-id of the profile}
 TOAST_ENV_STORE_KMS_KEY   # default: bucket/account default KMS key
-TOAST_ENV_STORE_REGION    # default: profile's region (SSM reads fall back to us-east-1)
+TOAST_ENV_STORE_REGION    # profile region, then AWS_REGION / AWS_DEFAULT_REGION; required for SSM
 ```
 
 The profile defaults to your OS username + `-admin`, and the bucket defaults to
 `env-store-` + the AWS account id of that profile (looked up via
-`aws sts get-caller-identity`). The region resolves to the configured value, else
-the profile's region; SSM reads (which require a region) fall back to `us-east-1`
-so a missing parameter is reported as absent rather than failing.
+`aws sts get-caller-identity`). The region resolves to the configured value, then
+the profile's region, then `AWS_REGION` / `AWS_DEFAULT_REGION`. If none is set,
+SSM reads fail. Set `TOAST_ENV_STORE_REGION` to the region holding your legacy
+parameters; toast never assumes a different region to report them as absent.
 
 Config file `~/.config/toast/config` (`KEY=VALUE` format). On first run, if it
 is missing, toast prompts for the values and saves them (interactive sessions
@@ -284,7 +288,11 @@ class MyPlugin(BasePlugin):
 
 ```bash
 alias t='toast'
-c() { cd "$(toast cdw)" }    # Navigate to workspace
+c() {
+  local dir
+  dir="$(toast cdw "$@")" || return
+  [ -n "$dir" ] && cd "$dir"
+}                          # Navigate only after a selection
 alias m='toast am'           # AWS identity
 alias x='toast ctx'          # Kubernetes contexts
 alias d='toast dot'          # .env.local files
@@ -292,8 +300,28 @@ alias p='toast prompt'       # .prompt.md files
 alias e='toast env'          # AWS profiles
 alias g='toast git'          # Git repositories
 alias r='toast region'       # AWS region
-alias s='toast ssm'          # SSM Parameter Store
+alias ssm='toast ssm'        # SSM Parameter Store
 ```
+
+## Failure behavior
+
+Invalid command arguments exit with status 2. Operational failures exit nonzero
+and print to stderr. A cancelled selection performs no action. `cdw` writes only
+the selected path to stdout, so shell functions can safely capture it.
+
+`env` manages static profiles in `AWS_SHARED_CREDENTIALS_FILE` (default
+`~/.aws/credentials`). It requires both access key fields before replacing the
+default credentials, removes a stale session token, and verifies the explicit
+`default` profile. SSO/role configuration in `~/.aws/config` is not copied.
+
+`ssm put` requires permission to read the current parameter. A failed read stops
+the write. To keep input out of shell history, use `toast ssm` and choose the
+interactive create/update action; the value prompt hides input. `--reveal`
+prints values literally, including markup-like text.
+
+Git branch/pull/push/rm require an existing repository directory name. Invalid
+names and symlinks are rejected without rewriting the target. Mirror push uses
+the full workspace namespace and leaves existing remotes unchanged.
 
 ## Resources
 

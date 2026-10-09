@@ -193,6 +193,9 @@ nav {
 }
 
 .hamburger {
+    background: transparent;
+    border: 0;
+    padding: 0.5rem;
     display: none;
     flex-direction: column;
     cursor: pointer;
@@ -321,7 +324,7 @@ nav {
 
 .install-methods {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
     gap: 2rem;
     margin-bottom: 3rem;
 }
@@ -373,7 +376,7 @@ nav {
 /* Plugins section */
 .plugin-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
     gap: 2rem;
     margin-top: 3rem;
 }
@@ -426,145 +429,30 @@ nav {
 /* Architecture section */
 .architecture-diagram {
     margin: 3rem 0;
-    text-align: center;
-    overflow: hidden;
-    position: relative;
 }
 
-.interactive-diagram {
-    max-width: 100%;
-    height: 800px;
-    box-shadow: var(--shadow);
-    border-radius: var(--border-radius);
-    background-color: #f8f9fa;
-    position: relative;
-}
-
-#diagram-2d, #diagram-3d {
-    width: 100%;
-    height: 800px;
-    position: relative;
-}
-
-#diagram-3d {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: grab;
-}
-
-#diagram-3d:active {
-    cursor: grabbing;
-}
-
-#diagram-3d canvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-    margin: 0 auto;
-}
-
-.diagram-controls {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    margin-top: 1.5rem;
+.architecture-flow {
+    list-style: none;
+    display: grid;
+    gap: 1.5rem;
     margin-bottom: 1rem;
-    gap: 1rem;
-    padding: 0.8rem;
-    background-color: rgba(248, 249, 250, 0.8);
+}
+
+.architecture-flow li {
+    position: relative;
+    padding: 1rem;
+    background: var(--light-color);
+    border: 1px solid var(--primary-color);
     border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
+    overflow-wrap: anywhere;
 }
 
-.view-toggle {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-}
-
-.view-btn {
-    padding: 0.5rem 1.2rem;
-    font-size: 1rem;
-    font-weight: 500;
-    background-color: #f8f9fa;
-    color: var(--secondary-color);
-    border: 1px solid var(--secondary-color);
-    transition: all 0.2s ease;
-}
-
-.view-btn.active {
-    background-color: var(--primary-color);
-    color: white;
-    border-color: var(--primary-color);
-}
-
-.view-btn:hover:not(.active) {
-    background-color: #e9ecef;
-}
-
-.controls-3d {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 2rem;
-    width: 100%;
-}
-
-.toggle-container {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    padding: 0.5rem 1rem;
-    background-color: #fff;
-    border-radius: var(--border-radius);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.toggle-container input[type="checkbox"] {
-    margin-right: 0.8rem;
-    transform: scale(1.2);
-}
-
-.toggle-label {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--secondary-color);
-}
-
-#reset-camera {
-    padding: 0.5rem 1.2rem;
-    font-size: 1rem;
-    font-weight: 500;
-}
-
-.interactive-diagram-svg {
-    max-width: 100%;
-    height: auto;
-}
-
-/* 3D 요소 툴팁 스타일 */
-.element-tooltip {
+.architecture-flow li + li::before {
+    content: '↓';
     position: absolute;
-    background-color: rgba(0, 0, 0, 0.85);
-    color: white;
-    padding: 8px 12px;
-    border-radius: 4px;
-    font-size: 16px;
-    font-weight: 500;
-    pointer-events: none;
-    z-index: 1000;
-    opacity: 0;
-    transition: opacity 0.2s;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.caption {
-    margin-top: 1rem;
-    color: var(--secondary-color);
-    font-style: italic;
+    top: -1.6rem;
+    left: 50%;
+    color: var(--primary-color);
 }
 
 .structure-details,
@@ -715,14 +603,13 @@ footer {
     }
 }
 
-/* Utils */
-.placeholder-img {
-    background-color: #e9ecef;
-    width: 100%;
-    height: 300px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--secondary-color);
-    font-style: italic;
+
+:focus-visible {
+    outline: 3px solid var(--primary-color);
+    outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition: none; }
 }
