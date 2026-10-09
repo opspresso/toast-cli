@@ -76,10 +76,6 @@ class SsmPutTests(unittest.TestCase):
         run_mock.assert_not_called()
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SsmCliTests(unittest.TestCase):
     def setUp(self):
         import click
@@ -166,3 +162,6 @@ class SsmCliTests(unittest.TestCase):
             result = self.runner.invoke(self.cli, ["ssm", "get", "/x"])
         self.assertEqual(result.exit_code, 1)
         self.assertIn("Parameter.Value is missing", result.stderr)
+
+if __name__ == "__main__":
+    unittest.main()

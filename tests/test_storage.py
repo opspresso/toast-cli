@@ -610,10 +610,6 @@ class StoreListTests(unittest.TestCase):
         self.assertEqual(rows, [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class StorageSafetyTests(unittest.TestCase):
     def setUp(self):
         self.cfg = storage.StoreConfig("bucket", "profile", None, "eu-west-1")
@@ -709,3 +705,6 @@ class StorageSafetyTests(unittest.TestCase):
     def test_invalid_epoch_does_not_crash(self):
         for timestamp in (float("nan"), float("inf"), 1e100):
             self.assertIsNone(storage.parse_timestamp(timestamp))
+
+if __name__ == "__main__":
+    unittest.main()

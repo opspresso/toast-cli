@@ -108,10 +108,6 @@ class PrintUnifiedDiffTests(unittest.TestCase):
             self.fail(f"print_unified_diff raised: {e}")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class MultilineMaskTests(unittest.TestCase):
     def test_quoted_continuations_never_expose_keys_or_comments(self):
         content = 'PRIVATE_KEY="firstsecret\ncontinuation=secretbody\n#not-a-comment\nlastsecret"\n#safe-comment\nNEXT=nextsecret'
@@ -129,3 +125,6 @@ class MultilineMaskTests(unittest.TestCase):
 
     def test_zero_visible_does_not_reveal_entire_value(self):
         self.assertEqual(mask_secret("secret", visible=0), "******")
+
+if __name__ == "__main__":
+    unittest.main()
