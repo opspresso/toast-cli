@@ -12,7 +12,12 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+        python: ['3.9', '3.14']
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout 🛎️
@@ -21,7 +26,7 @@ jobs:
       - name: Set up Python 🐍
         uses: actions/setup-python@v6
         with:
-          python-version: '3.x'
+          python-version: ${{ matrix.python }}
 
       - name: Install dependencies 📦
         run: |
@@ -36,7 +41,6 @@ jobs:
 
   build:
     needs: test
-    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
 
     steps:
@@ -46,13 +50,14 @@ jobs:
           fetch-depth: 0
 
       - name: Bump Version 🏷️
+        if: github.event_name == 'push'
         id: bump
         uses: opspresso/action-builder@master
         with:
           args: --version
 
       - name: Set up Python 🐍
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
 
@@ -66,12 +71,14 @@ jobs:
           python -m build
 
       - name: Publish to PyPI
+        if: github.event_name == 'push'
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: twine upload dist/*
 
       - name: Release Version 🚀
+        if: github.event_name == 'push'
         uses: opspresso/action-builder@master
         with:
           args: --release
