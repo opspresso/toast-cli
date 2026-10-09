@@ -3,6 +3,12 @@
 """Unit tests for the env-store backend pure logic (no AWS access)."""
 
 import os
+import click
+import io
+import subprocess
+import threading
+from pathlib import Path
+from rich.console import Console
 import tempfile
 import unittest
 from datetime import timezone
@@ -278,17 +284,13 @@ class AwsCommandTests(unittest.TestCase):
             "/toast/local/o/p/env-local", profile="myprofile", region="eu-west-1"
         )
 
-    def test_ssm_get_falls_back_to_default_region(self):
-        cfg = storage.StoreConfig("b", "myprofile", None, None)
-        with mock.patch.object(
-            storage, "get_ssm_parameter", return_value=("v", "t", None)
-        ) as m:
-            storage.ssm_get(cfg, "/toast/local/o/p/env-local")
-        m.assert_called_once_with(
-            "/toast/local/o/p/env-local",
-            profile="myprofile",
-            region=storage.DEFAULT_REGION,
-        )
+    def test_ssm_requires_a_resolved_region(self):
+        cfg = storage.StoreConfig("b", "p", None, None)
+        with mock.patch.object(storage, "get_ssm_parameter") as get:
+            value, _, error = storage.ssm_get(cfg, "/toast/local/o/p/env-local")
+        self.assertIsNone(value)
+        self.assertIn("TOAST_ENV_STORE_REGION", error)
+        get.assert_not_called()
 
     def test_profile_region_lookup(self):
         ok = mock.Mock(returncode=0, stdout="ap-northeast-2\n", stderr="")
@@ -610,3 +612,100 @@ class StoreListTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StorageSafetyTests(unittest.TestCase):
+    def setUp(self):
+        self.cfg = storage.StoreConfig("bucket", "profile", None, "eu-west-1")
+
+    def test_partial_read_never_allows_comparison_or_write(self):
+        for handler in (storage._cmd_up, storage._cmd_down, storage._cmd_sync, storage._cmd_diff):
+            with self.subTest(handler=handler.__name__), tempfile.TemporaryDirectory() as temp:
+                local = Path(temp) / ".env.local"
+                local.write_text("KEEP=original")
+                partial = storage.ReadResult("old", "ssm", None, None, "old", "ts", "ssm_only", [("s3", "AccessDenied")])
+                with mock.patch.object(storage, "store_read", return_value=partial), mock.patch.object(storage, "store_write") as write:
+                    with self.assertRaisesRegex(click.ClickException, "AccessDenied"):
+                        handler(self.cfg, "o", "p", "env-local", ".env.local", str(local))
+                write.assert_not_called()
+                self.assertEqual(local.read_text(), "KEEP=original")
+
+    def test_s3_error_classification_does_not_hide_bucket_or_network_errors(self):
+        for code in ("NoSuchKey", "NoSuchBucket", "AccessDenied"):
+            with self.subTest(code=code), mock.patch("subprocess.run", return_value=subprocess.CompletedProcess(
+                [], 254, "", f"An error occurred ({code}) when calling GetObject: resource 404 Not Found"
+            )):
+                value, _, error = storage.s3_get(self.cfg, "key")
+                self.assertIsNone(value)
+                self.assertEqual(error is None, code == "NoSuchKey")
+
+    def test_download_is_private_and_preserves_crlf_and_unicode(self):
+        for handler in (storage._cmd_down, storage._cmd_sync):
+            with self.subTest(handler=handler.__name__), tempfile.TemporaryDirectory() as temp:
+                local = Path(temp) / ".env.local"
+                content = "KEY=한글\r\nEMPTY=\r\n"
+                remote = storage.ReadResult(content, "s3", content, "ts", None, None, "s3_only", [])
+                with mock.patch.object(storage, "store_read", return_value=remote), mock.patch.object(storage, "select_sync_action", return_value="download"):
+                    handler(self.cfg, "o", "p", "env-local", ".env.local", str(local))
+                self.assertEqual(local.read_bytes(), content.encode())
+                self.assertEqual(local.stat().st_mode & 0o777, 0o600)
+
+    def test_failed_atomic_download_preserves_original(self):
+        from toast.plugins.utils import write_private_file
+        with tempfile.TemporaryDirectory() as temp:
+            local = Path(temp) / ".env.local"
+            local.write_text("original")
+            with mock.patch("os.replace", side_effect=OSError("disk failure")), self.assertRaises(OSError):
+                write_private_file(str(local), "replacement")
+            self.assertEqual(local.read_text(), "original")
+            self.assertEqual(list(Path(temp).iterdir()), [local])
+
+    def test_nested_cwd_uses_project_root_file(self):
+        cwd = "/tmp/workspace/github.com/org/project/src/components"
+        with mock.patch.object(storage.os, "getcwd", return_value=cwd), mock.patch.object(
+            storage, "resolve_config", return_value=self.cfg
+        ), mock.patch.object(storage, "_cmd_up") as up:
+            storage.run_file_sync("env-local", ".env.local", "up")
+        self.assertEqual(up.call_args.args[-1], "/tmp/workspace/github.com/org/project/.env.local")
+
+    def test_invalid_command_and_workspace_fail_before_config_or_aws(self):
+        with mock.patch.object(storage, "resolve_config") as config:
+            with self.assertRaises(click.UsageError):
+                storage.run_file_sync("env-local", ".env.local", "typo")
+            with mock.patch.object(storage.os, "getcwd", return_value="/tmp/workspace/githubXcom/o/p"):
+                with self.assertRaises(click.ClickException):
+                    storage.run_file_sync("env-local", ".env.local", "up")
+        config.assert_not_called()
+
+    def test_empty_file_is_displayed_as_present(self):
+        remote = storage.ReadResult("", "s3", "", "ts", None, None, "s3_only", [])
+        with tempfile.TemporaryDirectory() as temp:
+            local = Path(temp) / ".env.local"
+            local.write_text("")
+            output = io.StringIO()
+            with mock.patch.object(storage, "store_read", return_value=remote), mock.patch.object(storage, "console", Console(file=output)):
+                storage._cmd_sync(self.cfg, "o", "p", "env-local", ".env.local", str(local))
+            self.assertIn("Local: e3b0c44298fc", output.getvalue())
+            self.assertIn("S3:    e3b0c44298fc", output.getvalue())
+
+    def test_backends_are_read_concurrently(self):
+        barrier = threading.Barrier(2)
+        def read(*args):
+            barrier.wait(timeout=2)
+            return "value", "2024-01-01T00:00:00Z", None
+        with mock.patch.object(storage, "s3_get", side_effect=read), mock.patch.object(storage, "ssm_get", side_effect=read):
+            result = storage.store_read(self.cfg, "o", "p", "env-local")
+        self.assertEqual(result.value, "value")
+        self.assertEqual(result.source, "s3")
+
+    def test_conflicting_values_without_timestamps_cannot_select_newest(self):
+        with mock.patch.object(storage, "s3_get", return_value=("new?", None, None)), mock.patch.object(
+            storage, "ssm_get", return_value=("old?", "2024-01-01T00:00:00Z", None)
+        ):
+            result = storage.store_read(self.cfg, "o", "p", "env-local")
+        with self.assertRaisesRegex(click.ClickException, "timestamps"):
+            storage._require_complete_read(result)
+
+    def test_invalid_epoch_does_not_crash(self):
+        for timestamp in (float("nan"), float("inf"), 1e100):
+            self.assertIsNone(storage.parse_timestamp(timestamp))

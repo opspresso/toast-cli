@@ -20,13 +20,15 @@ import getpass
 import tempfile
 import subprocess
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 
 import click
 from rich.console import Console
 
 from toast.plugins.utils import (
-    check_aws_cli,
     get_ssm_parameter,
+    aws_error_code,
+    write_private_file,
     compute_hash,
     show_diff,
     compare_contents,
@@ -35,7 +37,7 @@ from toast.plugins.utils import (
     print_unified_diff,
 )
 
-console = Console()
+console = Console(markup=False, highlight=False)
 
 # Defaults (overridable via environment variables or the config file).
 # - profile defaults to {username}-admin (see default_profile())
@@ -44,10 +46,6 @@ console = Console()
 PROFILE_SUFFIX = "-admin"
 BUCKET_PREFIX = "env-store-"
 
-# SSM get-parameter requires a region. When none is configured (env/file/profile)
-# this fallback keeps SSM reads from failing with NoRegion; a missing parameter
-# then returns ParameterNotFound (treated as absent) instead of an error.
-DEFAULT_REGION = "us-east-1"
 
 
 class StoreConfig:
@@ -121,13 +119,11 @@ def prompt_and_create_config(path=None):
 
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
-            f.write(render_config(bucket, profile, kms_key, region))
+        write_private_file(path, render_config(bucket, profile, kms_key, region))
         console.print(f"✓ Saved config file: {path}", style="bold green")
         return True
-    except Exception as e:
-        console.print(f"Warning: Could not write {path}: {e}", style="yellow")
-        return False
+    except OSError as e:
+        raise click.ClickException(f"Could not write {path}: {e}") from e
 
 
 def read_config_file(path=None):
@@ -137,7 +133,7 @@ def read_config_file(path=None):
     if not os.path.exists(path):
         return values
     try:
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
@@ -145,8 +141,8 @@ def read_config_file(path=None):
                 if "=" in line:
                     key, value = line.split("=", 1)
                     values[key.strip()] = value.strip()
-    except Exception as e:
-        console.print(f"Warning: Could not read {path}: {e}", style="yellow")
+    except OSError as e:
+        raise click.ClickException(f"Could not read {path}: {e}") from e
     return values
 
 
@@ -154,7 +150,7 @@ def _current_username():
     """Best-effort current OS username."""
     try:
         return getpass.getuser()
-    except Exception:
+    except (OSError, KeyError):
         return os.environ.get("USER") or os.environ.get("USERNAME") or "user"
 
 
@@ -174,7 +170,7 @@ def _profile_region(profile):
         if result.returncode != 0:
             return None
         return result.stdout.strip() or None
-    except Exception:
+    except OSError:
         return None
 
 
@@ -198,8 +194,8 @@ def get_account_id(profile, region=None):
         if result.returncode != 0:
             return None
         account = result.stdout.strip()
-        return account or None
-    except Exception:
+        return account if re.fullmatch(r"[0-9]{12}", account) else None
+    except OSError:
         return None
 
 
@@ -232,6 +228,8 @@ def resolve_config(config_path=None, create=True):
     region = (
         pick("TOAST_ENV_STORE_REGION", "ENV_STORE_REGION", "")
         or _profile_region(profile)
+        or os.environ.get("AWS_REGION")
+        or os.environ.get("AWS_DEFAULT_REGION")
         or None
     )
     kms_key = pick("TOAST_ENV_STORE_KMS_KEY", "ENV_STORE_KMS_KEY", "") or None
@@ -275,7 +273,10 @@ def parse_timestamp(value):
     if value is None:
         return None
     if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(value, tz=timezone.utc)
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            return None
     if not isinstance(value, str) or not value.strip():
         return None
 
@@ -283,23 +284,9 @@ def parse_timestamp(value):
     if s.endswith("Z"):
         s = s[:-1] + "+00:00"
 
-    dt = None
     try:
         dt = datetime.fromisoformat(s)
     except ValueError:
-        for fmt in (
-            "%Y-%m-%dT%H:%M:%S%z",
-            "%Y-%m-%dT%H:%M:%S.%f%z",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%dT%H:%M:%S.%f",
-        ):
-            try:
-                dt = datetime.strptime(s, fmt)
-                break
-            except ValueError:
-                continue
-
-    if dt is None:
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -320,8 +307,10 @@ def _aws(config, service_args, region=None):
 
 
 def _ssm_region(config):
-    """Region for SSM calls: configured region, else a safe default."""
-    return config.region or DEFAULT_REGION
+    """SSM is regional; an arbitrary region cannot establish absence."""
+    if not config.region:
+        raise click.ClickException("Set TOAST_ENV_STORE_REGION or configure a region for the env-store profile")
+    return config.region
 
 
 def s3_get(config, key):
@@ -356,19 +345,19 @@ def s3_get(config, key):
 
         if result.returncode != 0:
             stderr = result.stderr or ""
-            if "NoSuchKey" in stderr or "Not Found" in stderr or "404" in stderr:
+            if aws_error_code(stderr) == "NoSuchKey":
                 return None, None, None
-            return None, None, stderr.strip()
+            return None, None, stderr.strip() or f"AWS exited with {result.returncode}"
 
         meta = json.loads(result.stdout) if result.stdout.strip() else {}
         last_modified = meta.get("LastModified")
-        with open(tmp, "r") as f:
+        with open(tmp, "r", encoding="utf-8", newline="") as f:
             value = f.read()
         return value, last_modified, None
 
     except json.JSONDecodeError:
         return None, None, "Error parsing S3 get-object response"
-    except Exception as e:
+    except (OSError, ValueError, click.ClickException) as e:
         return None, None, str(e)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -383,7 +372,7 @@ def s3_put(config, key, content):
     # plaintext body is not world-readable and concurrent puts never collide.
     fd, tmp = tempfile.mkstemp(prefix="toast-", suffix=".tmp")
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(content)
 
         args = [
@@ -405,10 +394,10 @@ def s3_put(config, key, content):
 
         result = subprocess.run(_aws(config, args), capture_output=True, text=True)
         if result.returncode != 0:
-            return False, (result.stderr or "").strip()
+            return False, result.stderr.strip() or f"AWS exited with {result.returncode}"
         return True, None
 
-    except Exception as e:
+    except (OSError, ValueError, click.ClickException) as e:
         return False, str(e)
     finally:
         if os.path.exists(tmp):
@@ -440,9 +429,7 @@ def s3_list(config, prefix="local/"):
         )
 
         if result.returncode != 0:
-            return [], (result.stderr or "").strip()
-        if not result.stdout.strip():
-            return [], None
+            return [], result.stderr.strip() or f"AWS exited with {result.returncode}"
 
         data = json.loads(result.stdout)
         entries = [
@@ -453,13 +440,16 @@ def s3_list(config, prefix="local/"):
 
     except json.JSONDecodeError:
         return [], "Error parsing S3 list-objects-v2 response"
-    except Exception as e:
+    except (OSError, ValueError, click.ClickException) as e:
         return [], str(e)
 
 
 def ssm_get(config, path):
     """Get an SSM parameter value and LastModified using the env-store profile."""
-    return get_ssm_parameter(path, profile=config.profile, region=_ssm_region(config))
+    try:
+        return get_ssm_parameter(path, profile=config.profile, region=_ssm_region(config))
+    except click.ClickException as exc:
+        return None, None, str(exc)
 
 
 def ssm_list(config, prefix="/toast/local/"):
@@ -487,7 +477,7 @@ def ssm_list(config, prefix="/toast/local/"):
         )
 
         if result.returncode != 0:
-            return [], (result.stderr or "").strip()
+            return [], result.stderr.strip() or f"AWS exited with {result.returncode}"
 
         data = json.loads(result.stdout)
         entries = [
@@ -498,7 +488,7 @@ def ssm_list(config, prefix="/toast/local/"):
 
     except json.JSONDecodeError:
         return [], "Error parsing SSM response"
-    except Exception as e:
+    except (OSError, ValueError, click.ClickException) as e:
         return [], str(e)
 
 
@@ -520,8 +510,11 @@ class ReadResult:
 
 def store_read(config, org, project, kind):
     """Read from both backends and return whichever copy is newest."""
-    s3_value, s3_last, s3_err = s3_get(config, s3_key(org, project, kind))
-    ssm_value, ssm_last, ssm_err = ssm_get(config, ssm_path(org, project, kind))
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        s3_future = executor.submit(s3_get, config, s3_key(org, project, kind))
+        ssm_future = executor.submit(ssm_get, config, ssm_path(org, project, kind))
+        s3_value, s3_last, s3_err = s3_future.result()
+        ssm_value, ssm_last, ssm_err = ssm_future.result()
 
     errors = []
     if s3_err:
@@ -533,6 +526,9 @@ def store_read(config, org, project, kind):
     has_ssm = ssm_value is not None
     s3_dt = parse_timestamp(s3_last) if has_s3 else None
     ssm_dt = parse_timestamp(ssm_last) if has_ssm else None
+
+    if has_s3 and has_ssm and s3_value != ssm_value and (s3_dt is None or ssm_dt is None):
+        errors.append(("metadata", "Cannot determine the newest copy without valid timestamps"))
 
     if has_s3 and has_ssm:
         status = "both"
@@ -571,7 +567,11 @@ def store_list(config, kind):
     errors = []
     merged = {}
 
-    s3_entries, s3_err = s3_list(config)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        s3_future = executor.submit(s3_list, config)
+        ssm_future = executor.submit(ssm_list, config)
+        s3_entries, s3_err = s3_future.result()
+        ssm_entries, ssm_err = ssm_future.result()
     if s3_err:
         errors.append(("s3", s3_err))
     for e in s3_entries:
@@ -581,10 +581,9 @@ def store_list(config, kind):
         org, project, k = parsed
         if k != kind:
             continue
-        slot = merged.setdefault(f"{org}/{project}", {"s3": None, "ssm": None})
+        slot = merged.setdefault(f"{org}/{project}", {})
         slot["s3"] = e["last_modified"]
 
-    ssm_entries, ssm_err = ssm_list(config)
     if ssm_err:
         errors.append(("ssm", ssm_err))
     for e in ssm_entries:
@@ -594,21 +593,22 @@ def store_list(config, kind):
         org, project, k = parsed
         if k != kind:
             continue
-        slot = merged.setdefault(f"{org}/{project}", {"s3": None, "ssm": None})
+        slot = merged.setdefault(f"{org}/{project}", {})
         slot["ssm"] = e["last_modified"]
 
     rows = []
     for path, slot in merged.items():
-        s3_dt = parse_timestamp(slot["s3"])
-        ssm_dt = parse_timestamp(slot["ssm"])
+        s3_dt = parse_timestamp(slot.get("s3"))
+        ssm_dt = parse_timestamp(slot.get("ssm"))
         if s3_dt and ssm_dt:
             source = "s3" if s3_dt >= ssm_dt else "ssm"
-        elif s3_dt:
+        elif "ssm" not in slot:
             source = "s3"
-        elif ssm_dt:
+        elif "s3" not in slot:
             source = "ssm"
         else:
             source = "?"
+            errors.append(("metadata", f"Cannot determine newest copy of {path}"))
         latest = slot["s3"] if source == "s3" else (
             slot["ssm"] if source == "ssm" else None
         )
@@ -617,8 +617,8 @@ def store_list(config, kind):
                 "path": path,
                 "source": source,
                 "last_modified": latest,
-                "in_s3": slot["s3"] is not None,
-                "in_ssm": slot["ssm"] is not None,
+                "in_s3": "s3" in slot,
+                "in_ssm": "ssm" in slot,
             }
         )
 
@@ -678,75 +678,48 @@ def run_file_sync(kind, filename, command):
     filename: local file name, e.g. '.env.local' or '.prompt.md'
     command: subcommand string or None (None defaults to 'sync')
     """
-    if not check_aws_cli():
-        console.print(
-            "Error: AWS CLI not found. Please install it to use this feature."
-        )
-        return
+    handlers = {"up": _cmd_up, "down": _cmd_down, "dn": _cmd_down, "diff": _cmd_diff, "sync": _cmd_sync}
+    command = command or "sync"
+    if command not in (*handlers, "ls"):
+        raise click.UsageError(f"Unknown command: {command}. Use sync, up, down, dn, diff, or ls")
+
+    if command != "ls":
+        match = re.fullmatch(r"(.*/workspace/github[.]com/([^/]+)/([^/]+))(?:/.*)?", os.getcwd())
+        if not match:
+            raise click.ClickException("Current directory must be under workspace/github.com/{org}/{project}")
+        project_root, org_name, project_name = match.groups()
+        local_path = os.path.join(project_root, filename)
 
     config = resolve_config()
     if not config.bucket:
-        console.print(
-            "✗ Error: could not determine the env-store bucket. Set "
-            "TOAST_ENV_STORE_BUCKET, or check the AWS profile/credentials "
-            f"('{config.profile}').",
-            style="bold red",
+        raise click.ClickException(
+            "Could not determine the env-store bucket. Set TOAST_ENV_STORE_BUCKET "
+            f"or check the AWS profile/credentials ('{config.profile}')"
         )
-        return
-
-    current_path = os.getcwd()
-    local_path = os.path.join(current_path, filename)
-
     if command == "ls":
         _cmd_ls(config, kind, filename)
-        return
-
-    pattern = r"^(.*/workspace/github.com/[^/]+/[^/]+).*$"
-    match = re.match(pattern, current_path)
-    if not match:
-        console.print(
-            "Error: Current directory is not in a recognized workspace structure."
-        )
-        return
-
-    project_root = match.group(1)
-    project_name = os.path.basename(project_root)
-    org_name = os.path.basename(os.path.dirname(project_root))
-
-    if command == "up":
-        _cmd_up(config, org_name, project_name, kind, filename, local_path)
-    elif command in ("down", "dn"):
-        _cmd_down(config, org_name, project_name, kind, filename, local_path)
-    elif command == "diff":
-        _cmd_diff(config, org_name, project_name, kind, filename, local_path)
-    elif command in (None, "sync"):
-        _cmd_sync(config, org_name, project_name, kind, filename, local_path)
     else:
-        console.print(f"Unknown command: {command}", style="yellow")
-        console.print(f"Usage: toast {filename_to_cmd(filename)} [sync|up|down|dn|diff|ls]")
+        handlers[command](config, org_name, project_name, kind, filename, local_path)
 
 
-def filename_to_cmd(filename):
-    """Map a managed file name back to its command name (for usage hints)."""
-    return "dot" if filename == ".env.local" else "prompt"
+def _require_complete_read(result):
+    if result.errors:
+        details = "; ".join(f"{source.upper()}: {message}" for source, message in result.errors)
+        raise click.ClickException(f"Cannot compare env-store copies: {details}")
+    return result
 
 
 def _cmd_up(config, org, project, kind, filename, local_path):
     if not os.path.exists(local_path):
-        console.print(
-            f"✗ Error: {filename} not found in current directory.", style="bold red"
-        )
-        return
+        raise click.ClickException(f"{filename} not found in project root")
 
     key = s3_key(org, project, kind)
     target = f"s3://{config.bucket}/{key}"
 
-    with open(local_path, "r") as f:
+    with open(local_path, "r", encoding="utf-8", newline="") as f:
         content = f.read()
 
-    result = store_read(config, org, project, kind)
-    for src, e in result.errors:
-        console.print(f"⚠ Warning: {src.upper()} read error: {e}", style="yellow")
+    result = _require_complete_read(store_read(config, org, project, kind))
 
     # The upload target is S3, so the no-op decision is made against the S3 copy
     # (not the newest copy): when the newest copy is a stale SSM parameter, an
@@ -787,30 +760,19 @@ def _cmd_up(config, org, project, kind, filename, local_path):
             f"✓ Successfully uploaded {filename} to {target}", style="bold green"
         )
     else:
-        console.print(f"✗ Error uploading to S3: {err}", style="bold red")
+        raise click.ClickException(f"Error uploading to S3: {err}")
 
 
 def _cmd_down(config, org, project, kind, filename, local_path):
-    result = store_read(config, org, project, kind)
+    result = _require_complete_read(store_read(config, org, project, kind))
 
     if result.value is None:
-        if result.errors:
-            for src, e in result.errors:
-                console.print(f"✗ Error reading {src.upper()}: {e}", style="bold red")
-        else:
-            console.print(
-                f"✗ Error: {filename} not found in env-store (S3 or SSM).",
-                style="bold red",
-            )
-        return
-
-    for src, e in result.errors:
-        console.print(f"⚠ Warning: {src.upper()} read error: {e}", style="yellow")
+        raise click.ClickException(f"{filename} not found in env-store (S3 or SSM)")
 
     local_exists = os.path.exists(local_path)
     overwrite_msg = ""
     if local_exists:
-        with open(local_path, "r") as f:
+        with open(local_path, "r", encoding="utf-8", newline="") as f:
             local_content = f.read()
         status = compare_contents(local_content, result.value)
         if status == "identical":
@@ -832,8 +794,7 @@ def _cmd_down(config, org, project, kind, filename, local_path):
         console.print("Operation cancelled.")
         return
 
-    with open(local_path, "w") as f:
-        f.write(result.value)
+    write_private_file(local_path, result.value)
     console.print(
         f"✓ Successfully downloaded {filename} from {src_label} to {local_path}",
         style="bold green",
@@ -843,12 +804,10 @@ def _cmd_down(config, org, project, kind, filename, local_path):
 def _cmd_diff(config, org, project, kind, filename, local_path):
     local_content = None
     if os.path.exists(local_path):
-        with open(local_path, "r") as f:
+        with open(local_path, "r", encoding="utf-8", newline="") as f:
             local_content = f.read()
 
-    result = store_read(config, org, project, kind)
-    for src, e in result.errors:
-        console.print(f"⚠ Warning: {src.upper()} read error: {e}", style="yellow")
+    result = _require_complete_read(store_read(config, org, project, kind))
 
     remote_content = result.value
     status = compare_contents(local_content, remote_content)
@@ -884,26 +843,24 @@ def _cmd_sync(config, org, project, kind, filename, local_path):
 
     local_content = None
     if os.path.exists(local_path):
-        with open(local_path, "r") as f:
+        with open(local_path, "r", encoding="utf-8", newline="") as f:
             local_content = f.read()
 
-    result = store_read(config, org, project, kind)
-    for src, e in result.errors:
-        console.print(f"⚠ Warning: {src.upper()} read error: {e}", style="yellow")
+    result = _require_complete_read(store_read(config, org, project, kind))
 
     remote_content = result.value
 
-    local_hash = compute_hash(local_content) if local_content else "-"
-    s3_hash = compute_hash(result.s3_value) if result.s3_value else "-"
-    ssm_hash = compute_hash(result.ssm_value) if result.ssm_value else "-"
+    local_hash = compute_hash(local_content) if local_content is not None else "-"
+    s3_hash = compute_hash(result.s3_value) if result.s3_value is not None else "-"
+    ssm_hash = compute_hash(result.ssm_value) if result.ssm_value is not None else "-"
 
-    console.print(f"Local: {local_hash if local_content else '(not found)'}")
+    console.print(f"Local: {local_hash if local_content is not None else '(not found)'}")
     console.print(
-        f"S3:    {s3_hash if result.s3_value else '(not found)'}"
+        f"S3:    {s3_hash if result.s3_value is not None else '(not found)'}"
         + (f"  {result.s3_last}" if result.s3_last else "")
     )
     console.print(
-        f"SSM:   {ssm_hash if result.ssm_value else '(not found)'}"
+        f"SSM:   {ssm_hash if result.ssm_value is not None else '(not found)'}"
         + (f"  {result.ssm_last}" if result.ssm_last else "")
     )
     if result.source:
@@ -952,11 +909,10 @@ def _cmd_sync(config, org, project, kind, filename, local_path):
                 style="bold green",
             )
         else:
-            console.print(f"✗ Error uploading: {err}", style="bold red")
+            raise click.ClickException(f"Error uploading: {err}")
     elif action == "download":
         console.print(f"Downloading from {result.source.upper()} to {filename}...")
-        with open(local_path, "w") as f:
-            f.write(remote_content)
+        write_private_file(local_path, remote_content)
         console.print(f"✓ Successfully downloaded to {local_path}", style="bold green")
     else:
         console.print("Operation cancelled.")
@@ -965,8 +921,9 @@ def _cmd_sync(config, org, project, kind, filename, local_path):
 def _cmd_ls(config, kind, filename):
     console.print(f"Listing {filename} entries in env-store (S3 + SSM)...")
     rows, errors = store_list(config, kind)
-    for src, e in errors:
-        console.print(f"⚠ Warning: {src.upper()} list error: {e}", style="yellow")
+    if errors:
+        details = "; ".join(f"{source.upper()}: {message}" for source, message in errors)
+        raise click.ClickException(f"Cannot list env-store copies: {details}")
 
     if not rows:
         console.print("No entries found.", style="yellow")

@@ -2,12 +2,12 @@
 
 import os
 import configparser
-import tempfile
+import io
 from rich.console import Console
 import click
 from toast.plugins.am_plugin import show_identity
 from toast.plugins.base_plugin import BasePlugin
-from toast.plugins.utils import select_from_list
+from toast.plugins.utils import select_from_list, write_private_file
 
 console = Console()
 
@@ -82,20 +82,9 @@ class EnvPlugin(BasePlugin):
                 # Remove existing token when switching to profile without token
                 config.remove_option("default", "aws_session_token")
 
-            # Save changes atomically: write to a temp file in the same
-            # directory, then os.replace() so an interrupted write can never
-            # leave ~/.aws/credentials truncated/corrupted.
-            cred_dir = os.path.dirname(credentials_path)
-            fd, tmp_path = tempfile.mkstemp(prefix=".credentials-", dir=cred_dir)
-            try:
-                with os.fdopen(fd, "w") as configfile:
-                    config.write(configfile)
-                os.chmod(tmp_path, 0o600)
-                os.replace(tmp_path, credentials_path)
-            except BaseException:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                raise
+            serialized = io.StringIO()
+            config.write(serialized)
+            write_private_file(credentials_path, serialized.getvalue())
 
             console.print(f"✓ Set '{selected_profile}' as default profile.", style="bold green")
 

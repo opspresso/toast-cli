@@ -6,6 +6,8 @@ import json
 import hashlib
 import difflib
 import re
+import os
+import tempfile
 
 
 def run_command(args, **kwargs):
@@ -15,6 +17,18 @@ def run_command(args, **kwargs):
         detail = result.stderr.strip() or f"exit status {result.returncode}"
         raise click.ClickException(f"{args[0]} failed: {detail}")
     return result
+
+
+def write_private_file(path, content):
+    """Atomically replace a UTF-8 file with a private, complete copy."""
+    fd, temporary = tempfile.mkstemp(prefix=".toast-", dir=os.path.dirname(os.path.abspath(path)))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
+            stream.write(content)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def select_from_list(options, prompt="Select an option"):
