@@ -161,7 +161,7 @@ class SsmCliTests(unittest.TestCase):
         with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, '{}', "")):
             result = self.runner.invoke(self.cli, ["ssm", "get", "/x"])
         self.assertEqual(result.exit_code, 1)
-        self.assertIn("Parameter.Value is missing", result.stderr)
+        self.assertIn("Parameter.Value is missing", result.output)
 
 if __name__ == "__main__":
     unittest.main()

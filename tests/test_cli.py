@@ -44,7 +44,7 @@ class CliTests(unittest.TestCase):
             ):
                 result = self.runner.invoke(self.cli, [command])
                 self.assertEqual(result.exit_code, 1)
-                self.assertIn("Executable not found", result.stderr)
+                self.assertIn("Executable not found", result.output)
 
     def test_context_mutation_failure_never_reports_success(self):
         for selections in (["dev"], ["[Del...]", "dev"], ["[Del...]", "[All...]"]):
@@ -56,14 +56,14 @@ class CliTests(unittest.TestCase):
             ), mock.patch("toast.plugins.ctx_plugin.select_from_list", side_effect=selections):
                 result = self.runner.invoke(self.cli, ["ctx"])
                 self.assertEqual(result.exit_code, 1)
-                self.assertIn("permission denied", result.stderr)
+                self.assertIn("permission denied", result.output)
                 self.assertNotIn("✓", result.output)
 
     def test_aws_api_failure_exits_nonzero(self):
         with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 255, "", "AccessDenied")):
             result = self.runner.invoke(self.cli, ["am"])
         self.assertEqual(result.exit_code, 1)
-        self.assertIn("AccessDenied", result.stderr)
+        self.assertIn("AccessDenied", result.output)
 
     def test_cdw_returns_project_path_without_status_output(self):
         with tempfile.TemporaryDirectory() as temp:

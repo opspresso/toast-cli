@@ -32,6 +32,7 @@ class FileSyncIntegrationTests(unittest.TestCase):
             "TOAST_TEST_REMOTE": str(self.remote),
         }
         self.executable("toast", "from toast import main\nmain()\n")
+        self.executable("kubectl", "import sys\nprint('fixture denied', file=sys.stderr)\nsys.exit(1)\n")
         self.executable("fzf", "import sys\nprint(sys.stdin.read().splitlines()[0])\n")
         self.executable("aws", textwrap.dedent('''\
             import json, os, shutil, sys
@@ -125,3 +126,15 @@ class FileSyncIntegrationTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(expected, result.stdout)
         self.assertEqual(self.command("t", "version").returncode, 0)
+
+
+    def test_operational_errors_are_on_stderr_in_real_processes(self):
+        # Exercise real streams independently of Click's changing test capture API.
+        self.env["TOAST_TEST_DENIED"] = "1"
+        for alias, args in (("t", "am"), ("t", "ctx"), ("t", "region"), ("ssm", "get /x")):
+            with self.subTest(command=f"{alias} {args}"):
+                result = self.command(alias, args)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("fixture denied", result.stderr)
+                self.assertNotIn("fixture denied", result.stdout)
+                self.assertNotIn("✓", result.stdout)
