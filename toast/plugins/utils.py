@@ -5,6 +5,7 @@ import click
 import json
 import hashlib
 import difflib
+import re
 
 
 def run_command(args, **kwargs):
@@ -45,59 +46,39 @@ def check_aws_cli():
     return result.returncode == 0
 
 
+def aws_error_code(stderr):
+    """Extract the service error code, without mistaking message text for a code."""
+    match = re.search(r"An error occurred \(([^)]+)\)", stderr or "")
+    return match.group(1) if match else None
+
+
+def fetch_ssm_parameter(args):
+    """Return a decrypted Parameter object, or None only for ParameterNotFound."""
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode:
+        if aws_error_code(result.stderr) == "ParameterNotFound":
+            return None
+        raise click.ClickException(result.stderr.strip() or f"AWS exited with {result.returncode}")
+    parameter = json.loads(result.stdout).get("Parameter")
+    if not isinstance(parameter, dict) or not isinstance(parameter.get("Value"), str):
+        raise click.ClickException("Invalid AWS SSM response: Parameter.Value is missing")
+    return parameter
+
+
 def get_ssm_parameter(ssm_path, profile=None, region=None):
-    """
-    Get parameter value from AWS SSM.
-
-    Args:
-        ssm_path: SSM parameter name
-        profile: Optional AWS profile to use
-        region: Optional AWS region to use
-
-    Returns:
-        tuple: (value, last_modified, error_message)
-        - value: Parameter value or None if not found
-        - last_modified: Last modified date string or None
-        - error_message: Error message or None if successful
-    """
+    """Return (value, LastModifiedDate, error); only a missing parameter is absent."""
+    args = ["aws", "ssm", "get-parameter", "--name", ssm_path, "--with-decryption", "--output", "json"]
+    if profile:
+        args += ["--profile", profile]
+    if region:
+        args += ["--region", region]
     try:
-        cmd = [
-            "aws",
-            "ssm",
-            "get-parameter",
-            "--name",
-            ssm_path,
-            "--with-decryption",
-            "--output",
-            "json",
-        ]
-        if profile:
-            cmd += ["--profile", profile]
-        if region:
-            cmd += ["--region", region]
-
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-        )
-
-        if result.returncode != 0:
-            if "ParameterNotFound" in result.stderr:
-                return None, None, None  # Parameter doesn't exist (not an error)
-            return None, None, result.stderr
-
-        response = json.loads(result.stdout)
-        parameter = response.get("Parameter", {})
-        value = parameter.get("Value", "")
-        last_modified = parameter.get("LastModifiedDate", "")
-
-        return value, last_modified, None
-
-    except json.JSONDecodeError:
-        return None, None, "Error parsing AWS SSM response"
-    except Exception as e:
-        return None, None, str(e)
+        parameter = fetch_ssm_parameter(args)
+        if parameter is None:
+            return None, None, None
+        return parameter["Value"], parameter.get("LastModifiedDate"), None
+    except (OSError, ValueError, click.ClickException) as exc:
+        return None, None, str(exc)
 
 
 def compute_hash(content):
