@@ -2,11 +2,10 @@
 
 import click
 import os
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 from rich.console import Console
 
 console = Console()
-console_err = Console(stderr=True)
 
 
 def display_logo():
@@ -35,11 +34,11 @@ def get_version():
     try:
         # Get version from installed package metadata
         return version("toast-cli")
-    except Exception:
+    except PackageNotFoundError:
         # Fallback to VERSION file for development environment
         version_file = os.path.join(os.path.dirname(__file__), "..", "VERSION")
         if os.path.exists(version_file):
-            with open(version_file, "r") as f:
+            with open(version_file, "r", encoding="utf-8") as f:
                 return f.read().strip()
         return "unknown"
 
@@ -49,32 +48,7 @@ class CustomHelpCommand(click.Command):
         display_logo()
         return super().get_help(ctx)
 
-    def main(self, *args, **kwargs):
-        try:
-            return super().main(*args, **kwargs)
-        except click.ClickException as e:
-            # Override Click's default error display with colored version
-            console_err.print(f"✗ Error: {e.format_message()}", style="bold red")
-            ctx = click.get_current_context(silent=True)
-            if ctx is not None:
-                ctx.exit(e.exit_code)
-            else:
-                raise SystemExit(e.exit_code)
-
-
 class CustomHelpGroup(click.Group):
     def get_help(self, ctx):
         display_logo()
         return super().get_help(ctx)
-
-    def main(self, *args, **kwargs):
-        try:
-            return super().main(*args, **kwargs)
-        except click.ClickException as e:
-            # Override Click's default error display with colored version
-            console_err.print(f"✗ Error: {e.format_message()}", style="bold red")
-            ctx = click.get_current_context(silent=True)
-            if ctx is not None:
-                ctx.exit(e.exit_code)
-            else:
-                raise SystemExit(e.exit_code)

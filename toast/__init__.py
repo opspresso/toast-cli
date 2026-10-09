@@ -11,32 +11,6 @@ from rich.console import Console
 from toast.helpers import CustomHelpGroup
 
 console = Console()
-console_err = Console(stderr=True)
-
-# Monkey patch Click's echo to add colors to error messages
-_original_click_echo = click.echo
-
-def _colored_click_echo(message=None, file=None, nl=True, err=False, color=None):
-    """Override click.echo to add colors to error messages"""
-    if message and isinstance(message, str):
-        # Check if it's an error message
-        if message.startswith("Error:"):
-            target = console_err if err else console
-            target.print(f"✗ {message}", style="bold red")
-            return
-    # Fall back to original echo
-    _original_click_echo(message, file, nl, err, color)
-
-click.echo = _colored_click_echo
-
-# Also monkey patch Click's ClickException to use colored output
-_original_click_exception_show = click.ClickException.show
-
-def _colored_click_exception_show(self, file=None):
-    """Override Click's error display with colored version"""
-    console_err.print(f"✗ Error: {self.format_message()}", style="bold red")
-
-click.ClickException.show = _colored_click_exception_show
 
 
 def discover_and_load_plugins(
@@ -61,7 +35,7 @@ def discover_and_load_plugins(
         plugins_path = os.path.dirname(plugins_package.__file__)
 
         # Discover all modules in the plugins package
-        for _, name, is_pkg in pkgutil.iter_modules([plugins_path]):
+        for _, name, _ in pkgutil.iter_modules([plugins_path]):
             # Skip the base_plugin module and __init__.py
             if name == "base_plugin" or name == "__init__" or name == "utils":
                 continue
@@ -72,7 +46,7 @@ def discover_and_load_plugins(
                 module = importlib.import_module(module_name)
 
                 # Find all classes in the module that are subclasses of BasePlugin
-                for item_name, item in inspect.getmembers(module, inspect.isclass):
+                for _, item in inspect.getmembers(module, inspect.isclass):
                     if (
                         issubclass(item, BasePlugin)
                         and item is not BasePlugin
@@ -80,12 +54,10 @@ def discover_and_load_plugins(
                     ):
                         discovered_plugins.append(item)
             except ImportError as e:
-                console_err.print(f"✗ Error loading plugin module {module_name}: {e}", style="bold red")
+                raise click.ClickException(f"Error loading plugin module {module_name}: {e}") from e
 
     except ImportError as e:
-        console_err.print(
-            f"✗ Error loading plugins package {plugins_package_name}: {e}", style="bold red"
-        )
+        raise click.ClickException(f"Error loading plugins package {plugins_package_name}: {e}") from e
 
     return discovered_plugins
 
@@ -108,20 +80,15 @@ def version():
 
 def main():
     # Discover and load all plugins
-    plugins = discover_and_load_plugins()
-
-    if not plugins:
-        console_err.print("✗ No plugins were discovered", style="bold red")
-        sys.exit(1)
-
-    # Register each plugin with the CLI
-    for plugin_class in plugins:
-        try:
+    try:
+        plugins = discover_and_load_plugins()
+        if not plugins:
+            raise click.ClickException("No plugins were discovered")
+        for plugin_class in plugins:
             plugin_class.register(toast_cli)
-        except Exception as e:
-            console_err.print(
-                f"✗ Error registering plugin {plugin_class.__name__}: {e}", style="bold red"
-            )
+    except (click.ClickException, ValueError) as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
 
     # Run the CLI
     toast_cli()

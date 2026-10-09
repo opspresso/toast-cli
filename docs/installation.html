@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Installation - Toast-cli</title>
     <link rel="stylesheet" href="css/style.css">
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="icon" href="favicon.ico" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -18,18 +18,18 @@
                 <div class="logo">
                     <h1><a href="index.html">Toast-cli</a></h1>
                 </div>
-                <ul class="nav-links">
+                <ul class="nav-links" id="navigation">
                     <li><a href="overview.html">Overview</a></li>
                     <li><a href="installation.html" class="active">Installation</a></li>
                     <li><a href="plugins.html">Plugins</a></li>
                     <li><a href="architecture.html">Architecture</a></li>
                     <li><a href="https://github.com/opspresso/toast-cli" target="_blank" class="github-link">GitHub</a></li>
                 </ul>
-                <div class="hamburger">
+                <button class="hamburger" type="button" aria-label="Toggle navigation" aria-controls="navigation" aria-expanded="false">
                     <span></span>
                     <span></span>
                     <span></span>
-                </div>
+                </button>
             </nav>
         </div>
     </header>
@@ -42,7 +42,7 @@
                     <h3>Install from PyPI</h3>
                     <div class="code-block">
                         <pre><code>pip install toast-cli</code></pre>
-                        <button class="copy-btn" data-clipboard-text="pip install toast-cli">Copy</button>
+                        <button class="copy-btn" type="button" aria-live="polite">Copy</button>
                     </div>
                     <p><a href="https://pypi.org/project/toast-cli/" target="_blank">View on PyPI</a></p>
                 </div>
@@ -50,7 +50,7 @@
                     <h3>Install from GitHub</h3>
                     <div class="code-block">
                         <pre><code>pip install git+https://github.com/opspresso/toast-cli.git</code></pre>
-                        <button class="copy-btn" data-clipboard-text="pip install git+https://github.com/opspresso/toast-cli.git">Copy</button>
+                        <button class="copy-btn" type="button" aria-live="polite">Copy</button>
                     </div>
                 </div>
                 <div class="install-method">
@@ -59,27 +59,26 @@
                         <pre><code>git clone https://github.com/opspresso/toast-cli.git
 cd toast-cli
 pip install -e .</code></pre>
-                        <button class="copy-btn" data-clipboard-text="git clone https://github.com/opspresso/toast-cli.git
-cd toast-cli
-pip install -e .">Copy</button>
+                        <button class="copy-btn" type="button" aria-live="polite">Copy</button>
                     </div>
                 </div>
             </div>
             <div class="requirements">
                 <h3>Dependencies</h3>
                 <ul>
-                    <li>Python 3.6+</li>
+                    <li>Python 3.9+</li>
                     <li>Click - Command-line interface creation</li>
-                    <li>External tools:</li>
+                    <li>External tools:
                     <ul>
+                        <li>git - Repository operations</li>
                         <li>fzf - Interactive selection in terminal</li>
                         <li>aws-cli - AWS command line interface</li>
                         <li>kubectl - Kubernetes command line tool</li>
-                    </ul>
-                    <li>Python packages:</li>
+                    </ul></li>
+                    <li>Python packages:
                     <ul>
                         <li>rich - Terminal formatting and JSON output</li>
-                    </ul>
+                    </ul></li>
                 </ul>
                 <h3>Recommended Aliases</h3>
                 <div class="code-block">
@@ -88,7 +87,9 @@ alias t='toast'
 
 # Navigate workspace directories
 c() {
-  cd "$(toast cdw)"
+  local dir
+  dir="$(toast cdw &quot;$@&quot;)" || return
+  [ -n "$dir" ] &amp;&amp; cd "$dir"
 }
 
 # Common Command Aliases
@@ -97,21 +98,10 @@ alias x='toast ctx'     # Manage Kubernetes contexts
 alias d='toast dot'     # Manage .env.local files
 alias e='toast env'     # Manage AWS profiles
 alias g='toast git'     # Manage Git repositories
-alias r='toast region'  # Manage AWS region</code></pre>
-                    <button class="copy-btn" data-clipboard-text="alias t='toast'
-
-# Navigate workspace directories
-c() {
-  cd \"$(toast cdw)\"
-}
-
-# Common Command Aliases
-alias m='toast am'      # Show AWS identity
-alias x='toast ctx'     # Manage Kubernetes contexts
-alias d='toast dot'     # Manage .env.local files
-alias e='toast env'     # Manage AWS profiles
-alias g='toast git'     # Manage Git repositories
-alias r='toast region'  # Manage AWS region">Copy</button>
+alias r='toast region'  # Manage AWS region
+alias p='toast prompt'  # Manage .prompt.md files
+alias ssm='toast ssm'   # Manage SSM parameters</code></pre>
+                    <button class="copy-btn" type="button" aria-live="polite">Copy</button>
                 </div>
             </div>
         </div>

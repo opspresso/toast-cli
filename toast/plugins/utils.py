@@ -5,81 +5,85 @@ import click
 import json
 import hashlib
 import difflib
+import re
+import os
+import tempfile
+
+
+def run_command(args, **kwargs):
+    """Run a command and report failures without including its arguments."""
+    result = subprocess.run(args, capture_output=True, text=True, **kwargs)
+    if result.returncode:
+        detail = result.stderr.strip() or f"exit status {result.returncode}"
+        raise click.ClickException(f"{args[0]} failed: {detail}")
+    return result
+
+
+def write_private_file(path, content):
+    """Atomically replace a UTF-8 file with a private, complete copy."""
+    fd, temporary = tempfile.mkstemp(prefix=".toast-", dir=os.path.dirname(os.path.abspath(path)))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
+            stream.write(content)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def select_from_list(options, prompt="Select an option"):
-    try:
-        fzf_proc = subprocess.run(
-            ["fzf", "--height=15", "--reverse", "--border", "--prompt", prompt + ": "],
-            input="\n".join(options),
-            capture_output=True,
-            text=True,
-        )
-        return fzf_proc.stdout.strip()
-    except Exception as e:
-        click.echo(f"Error selecting from list: {e}")
+    if not options:
         return None
+    fzf_proc = subprocess.run(
+        ["fzf", "--height=15", "--reverse", "--border", "--prompt", prompt + ": "],
+        input="\n".join(options),
+        capture_output=True,
+        text=True,
+    )
+    # fzf: 1 = no match, 130 = user cancellation; other failures are errors.
+    if fzf_proc.returncode in (1, 130):
+        return None
+    if fzf_proc.returncode:
+        raise click.ClickException(f"fzf failed: {fzf_proc.stderr.strip()}")
+    selected = fzf_proc.stdout.rstrip("\n")
+    if selected and selected not in options:
+        raise click.ClickException("fzf returned an unknown selection")
+    return selected or None
 
 
-def check_aws_cli():
-    """Check if AWS CLI is available."""
-    result = subprocess.run(["aws", "--version"], capture_output=True, text=True)
-    return result.returncode == 0
+def aws_error_code(stderr):
+    """Extract the service error code, without mistaking message text for a code."""
+    match = re.search(r"An error occurred \(([^)]+)\)", stderr or "")
+    return match.group(1) if match else None
+
+
+def fetch_ssm_parameter(args):
+    """Return a decrypted Parameter object, or None only for ParameterNotFound."""
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode:
+        if aws_error_code(result.stderr) == "ParameterNotFound":
+            return None
+        raise click.ClickException(result.stderr.strip() or f"AWS exited with {result.returncode}")
+    parameter = json.loads(result.stdout).get("Parameter")
+    if not isinstance(parameter, dict) or not isinstance(parameter.get("Value"), str):
+        raise click.ClickException("Invalid AWS SSM response: Parameter.Value is missing")
+    return parameter
 
 
 def get_ssm_parameter(ssm_path, profile=None, region=None):
-    """
-    Get parameter value from AWS SSM.
-
-    Args:
-        ssm_path: SSM parameter name
-        profile: Optional AWS profile to use
-        region: Optional AWS region to use
-
-    Returns:
-        tuple: (value, last_modified, error_message)
-        - value: Parameter value or None if not found
-        - last_modified: Last modified date string or None
-        - error_message: Error message or None if successful
-    """
+    """Return (value, LastModifiedDate, error); only a missing parameter is absent."""
+    args = ["aws", "ssm", "get-parameter", "--name", ssm_path, "--with-decryption", "--output", "json"]
+    if profile:
+        args += ["--profile", profile]
+    if region:
+        args += ["--region", region]
     try:
-        cmd = [
-            "aws",
-            "ssm",
-            "get-parameter",
-            "--name",
-            ssm_path,
-            "--with-decryption",
-            "--output",
-            "json",
-        ]
-        if profile:
-            cmd += ["--profile", profile]
-        if region:
-            cmd += ["--region", region]
-
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-        )
-
-        if result.returncode != 0:
-            if "ParameterNotFound" in result.stderr:
-                return None, None, None  # Parameter doesn't exist (not an error)
-            return None, None, result.stderr
-
-        response = json.loads(result.stdout)
-        parameter = response.get("Parameter", {})
-        value = parameter.get("Value", "")
-        last_modified = parameter.get("LastModifiedDate", "")
-
-        return value, last_modified, None
-
-    except json.JSONDecodeError:
-        return None, None, "Error parsing AWS SSM response"
-    except Exception as e:
-        return None, None, str(e)
+        parameter = fetch_ssm_parameter(args)
+        if parameter is None:
+            return None, None, None
+        return parameter["Value"], parameter.get("LastModifiedDate"), None
+    except (OSError, ValueError, click.ClickException) as exc:
+        return None, None, str(exc)
 
 
 def compute_hash(content):
@@ -98,6 +102,8 @@ def mask_secret(value, visible=2):
     """
     if value is None:
         return None
+    if visible <= 0:
+        return "*" * min(len(value), 12)
     n = len(value)
     if n == 0:
         return value
@@ -108,22 +114,41 @@ def mask_secret(value, visible=2):
 
 
 def mask_env_content(content, visible=2):
-    """Mask the value of each KEY=VALUE line in dotenv content.
+    """Mask dotenv values, including quoted continuations and malformed lines.
 
-    Keys are preserved so a diff still shows which entry changed. Blank lines,
-    comments, and lines without '=' pass through unchanged. The first '=' is the
-    separator, so values containing '=' (e.g. base64 padding) stay intact.
+    Only assignment keys and comments outside values are safe to show verbatim.
     """
     if content is None:
         return None
+
+    def quote_remains_open(value, quote):
+        escaped = False
+        for char in value:
+            if char == quote and not escaped:
+                return False
+            escaped = char == "\\" and not escaped
+        return True
+
     out = []
+    quote = None
     for line in content.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in line:
+        if quote:
+            out.append(mask_secret(line, visible))
+            if not quote_remains_open(line, quote):
+                quote = None
+        elif not stripped or stripped.startswith("#"):
             out.append(line)
-            continue
-        key, sep, val = line.partition("=")
-        out.append(f"{key}{sep}{mask_secret(val, visible)}")
+        else:
+            assignment = re.match(r"([ \t]*(?:export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=)(.*)", line)
+            if assignment:
+                key, value = assignment.groups()
+                out.append(key + mask_secret(value, visible))
+                value = value.lstrip()
+                if value[:1] in ("'", '\"') and quote_remains_open(value[1:], value[0]):
+                    quote = value[0]
+            else:
+                out.append(mask_secret(line, visible))
     return "\n".join(out)
 
 

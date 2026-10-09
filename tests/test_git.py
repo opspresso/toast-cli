@@ -3,6 +3,9 @@
 """Unit tests for git_plugin (no network or real subprocesses)."""
 
 import os
+import click
+import subprocess
+from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
@@ -68,7 +71,7 @@ class CloneTests(unittest.TestCase):
     def run_clone(self, source, cwd, expected_url, expected_target="ws", command="clone", **kwargs):
         with mock.patch.object(git_plugin.os, "getcwd", return_value=cwd), mock.patch.object(
             git_plugin.os.path, "exists", return_value=False
-        ), mock.patch.object(git_plugin.subprocess, "run") as run:
+        ), mock.patch("subprocess.run") as run:
             run.return_value.returncode = 0
             git_plugin.GitPlugin.execute(command, source, **kwargs)
             run.assert_called_once_with(
@@ -105,11 +108,65 @@ class CloneTests(unittest.TestCase):
 
     def test_existing_target_is_not_cloned(self):
         with mock.patch.object(git_plugin.os, "getcwd", return_value="/home/user/workspace/gitlab.clush.net/apps"), mock.patch.object(
-            git_plugin.os.path, "exists", return_value=True
-        ), mock.patch.object(git_plugin.subprocess, "run") as run:
-            git_plugin.GitPlugin.execute("clone", "https://gitlab.clush.net/apps/ws.git")
+            git_plugin.os.path, "lexists", return_value=True
+        ), mock.patch("subprocess.run") as run:
+            with self.assertRaises(click.ClickException):
+                git_plugin.GitPlugin.execute("clone", "https://gitlab.clush.net/apps/ws.git")
             run.assert_not_called()
 
 
-if __name__ == "__main__":
-    unittest.main()
+class RepositoryOperationsTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.namespace = Path(self.temp.name) / "workspace" / "gitlab.com" / "org" / "group"
+        self.namespace.mkdir(parents=True)
+        self.repo = self.namespace / "repo"
+        self.repo.mkdir()
+        self.cwd = mock.patch.object(git_plugin.os, "getcwd", return_value=str(self.namespace))
+        self.cwd.start()
+        self.addCleanup(self.cwd.stop)
+
+    def test_destructive_names_are_rejected_without_rewriting(self):
+        for name in ("../repo", "re/po", "repo ", "..", "", "-repo"):
+            with self.subTest(name=name), self.assertRaises(click.UsageError):
+                git_plugin.GitPlugin.execute("rm", name)
+            self.assertTrue(self.repo.exists())
+
+    def test_non_repository_cannot_be_removed(self):
+        with self.assertRaisesRegex(click.ClickException, "not a Git repository"):
+            git_plugin.GitPlugin.execute("rm", "repo")
+        self.assertTrue(self.repo.exists())
+
+    def test_symlink_cannot_target_another_repository(self):
+        (self.repo / ".git").mkdir()
+        (self.namespace / "linked").symlink_to(self.repo, target_is_directory=True)
+        with self.assertRaisesRegex(click.ClickException, "symlink"):
+            git_plugin.GitPlugin.execute("rm", "linked")
+        self.assertTrue(self.repo.exists())
+
+    def test_mirror_uses_nested_namespace_without_mutating_remotes(self):
+        (self.repo / ".git").mkdir()
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run:
+            git_plugin.GitPlugin.execute("push", "repo", mirror=True)
+        run.assert_called_once_with(
+            ["git", "push", "--mirror", "git@gitlab.com:org/group/repo.git"],
+            cwd=str(self.repo), capture_output=True, text=True,
+        )
+
+    def test_real_local_branch_pull_push_and_remove(self):
+        def git(*args, cwd=None):
+            return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)
+        remote = Path(self.temp.name) / "remote.git"
+        git("init", "--bare", "--initial-branch=trunk", str(remote))
+        git("init", "--initial-branch=trunk", str(self.repo))
+        git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "fixture", cwd=self.repo)
+        git("remote", "add", "origin", str(remote), cwd=self.repo)
+        git("push", "-u", "origin", "trunk", cwd=self.repo)
+        git_plugin.GitPlugin.execute("pull", "repo", rebase=True)
+        git_plugin.GitPlugin.execute("push", "repo")
+        git_plugin.GitPlugin.execute("branch", "repo", branch="feature")
+        self.assertEqual(git("branch", "--show-current", cwd=self.repo).stdout.strip(), "feature")
+        git_plugin.GitPlugin.execute("rm", "repo")
+        self.assertFalse(self.repo.exists())
+        self.assertTrue(remote.exists())

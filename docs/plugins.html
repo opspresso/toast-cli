@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Plugins - Toast-cli</title>
     <link rel="stylesheet" href="css/style.css">
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="icon" href="favicon.ico" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -18,18 +18,18 @@
                 <div class="logo">
                     <h1><a href="index.html">Toast-cli</a></h1>
                 </div>
-                <ul class="nav-links">
+                <ul class="nav-links" id="navigation">
                     <li><a href="overview.html">Overview</a></li>
                     <li><a href="installation.html">Installation</a></li>
                     <li><a href="plugins.html" class="active">Plugins</a></li>
                     <li><a href="architecture.html">Architecture</a></li>
                     <li><a href="https://github.com/opspresso/toast-cli" target="_blank" class="github-link">GitHub</a></li>
                 </ul>
-                <div class="hamburger">
+                <button class="hamburger" type="button" aria-label="Toggle navigation" aria-controls="navigation" aria-expanded="false">
                     <span></span>
                     <span></span>
                     <span></span>
-                </div>
+                </button>
             </nav>
         </div>
     </header>
@@ -37,7 +37,8 @@
     <section class="plugins">
         <div class="container">
             <h2>Plugins</h2>
-            <p>Toast-cli features a modular plugin architecture. Here are the available plugins:</p>
+            <p>Each command uses the external tools listed in the installation guide. Failures return a nonzero exit status.</p>
+            <p><code>dot</code> and <code>prompt</code> use the project root under <code>~/workspace/github.com/{org}/{project}</code>. They compare S3 and legacy SSM copies, require successful reads from both, and write only to S3. Set <code>TOAST_ENV_STORE_REGION</code> or configure the env-store profile region. Downloads are atomic files with mode 0600.</p>
 
             <div class="plugin-grid">
                 <div class="plugin-card">
@@ -85,12 +86,13 @@
                         <span class="plugin-badge">Environment</span>
                     </div>
                     <div class="plugin-body">
-                        <p>Manage .env.local files with AWS SSM integration</p>
+                        <p>Manage .env.local files with S3 env-store integration</p>
                         <div class="plugin-usage">
                             <code>toast dot ls</code>
                             <code>toast dot up</code>
                             <code>toast dot down</code>
                             <code>toast dot sync</code>
+                            <code>toast dot diff</code>
                         </div>
                     </div>
                 </div>
@@ -101,12 +103,13 @@
                         <span class="plugin-badge">Environment</span>
                     </div>
                     <div class="plugin-body">
-                        <p>Manage .prompt.md files with AWS SSM integration</p>
+                        <p>Manage .prompt.md files with S3 env-store</p>
                         <div class="plugin-usage">
                             <code>toast prompt ls</code>
                             <code>toast prompt up</code>
                             <code>toast prompt down</code>
                             <code>toast prompt sync</code>
+                            <code>toast prompt diff</code>
                         </div>
                     </div>
                 </div>
@@ -167,6 +170,8 @@
                             <code>toast ssm</code>
                             <code>toast ssm ls /path/</code>
                             <code>toast ssm get /param</code>
+                            <code>toast ssm get /param --reveal</code>
+                            <code>toast ssm diff /param 'value'</code>
                             <code>toast ssm put /param 'value'</code>
                             <code>toast ssm rm /param</code>
                         </div>

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Toast-cli - Toast.sh AWS, Kubernetes & Git Management CLI Tool</title>
     <link rel="stylesheet" href="css/style.css">
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="icon" href="favicon.ico" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -18,18 +18,18 @@
                 <div class="logo">
                     <h1><a href="index.html">Toast-cli</a></h1>
                 </div>
-                <ul class="nav-links">
+                <ul class="nav-links" id="navigation">
                     <li><a href="overview.html">Overview</a></li>
                     <li><a href="installation.html">Installation</a></li>
                     <li><a href="plugins.html">Plugins</a></li>
                     <li><a href="architecture.html">Architecture</a></li>
                     <li><a href="https://github.com/opspresso/toast-cli" target="_blank" class="github-link">GitHub</a></li>
                 </ul>
-                <div class="hamburger">
+                <button class="hamburger" type="button" aria-label="Toggle navigation" aria-controls="navigation" aria-expanded="false">
                     <span></span>
                     <span></span>
                     <span></span>
-                </div>
+                </button>
             </nav>
         </div>
     </header>
@@ -56,7 +56,9 @@ $ toast --help
 $ toast am      # Show AWS identity
 $ toast cdw     # Navigate workspace directories
 $ toast ctx     # Manage Kubernetes contexts
-$ toast dot     # Manage .env.local files with AWS SSM
+$ toast dot     # Manage .env.local files with S3 env-store
+$ toast prompt  # Manage .prompt.md files
+$ toast ssm     # Manage SSM parameters
 $ toast env     # Manage AWS profiles
 $ toast git     # Manage Git repositories
 $ toast region  # Set AWS region

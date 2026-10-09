@@ -2,11 +2,12 @@
 
 import click
 import os
-import subprocess
+import shutil
 import re
 from urllib.parse import urlsplit
 from rich.console import Console
 from toast.plugins.base_plugin import BasePlugin
+from toast.plugins.utils import run_command
 
 console = Console()
 
@@ -21,11 +22,9 @@ def get_github_host():
     match = re.match(pattern, current_path)
 
     default_host = "github.com"
-    extracted_host = None
 
     if match:
-        extracted_host = match.group(2)
-        default_host = extracted_host
+        default_host = match.group(2)
 
     config_locations = []
 
@@ -37,72 +36,28 @@ def get_github_host():
         config_locations.append(os.path.join(org_dir, ".toast-config"))
 
     # Add current directory config
-    config_locations.append(".toast-config")
+    config_locations.append(os.path.join(current_path, ".toast-config"))
 
     for config_file in config_locations:
         if os.path.exists(config_file):
             try:
-                with open(config_file, "r") as f:
+                with open(config_file, "r", encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
                         if line.startswith("GITHUB_HOST="):
                             host = line.split("=", 1)[1].strip()
+                            if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", host):
+                                raise click.ClickException(f"Invalid GITHUB_HOST in {config_file}")
                             return host
-            except Exception as e:
-                console.print(f"Warning: Could not read {config_file}: {e}", style="yellow")
+            except OSError as e:
+                raise click.ClickException(f"Could not read {config_file}: {e}") from e
 
     return default_host
 
 
 def sanitize_repo_name(repo_name):
-    """Sanitize repository name by removing invalid characters."""
-    if not repo_name:
-        return "repo"
-
-    # Remove or replace invalid characters for repository names
-    # Git repository names should only contain: letters, numbers, hyphens, underscores, dots
-    # Remove: /, \, :, *, ?, ", <, >, |, and other special characters
-    invalid_chars = [
-        "/",
-        "\\",
-        ":",
-        "*",
-        "?",
-        '"',
-        "<",
-        ">",
-        "|",
-        " ",
-        "@",
-        "#",
-        "$",
-        "%",
-        "^",
-        "&",
-        "(",
-        ")",
-        "+",
-        "=",
-        "[",
-        "]",
-        "{",
-        "}",
-        ";",
-        ",",
-    ]
-
-    sanitized = repo_name
-    for char in invalid_chars:
-        sanitized = sanitized.replace(char, "")
-
-    # Remove leading/trailing dots and hyphens as they're not valid
-    sanitized = sanitized.strip(".-")
-
-    # Ensure it's not empty after sanitization
-    if not sanitized:
-        sanitized = "repo"
-
-    return sanitized
+    """Build a local clone directory name from a remote repository name."""
+    return re.sub(r"[^A-Za-z0-9_.-]", "", repo_name or "").strip(".-") or "repo"
 
 
 class GitPlugin(BasePlugin):
@@ -143,230 +98,78 @@ class GitPlugin(BasePlugin):
         mirror=False,
         **kwargs,
     ):
-        # Preserve explicit clone URLs, including SSH users and custom ports.
-        repo_url = None
-        if command in ("clone", "cl"):
+        aliases = {"cl": "clone", "b": "branch", "p": "pull", "ps": "push"}
+        command = aliases.get(command, command)
+        if command not in ("clone", "rm", "branch", "pull", "push"):
+            raise click.UsageError(f"Unknown git command: {command}")
+        if target is not None and command != "clone":
+            raise click.UsageError("--target requires clone")
+        if branch is not None and command != "branch":
+            raise click.UsageError("--branch requires branch")
+        if rebase and command != "pull":
+            raise click.UsageError("--rebase requires pull")
+        if mirror and command != "push":
+            raise click.UsageError("--mirror requires push")
+
+        current_path = os.getcwd()
+        match = re.fullmatch(r".*/workspace/([^/]+)/(.+)", current_path)
+        if not match:
+            raise click.ClickException(
+                "Current directory must be in ~/workspace/{git-host}/{namespace}"
+            )
+        namespace = match.group(2)
+
+        if command == "clone":
+            repo_url = None
             if repo_name.startswith(("https://", "http://", "ssh://", "git://")):
                 repo_url = repo_name
-                repo_name = urlsplit(repo_url).path.rstrip("/").rsplit("/", 1)[-1]
+                parsed = urlsplit(repo_url)
+                if not parsed.hostname or not parsed.path.rstrip("/"):
+                    raise click.UsageError("Clone URL must include a host and repository path")
+                repo_name = parsed.path.rstrip("/").rsplit("/", 1)[-1]
             elif re.match(r"^[^/@:]+@[^/:]+:.+", repo_name):
                 repo_url = repo_name
                 repo_name = repo_url.split(":", 1)[1].rstrip("/").rsplit("/", 1)[-1]
             if repo_name.endswith(".git"):
                 repo_name = repo_name[:-4]
-
-        # Sanitize the local repository name, never the clone URL.
-        original_repo_name = repo_name
-        repo_name = sanitize_repo_name(repo_name)
-
-        if original_repo_name != repo_name:
-            console.print(
-                f"Repository name sanitized: '{original_repo_name}' -> '{repo_name}'",
-                style="yellow"
-            )
-
-        # Get the current path
-        current_path = os.getcwd()
-
-        # Check if the current path matches the expected pattern
-        pattern = r"^.*/workspace/([^/]+)/([^/]+)(?:/(.*))?$"
-        match = re.match(pattern, current_path)
-
-        if not match:
-            console.print(
-                "✗ Error: Current directory must be in ~/workspace/{git-host}/{namespace} format",
-                style="bold red"
-            )
+            repo_name = sanitize_repo_name(repo_name)
+            target_path = os.path.abspath(os.path.join(current_path, target or repo_name))
+            if os.path.lexists(target_path):
+                raise click.ClickException(f"Target directory '{target or repo_name}' already exists")
+            if repo_url is None:
+                repo_url = f"git@{get_github_host()}:{namespace}/{repo_name}.git"
+            console.print(f"Cloning {repo_name} into {target_path}...", style="cyan", markup=False)
+            run_command(["git", "clone", repo_url, target_path])
+            console.print(f"✓ Successfully cloned {repo_name} to {target_path}", style="bold green", markup=False)
             return
 
-        # Extract username from the path (host is handled by get_github_host())
-        username = match.group(2)
+        # Never rewrite the name of an existing repository: it could select a
+        # different directory, especially for destructive operations.
+        if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", repo_name):
+            raise click.UsageError("Repository must be a directory name, without paths or special characters")
+        repo_path = os.path.join(current_path, repo_name)
+        if not os.path.isdir(repo_path) or os.path.islink(repo_path):
+            raise click.ClickException(f"Repository directory '{repo_name}' does not exist or is a symlink")
+        is_worktree = os.path.exists(os.path.join(repo_path, ".git"))
+        is_bare = all(os.path.exists(os.path.join(repo_path, part)) for part in ("HEAD", "objects", "refs"))
+        if not (is_worktree or is_bare):
+            raise click.ClickException(f"'{repo_name}' is not a Git repository")
 
-        if command == "clone" or command == "cl":
-            # Determine the target directory name
-            target_dir = target if target else repo_name
-
-            if repo_url is None:
-                git_host = get_github_host()
-                namespace = "/".join(part for part in match.groups()[1:] if part)
-                repo_url = f"git@{git_host}:{namespace}/{repo_name}.git"
-
-            # Target path in the current directory
-            target_path = os.path.join(current_path, target_dir)
-
-            # Check if the target directory already exists
-            if os.path.exists(target_path):
-                console.print(f"✗ Error: Target directory '{target_dir}' already exists", style="bold red")
-                return
-
-            # Clone the repository
-            console.print(f"Cloning {repo_url} into {target_path}...", style="cyan")
-            try:
-                result = subprocess.run(
-                    ["git", "clone", repo_url, target_path],
-                    capture_output=True,
-                    text=True,
-                )
-
-                if result.returncode == 0:
-                    console.print(f"✓ Successfully cloned {repo_name} to {target_path}", style="bold green")
-                else:
-                    console.print(f"✗ Error cloning repository: {result.stderr}", style="bold red")
-            except Exception as e:
-                console.print(f"✗ Error executing git command: {e}", style="bold red")
-
-        elif command == "rm":
-            # Path to the repository
-            repo_path = os.path.join(current_path, repo_name)
-
-            # Check if the repository exists
-            if not os.path.exists(repo_path):
-                console.print(f"✗ Error: Repository directory '{repo_name}' does not exist", style="bold red")
-                return
-
-            try:
-                # Remove the repository
-                subprocess.run(["rm", "-rf", repo_path], check=True)
-                console.print(f"✓ Successfully removed {repo_path}", style="bold green")
-            except Exception as e:
-                console.print(f"✗ Error removing repository: {e}", style="bold red")
-
-        elif command == "branch" or command == "b":
-            # Path to the repository
-            repo_path = os.path.join(current_path, repo_name)
-
-            # Check if the repository exists
-            if not os.path.exists(repo_path):
-                console.print(f"✗ Error: Repository directory '{repo_name}' does not exist", style="bold red")
-                return
-
-            # Check if branch name is provided
+        if command == "rm":
+            shutil.rmtree(repo_path)
+            console.print(f"✓ Successfully removed {repo_path}", style="bold green", markup=False)
+            return
+        if command == "branch":
             if not branch:
-                console.print("✗ Error: Branch name is required for branch command", style="bold red")
-                return
-
-            try:
-                # Create the new branch in the repository directory
-                result = subprocess.run(
-                    ["git", "checkout", "-b", branch],
-                    capture_output=True,
-                    text=True,
-                    cwd=repo_path,
-                )
-
-                if result.returncode == 0:
-                    console.print(f"✓ Successfully created branch '{branch}' in {repo_name}", style="bold green")
-                else:
-                    console.print(f"✗ Error creating branch: {result.stderr}", style="bold red")
-            except Exception as e:
-                console.print(f"✗ Error executing git command: {e}", style="bold red")
-
-        elif command == "pull" or command == "p":
-            # Path to the repository
-            repo_path = os.path.join(current_path, repo_name)
-
-            # Check if the repository exists
-            if not os.path.exists(repo_path):
-                console.print(f"✗ Error: Repository directory '{repo_name}' does not exist", style="bold red")
-                return
-
-            try:
-                # Execute git pull with or without rebase option
-                console.print(f"Pulling latest changes for {repo_name}...", style="cyan")
-
-                # Set up command with or without --rebase flag
-                git_command = ["git", "pull", "--rebase"] if rebase else ["git", "pull"]
-
-                result = subprocess.run(
-                    git_command,
-                    capture_output=True,
-                    text=True,
-                    cwd=repo_path,
-                )
-
-                if result.returncode == 0:
-                    rebase_msg = "with rebase " if rebase else ""
-                    console.print(
-                        f"✓ Successfully pulled {rebase_msg}latest changes for {repo_name}",
-                        style="bold green"
-                    )
-                else:
-                    console.print(f"✗ Error pulling repository: {result.stderr}", style="bold red")
-            except Exception as e:
-                console.print(f"✗ Error executing git command: {e}", style="bold red")
-
-        elif command == "push" or command == "ps":
-            # Path to the repository
-            repo_path = os.path.join(current_path, repo_name)
-
-            # Check if the repository exists
-            if not os.path.exists(repo_path):
-                console.print(f"✗ Error: Repository directory '{repo_name}' does not exist", style="bold red")
-                return
-
-            try:
-                if mirror:
-                    # Mirror push for repository migration
-                    # Get GitHub host from config or use default
-                    github_host = get_github_host()
-
-                    # Construct the repository URL using the same logic as clone
-                    repo_url = f"git@{github_host}:{username}/{repo_name}.git"
-
-                    console.print(f"Mirror pushing {repo_name} to {repo_url}...", style="cyan")
-
-                    # Add new remote for mirror push
-                    subprocess.run(
-                        ["git", "remote", "remove", "mirror-origin"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        cwd=repo_path,
-                    )
-
-                    result = subprocess.run(
-                        ["git", "remote", "add", "mirror-origin", repo_url],
-                        capture_output=True,
-                        text=True,
-                        cwd=repo_path,
-                    )
-
-                    if result.returncode != 0:
-                        console.print(f"✗ Error adding mirror remote: {result.stderr}", style="bold red")
-                        return
-
-                    # Execute mirror push
-                    result = subprocess.run(
-                        ["git", "push", "--mirror", "mirror-origin"],
-                        capture_output=True,
-                        text=True,
-                        cwd=repo_path,
-                    )
-
-                    if result.returncode == 0:
-                        console.print(f"✓ Successfully mirror pushed {repo_name}", style="bold green")
-                    else:
-                        console.print(f"✗ Error mirror pushing repository: {result.stderr}", style="bold red")
-                else:
-                    # Regular push
-                    console.print(f"Pushing {repo_name}...", style="cyan")
-
-                    result = subprocess.run(
-                        ["git", "push"],
-                        capture_output=True,
-                        text=True,
-                        cwd=repo_path,
-                    )
-
-                    if result.returncode == 0:
-                        console.print(f"✓ Successfully pushed {repo_name}", style="bold green")
-                    else:
-                        console.print(f"✗ Error pushing repository: {result.stderr}", style="bold red")
-            except Exception as e:
-                console.print(f"✗ Error executing git command: {e}", style="bold red")
-
+                raise click.UsageError("Branch name is required (--branch)")
+            args = ["git", "checkout", "-b", branch]
+        elif command == "pull":
+            args = ["git", "pull"] + (["--rebase"] if rebase else [])
+        elif mirror:
+            # Push directly to the destination, preserving existing remotes.
+            repo_url = f"git@{get_github_host()}:{namespace}/{repo_name}.git"
+            args = ["git", "push", "--mirror", repo_url]
         else:
-            console.print(f"✗ Unknown command: {command}", style="bold red")
-            console.print(
-                "Available commands: clone (cl), rm, branch (b), pull (p), push (ps)",
-                style="yellow"
-            )
+            args = ["git", "push"]
+        run_command(args, cwd=repo_path)
+        console.print(f"✓ Successfully completed {command} for {repo_name}", style="bold green", markup=False)

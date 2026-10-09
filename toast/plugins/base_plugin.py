@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+import configparser
+
+import click
+
 from toast.helpers import CustomHelpCommand
 
 
@@ -15,11 +19,13 @@ class BasePlugin:
         if not cls.name:
             raise ValueError(f"Plugin {cls.__name__} must define a name")
 
-        # Use CustomHelpCommand for colored error messages
         @cli_group.command(name=cls.name, help=cls.help, cls=CustomHelpCommand)
         @cls.get_arguments
         def command(**kwargs):
-            return cls.execute(**kwargs)
+            try:
+                return cls.execute(**kwargs)
+            except (OSError, ValueError, configparser.Error) as exc:
+                raise click.ClickException(str(exc)) from exc
 
     @classmethod
     def get_arguments(cls, func):

@@ -2,12 +2,12 @@
 
 import os
 import configparser
-import subprocess
-import json
-import tempfile
+import io
 from rich.console import Console
+import click
+from toast.plugins.am_plugin import show_identity
 from toast.plugins.base_plugin import BasePlugin
-from toast.plugins.utils import select_from_list
+from toast.plugins.utils import select_from_list, write_private_file
 
 console = Console()
 
@@ -20,100 +20,74 @@ class EnvPlugin(BasePlugin):
 
     @classmethod
     def execute(cls, **kwargs):
-        try:
-            # AWS credentials file path
-            credentials_path = os.path.expanduser("~/.aws/credentials")
+        # AWS credentials file path
+        credentials_path = os.path.expanduser(os.environ.get("AWS_SHARED_CREDENTIALS_FILE", "~/.aws/credentials"))
 
-            # Check if file exists
-            if not os.path.exists(credentials_path):
-                console.print(f"✗ AWS credentials file not found: {credentials_path}", style="bold red")
+        # Check if file exists
+        if not os.path.exists(credentials_path):
+            raise click.ClickException(f"AWS credentials file not found: {credentials_path}")
+
+        # Parse credentials file using configparser
+        config = configparser.ConfigParser(interpolation=None)
+        config.read(credentials_path, encoding="utf-8")
+
+        # Extract profile list
+        profiles = config.sections()
+
+        if not profiles:
+            raise click.ClickException("No profiles found in AWS credentials file")
+
+        # Get current default profile
+        current_default = None
+        if "default" in profiles:
+            current_default = "default"
+
+        # Display current default profile if exists
+        if current_default:
+            console.print(f"Current default profile: {current_default}", style="bold cyan")
+
+        # User selects profile
+        selected_profile = select_from_list(profiles, "Select AWS Profile")
+
+        if selected_profile:
+            if selected_profile == "default":
+                console.print("Already the default profile.", style="yellow")
                 return
 
-            # Parse credentials file using configparser
-            config = configparser.ConfigParser()
-            config.read(credentials_path)
+            # Get credentials from selected profile
+            aws_access_key_id = config[selected_profile].get(
+                "aws_access_key_id", ""
+            )
+            aws_secret_access_key = config[selected_profile].get(
+                "aws_secret_access_key", ""
+            )
+            aws_session_token = config[selected_profile].get(
+                "aws_session_token", ""
+            )
 
-            # Extract profile list
-            profiles = config.sections()
+            if not aws_access_key_id or not aws_secret_access_key:
+                raise click.ClickException(f"Profile '{selected_profile}' has no static access key pair")
 
-            if not profiles:
-                console.print("✗ No profiles found in AWS credentials file.", style="bold red")
-                return
+            # Modify credentials file directly to set default profile
+            if "default" not in config:
+                config.add_section("default")
 
-            # Get current default profile
-            current_default = None
-            if "default" in profiles:
-                current_default = "default"
+            config["default"]["aws_access_key_id"] = aws_access_key_id
+            config["default"]["aws_secret_access_key"] = aws_secret_access_key
 
-            # Display current default profile if exists
-            if current_default:
-                console.print(f"Current default profile: {current_default}", style="bold cyan")
+            # Set session token if available
+            if aws_session_token:
+                config["default"]["aws_session_token"] = aws_session_token
+            elif "aws_session_token" in config["default"]:
+                # Remove existing token when switching to profile without token
+                config.remove_option("default", "aws_session_token")
 
-            # User selects profile
-            selected_profile = select_from_list(profiles, "Select AWS Profile")
+            serialized = io.StringIO()
+            config.write(serialized)
+            write_private_file(credentials_path, serialized.getvalue())
 
-            if selected_profile:
-                if selected_profile == "default":
-                    console.print("Already the default profile.", style="yellow")
-                    return
+            console.print(f"✓ Set '{selected_profile}' as default profile.", style="bold green")
 
-                # Get credentials from selected profile
-                aws_access_key_id = config[selected_profile].get(
-                    "aws_access_key_id", ""
-                )
-                aws_secret_access_key = config[selected_profile].get(
-                    "aws_secret_access_key", ""
-                )
-                aws_session_token = config[selected_profile].get(
-                    "aws_session_token", ""
-                )
-
-                # Modify credentials file directly to set default profile
-                if "default" not in config:
-                    config.add_section("default")
-
-                config["default"]["aws_access_key_id"] = aws_access_key_id
-                config["default"]["aws_secret_access_key"] = aws_secret_access_key
-
-                # Set session token if available
-                if aws_session_token:
-                    config["default"]["aws_session_token"] = aws_session_token
-                elif "aws_session_token" in config["default"]:
-                    # Remove existing token when switching to profile without token
-                    config.remove_option("default", "aws_session_token")
-
-                # Save changes atomically: write to a temp file in the same
-                # directory, then os.replace() so an interrupted write can never
-                # leave ~/.aws/credentials truncated/corrupted.
-                cred_dir = os.path.dirname(credentials_path)
-                fd, tmp_path = tempfile.mkstemp(prefix=".credentials-", dir=cred_dir)
-                try:
-                    with os.fdopen(fd, "w") as configfile:
-                        config.write(configfile)
-                    os.chmod(tmp_path, 0o600)
-                    os.replace(tmp_path, credentials_path)
-                except BaseException:
-                    if os.path.exists(tmp_path):
-                        os.remove(tmp_path)
-                    raise
-
-                console.print(f"✓ Set '{selected_profile}' as default profile.", style="bold green")
-
-                try:
-                    result = subprocess.run(
-                        ["aws", "sts", "get-caller-identity"],
-                        capture_output=True,
-                        text=True,
-                    )
-                    if result.returncode == 0:
-                        # Parse JSON and print with rich
-                        json_data = json.loads(result.stdout)
-                        console.print_json(json.dumps(json_data))
-                    else:
-                        console.print("✗ Error fetching AWS caller identity.", style="bold red")
-                except Exception as e:
-                    console.print(f"✗ Error fetching AWS caller identity: {e}", style="bold red")
-            else:
-                console.print("No profile selected.", style="yellow")
-        except Exception as e:
-            console.print(f"✗ Error while managing AWS profiles: {e}", style="bold red")
+            show_identity(profile="default")
+        else:
+            console.print("No profile selected.", style="yellow")
