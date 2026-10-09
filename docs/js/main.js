@@ -16,18 +16,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.querySelectorAll('.copy-btn').forEach(button => {
+        let copying = false;
+        let resetTimer;
         button.addEventListener('click', async () => {
+            if (copying) return;
+            copying = true;
+            clearTimeout(resetTimer);
             const code = button.closest('.code-block').querySelector('pre code');
-            button.disabled = true;
             try {
                 await navigator.clipboard.writeText(code.textContent);
                 button.textContent = 'Copied!';
             } catch {
                 button.textContent = 'Copy failed';
             } finally {
-                setTimeout(() => {
+                copying = false;
+                resetTimer = setTimeout(() => {
                     button.textContent = 'Copy';
-                    button.disabled = false;
                 }, 2000);
             }
         });

@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Env-store operations stop on incomplete reads and use the project root file from subdirectories.
 - Dotenv masking covers multiline values; downloads are atomic mode 0600 files with preserved line endings.
 - Workspace navigation returns only the selected path on stdout and prunes repository contents.
-- Documentation copy buttons use the displayed code and report copy failures.
+- Documentation copy buttons use the displayed code, report copy failures, and preserve keyboard focus.
 - `ctx` add-context flow checked the wrong subprocess result when reading the AWS region
 - Logo string used invalid escape sequences (Python 3.12+ `SyntaxWarning`)
 - Stale `SSM` labels in env-store sync UI corrected to `env-store`
