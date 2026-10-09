@@ -35,11 +35,11 @@ def select_from_list(options, prompt="Select an option"):
     if not options:
         return None
     fzf_proc = subprocess.run(
-            ["fzf", "--height=15", "--reverse", "--border", "--prompt", prompt + ": "],
-            input="\n".join(options),
-            capture_output=True,
-            text=True,
-        )
+        ["fzf", "--height=15", "--reverse", "--border", "--prompt", prompt + ": "],
+        input="\n".join(options),
+        capture_output=True,
+        text=True,
+    )
     # fzf: 1 = no match, 130 = user cancellation; other failures are errors.
     if fzf_proc.returncode in (1, 130):
         return None

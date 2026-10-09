@@ -7,7 +7,6 @@ from toast.plugins.utils import select_from_list
 from rich.console import Console
 
 console = Console(stderr=True)
-console_err = Console(stderr=True)
 
 
 class CdwPlugin(BasePlugin):
@@ -55,4 +54,4 @@ class CdwPlugin(BasePlugin):
         if selected_dir:
             click.echo(selected_dir)
         else:
-            console_err.print("No directory selected.", style="bold red")
+            console.print("No directory selected.", style="bold red")

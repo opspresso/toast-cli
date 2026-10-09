@@ -11,7 +11,7 @@ from rich.console import Console
 from toast.helpers import CustomHelpGroup
 
 console = Console()
-console_err = Console(stderr=True)
+
 
 def discover_and_load_plugins(
     plugins_package_name: str = "toast.plugins",
@@ -35,7 +35,7 @@ def discover_and_load_plugins(
         plugins_path = os.path.dirname(plugins_package.__file__)
 
         # Discover all modules in the plugins package
-        for _, name, is_pkg in pkgutil.iter_modules([plugins_path]):
+        for _, name, _ in pkgutil.iter_modules([plugins_path]):
             # Skip the base_plugin module and __init__.py
             if name == "base_plugin" or name == "__init__" or name == "utils":
                 continue
@@ -46,7 +46,7 @@ def discover_and_load_plugins(
                 module = importlib.import_module(module_name)
 
                 # Find all classes in the module that are subclasses of BasePlugin
-                for item_name, item in inspect.getmembers(module, inspect.isclass):
+                for _, item in inspect.getmembers(module, inspect.isclass):
                     if (
                         issubclass(item, BasePlugin)
                         and item is not BasePlugin

@@ -47,7 +47,6 @@ PROFILE_SUFFIX = "-admin"
 BUCKET_PREFIX = "env-store-"
 
 
-
 class StoreConfig:
     """Resolved env-store configuration."""
 
@@ -296,8 +295,7 @@ def parse_timestamp(value):
 def _aws(config, service_args, region=None):
     """Build an aws CLI command with the env-store profile (and region) applied.
 
-    A `region` override takes precedence over config.region (used for SSM, which
-    requires a region even when none is configured).
+    A `region` override takes precedence over config.region.
     """
     cmd = ["aws"] + service_args + ["--profile", config.profile]
     resolved = region or config.region
