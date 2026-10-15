@@ -1,14 +1,12 @@
 name: build
 
+# Tests run once per change, when it reaches main and is published; pull requests do not start them.
 on:
   push:
     branches:
       - main
       - master
-  pull_request:
-    branches:
-      - main
-      - master
+  workflow_dispatch:
 
 jobs:
   test:
