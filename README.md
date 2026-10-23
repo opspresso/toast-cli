@@ -209,17 +209,24 @@ truth), and SSM copies become stale and are harvested into S3 on the next
 upload.
 
 ```
-s3://env-store-{account-id}/local/{org}/{project}/env-local   # .env.local files
-s3://env-store-{account-id}/local/{org}/{project}/prompt-md   # .prompt.md files
+s3://env-store-{account-id}/local/{namespace}/{project}/env-local   # .env.local files
+s3://env-store-{account-id}/local/{namespace}/{project}/prompt-md   # .prompt.md files
 
-/toast/local/{org}/{project}/env-local     # legacy SSM (read-only fallback)
-/toast/local/{org}/{project}/prompt-md     # legacy SSM (read-only fallback)
+/toast/local/{namespace}/{project}/env-local     # legacy SSM (read-only fallback)
+/toast/local/{namespace}/{project}/prompt-md     # legacy SSM (read-only fallback)
 ```
 
-Run `dot` and `prompt` under `~/workspace/github.com/{org}/{project}`. A call
+Run `dot` and `prompt` under `~/workspace/{host}/{org}/{project}`. A call
 from a subdirectory still uses the project root's file. `ls` works anywhere.
-GitLab workspace paths are supported by `git` and `cdw`, but are not mapped to
-env-store keys.
+The namespace is `{org}` for `github.com` and `{host}/{org}` for other hosts:
+
+| Project directory | S3 key |
+|-------------------|--------|
+| `~/workspace/github.com/opspresso/toast-cli` | `local/opspresso/toast-cli/env-local` |
+| `~/workspace/gitlab.example.com/group/project` | `local/gitlab.example.com/group/project/env-local` |
+
+The host must contain a dot. GitLab subgroups are not supported: the directory
+after `{org}` is always the project root.
 
 Both S3 and SSM reads must succeed before comparison or transfer. On an access,
 network, or region error, fix the reported cause and run the command again.

@@ -58,14 +58,16 @@ arguments can still appear in shell history; interactive creation hides input.
 ## Env-store contracts
 
 `dot` manages `.env.local`; `prompt` manages `.prompt.md`. Both use the project
-root under `workspace/github.com/{org}/{project}`, including when invoked in a
-subdirectory. They currently do not map GitLab namespaces to storage keys.
+root under `workspace/{host}/{org}/{project}`, including when invoked in a
+subdirectory. The storage namespace is `{org}` for `github.com` and
+`{host}/{org}` for other hosts. GitHub org names cannot contain dots, so a
+dotted first key segment identifies a host. Subgroups are not mapped.
 `ls` can run outside a workspace.
 
 | Backend | Path | Operations |
 |---------|------|------------|
-| S3 | `s3://{bucket}/local/{org}/{project}/{kind}` | Read, list, write with SSE-KMS |
-| Legacy SSM | `/toast/local/{org}/{project}/{kind}` | Read and list only |
+| S3 | `s3://{bucket}/local/{namespace}/{project}/{kind}` | Read, list, write with SSE-KMS |
+| Legacy SSM | `/toast/local/{namespace}/{project}/{kind}` | Read and list only |
 
 `kind` is `env-local` or `prompt-md`. Reads and listings query both backends in
 parallel. The newer timestamp wins; ties prefer S3. A failed read is never
