@@ -237,6 +237,23 @@ class PathTests(unittest.TestCase):
         )
         self.assertIsNone(storage._parse_ssm_name("/foo/bar"))
 
+    def test_non_github_host_is_part_of_namespace(self):
+        namespace = storage.workspace_namespace("gitlab.example.com", "group")
+        self.assertEqual(storage.workspace_namespace("github.com", "org"), "org")
+        self.assertEqual(
+            storage.s3_key(namespace, "proj", "env-local"),
+            "local/gitlab.example.com/group/proj/env-local",
+        )
+        self.assertEqual(
+            storage._parse_s3_key("local/gitlab.example.com/group/proj/env-local"),
+            ("gitlab.example.com/group", "proj", "env-local"),
+        )
+        self.assertEqual(
+            storage._parse_ssm_name("/toast/local/gitlab.example.com/group/proj/env-local"),
+            ("gitlab.example.com/group", "proj", "env-local"),
+        )
+        self.assertIsNone(storage._parse_s3_key("local/group/sub/proj/env-local"))
+
 
 class AwsCommandTests(unittest.TestCase):
     def test_profile_injected(self):
@@ -663,6 +680,22 @@ class StorageSafetyTests(unittest.TestCase):
         ), mock.patch.object(storage, "_cmd_up") as up:
             storage.run_file_sync("env-local", ".env.local", "up")
         self.assertEqual(up.call_args.args[-1], "/tmp/workspace/github.com/org/project/.env.local")
+
+    def test_cwd_host_selects_storage_namespace(self):
+        cases = {
+            "/tmp/workspace/github.com/org/project/workspace/x.y/a/b": ("org", "/tmp/workspace/github.com/org/project"),
+            "/tmp/workspace/gitlab.example.com/group/project/src": (
+                "gitlab.example.com/group",
+                "/tmp/workspace/gitlab.example.com/group/project",
+            ),
+        }
+        for cwd, (namespace, root) in cases.items():
+            with self.subTest(cwd=cwd), mock.patch.object(storage.os, "getcwd", return_value=cwd), mock.patch.object(
+                storage, "resolve_config", return_value=self.cfg
+            ), mock.patch.object(storage, "_cmd_up") as up:
+                storage.run_file_sync("env-local", ".env.local", "up")
+            self.assertEqual(up.call_args.args[1:3], (namespace, "project"))
+            self.assertEqual(up.call_args.args[-1], f"{root}/.env.local")
 
     def test_invalid_command_and_workspace_fail_before_config_or_aws(self):
         with mock.patch.object(storage, "resolve_config") as config:

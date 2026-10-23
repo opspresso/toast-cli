@@ -241,29 +241,50 @@ def resolve_config(config_path=None, create=True):
     return StoreConfig(bucket=bucket, profile=profile, kms_key=kms_key, region=region)
 
 
+def workspace_namespace(host, org):
+    """Storage namespace for a workspace org.
+
+    github.com keeps the original '{org}' namespace; other hosts use
+    '{host}/{org}' so the same org name on different hosts cannot collide.
+    """
+    return org if host == "github.com" else f"{host}/{org}"
+
+
 def ssm_path(org, project, kind):
-    """SSM parameter path for a stored file."""
+    """SSM parameter path for a stored file. org is a workspace namespace."""
     return f"/toast/local/{org}/{project}/{kind}"
 
 
 def s3_key(org, project, kind):
-    """S3 object key for a stored file."""
+    """S3 object key for a stored file. org is a workspace namespace."""
     return f"local/{org}/{project}/{kind}"
 
 
+def _parse_namespace(parts):
+    """Parse '{org}/{project}/{kind}' or '{host}/{org}/{project}/{kind}'.
+
+    GitHub org names cannot contain dots, so a dotted first segment is a host.
+    """
+    if len(parts) == 3:
+        return parts[0], parts[1], parts[2]
+    if len(parts) == 4 and "." in parts[0]:
+        return f"{parts[0]}/{parts[1]}", parts[2], parts[3]
+    return None
+
+
 def _parse_s3_key(key):
-    """Parse 'local/{org}/{project}/{kind}' -> (org, project, kind) or None."""
+    """Parse 'local/{namespace}/{project}/{kind}' -> (namespace, project, kind) or None."""
     parts = key.split("/")
-    if len(parts) == 4 and parts[0] == "local":
-        return parts[1], parts[2], parts[3]
+    if parts[0] == "local":
+        return _parse_namespace(parts[1:])
     return None
 
 
 def _parse_ssm_name(name):
-    """Parse '/toast/local/{org}/{project}/{kind}' -> (org, project, kind) or None."""
+    """Parse '/toast/local/{namespace}/{project}/{kind}' -> (namespace, project, kind) or None."""
     parts = name.strip("/").split("/")
-    if len(parts) == 5 and parts[0] == "toast" and parts[1] == "local":
-        return parts[2], parts[3], parts[4]
+    if parts[:2] == ["toast", "local"]:
+        return _parse_namespace(parts[2:])
     return None
 
 
@@ -682,10 +703,11 @@ def run_file_sync(kind, filename, command):
         raise click.UsageError(f"Unknown command: {command}. Use sync, up, down, dn, diff, or ls")
 
     if command != "ls":
-        match = re.fullmatch(r"(.*/workspace/github[.]com/([^/]+)/([^/]+))(?:/.*)?", os.getcwd())
+        match = re.fullmatch(r"(.*?/workspace/([^/]+[.][^/]+)/([^/]+)/([^/]+))(?:/.*)?", os.getcwd())
         if not match:
-            raise click.ClickException("Current directory must be under workspace/github.com/{org}/{project}")
-        project_root, org_name, project_name = match.groups()
+            raise click.ClickException("Current directory must be under workspace/{host}/{org}/{project}")
+        project_root, host, org, project_name = match.groups()
+        org_name = workspace_namespace(host, org)
         local_path = os.path.join(project_root, filename)
 
     config = resolve_config()

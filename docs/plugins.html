@@ -38,7 +38,7 @@
         <div class="container">
             <h2>Plugins</h2>
             <p>Each command uses the external tools listed in the installation guide. Failures return a nonzero exit status.</p>
-            <p><code>dot</code> and <code>prompt</code> use the project root under <code>~/workspace/github.com/{org}/{project}</code>. They compare S3 and legacy SSM copies, require successful reads from both, and write only to S3. Set <code>TOAST_ENV_STORE_REGION</code> or configure the env-store profile region. Downloads are atomic files with mode 0600.</p>
+            <p><code>dot</code> and <code>prompt</code> use the project root under <code>~/workspace/{host}/{org}/{project}</code>. Keys use <code>{org}</code> for github.com and <code>{host}/{org}</code> for other hosts. They compare S3 and legacy SSM copies, require successful reads from both, and write only to S3. Set <code>TOAST_ENV_STORE_REGION</code> or configure the env-store profile region. Downloads are atomic files with mode 0600.</p>
 
             <div class="plugin-grid">
                 <div class="plugin-card">
