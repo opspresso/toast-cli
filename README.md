@@ -106,7 +106,7 @@ removal. On DGX Spark, Docker images and volumes are not listed. If one item fai
 the others continue and the command exits nonzero. Docker runtimes can return freed
 space late, so the free-space figure may not rise at once.
 
-## Examples
+### Examples
 
 ```bash
 # AWS
