@@ -2,8 +2,6 @@
 
 """Unit tests for the secret-masking helpers (pure logic, no AWS access)."""
 
-import contextlib
-import io
 import unittest
 
 from toast.plugins.utils import (
@@ -11,7 +9,6 @@ from toast.plugins.utils import (
     mask_env_content,
     mask_lines,
     compare_contents,
-    print_unified_diff,
 )
 
 
@@ -95,17 +92,6 @@ class CompareContentsTests(unittest.TestCase):
 
     def test_different(self):
         self.assertEqual(compare_contents("x", "y"), "different")
-
-
-class PrintUnifiedDiffTests(unittest.TestCase):
-    def test_does_not_raise_and_caps(self):
-        # 60 lines with limit 50 -> prints a "more lines" trailer, no exception
-        lines = [f"+line{i}" for i in range(60)]
-        try:
-            with contextlib.redirect_stdout(io.StringIO()):
-                print_unified_diff(lines, limit=50)
-        except Exception as e:  # noqa: BLE001 - test guard
-            self.fail(f"print_unified_diff raised: {e}")
 
 
 class MultilineMaskTests(unittest.TestCase):

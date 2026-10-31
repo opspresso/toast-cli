@@ -7,10 +7,8 @@ import os
 import pkgutil
 import sys
 from typing import List, Type
-from rich.console import Console
+from toast import ui
 from toast.helpers import CustomHelpGroup, get_version
-
-console = Console()
 
 
 def discover_and_load_plugins(
@@ -62,19 +60,27 @@ def discover_and_load_plugins(
     return discovered_plugins
 
 
-@click.group(cls=CustomHelpGroup, context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option(version=get_version(), prog_name="toast-cli", message="%(prog)s version: %(version)s")
-def toast_cli():
+def show_version(ctx, param, value):
+    if value and not ctx.resilient_parsing:
+        ui.result(f"toast-cli {get_version()}")
+        ctx.exit()
+
+
+@click.group(cls=CustomHelpGroup, invoke_without_command=True, context_settings={"help_option_names": ["-h", "--help"]})
+@click.option("--version", is_flag=True, is_eager=True, expose_value=False, callback=show_version, help="Show the version and exit.")
+@click.pass_context
+def toast_cli(ctx):
     """
     Daily commands for AWS, Kubernetes, Git and your workspace.
     """
-    pass
+    if ctx.invoked_subcommand is None:
+        ui.result(ctx.get_help())
 
 
 @toast_cli.command()
 def version():
-    """Display the current version of toast-cli."""
-    console.print(f"toast-cli version: {get_version()}", style="bold cyan")
+    """Show the version."""
+    ui.result(f"toast-cli {get_version()}")
 
 
 def main():
@@ -86,7 +92,7 @@ def main():
         for plugin_class in plugins:
             plugin_class.register(toast_cli)
     except (click.ClickException, ValueError) as e:
-        click.echo(f"Error: {e}", err=True)
+        ui.error(str(e))
         sys.exit(1)
 
     # Run the CLI

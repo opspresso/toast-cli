@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
 import click
-import subprocess
 from toast import ui
 from toast.plugins.base_plugin import BasePlugin
-from toast.plugins.utils import run_command, select_from_list
+from toast.plugins.utils import run_command, spawn
 
 
 class RegionPlugin(BasePlugin):
@@ -34,31 +33,19 @@ class RegionPlugin(BasePlugin):
             cls._apply(region)
             return
 
-        current = subprocess.run(
-            ["aws", "configure", "get", "default.region"],
-            capture_output=True,
-            text=True,
-        )
+        # `aws configure get` exits 1 without output when no region is set.
+        current = spawn(["aws", "configure", "get", "default.region"])
         if current.returncode and current.stderr.strip():
             raise click.ClickException(current.stderr.strip())
 
-        result = run_command(
-            [
-                "aws",
-                "ec2",
-                "describe-regions",
-                "--query",
-                "Regions[].RegionName",
-                "--output",
-                "text",
-            ],
-        )
+        with ui.status("Listing AWS regions"):
+            result = run_command(["aws", "ec2", "describe-regions", "--query", "Regions[].RegionName", "--output", "text"])
         regions = sorted(result.stdout.split())
         if not regions:
             raise click.ClickException("No regions found")
 
-        selected = select_from_list(regions, "Select AWS Region", current=current.stdout.strip())
+        selected = ui.choose(regions, "Select an AWS region", current=current.stdout.strip())
         if selected:
             cls._apply(selected)
         else:
-            ui.muted("No region selected.")
+            ui.cancelled()

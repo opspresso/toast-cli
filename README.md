@@ -23,7 +23,7 @@ Python-based CLI utility with plugin architecture for AWS, Kubernetes, and Git o
 * **Kubernetes**: Context switching, EKS cluster discovery and integration, context deletion
 * **Git**: Repository management (clone, branch, pull, push, rm, mirror), GitHub and GitLab clone URLs and nested groups
 * **Workspace**: Directory navigation, environment file management (.env.local, .prompt.md)
-* **Interface**: FZF-powered interactive menus, formatted output with Rich
+* **Interface**: One look across all commands: filtering pickers, colored help, and clean stdout for scripts
 * **Security**: S3 env-store with SSE-KMS for sensitive files (SSM fallback during transition); secret values masked in diffs and SSM previews
 
 ## Architecture
@@ -37,7 +37,7 @@ Python-based CLI utility with plugin architecture for AWS, Kubernetes, and Git o
 
 ### Requirements
 * Python 3.9+
-* External tools: git, fzf, aws-cli, kubectl (install those required by your commands)
+* External tools: git, aws-cli, kubectl (install those required by your commands)
 * Python packages: click, rich
 
 ### From PyPI
@@ -137,8 +137,8 @@ toast region               # Switch regions
 
 # Kubernetes
 toast ctx                  # Switch contexts
-# Select [New...] to add EKS clusters from current region
-# Select [Del...] to delete contexts (individual or all)
+# Select "+ Add an EKS cluster" to add clusters from the current region
+# Select "- Delete a context" to delete one or all contexts, after a confirmation
 
 # Environment Files (.env.local)
 toast dot                  # Compare local and env-store, choose action (default: sync)
@@ -328,6 +328,7 @@ ENV_STORE_REGION=
 4. Set name and help variables
 
 ```python
+from toast import ui
 from toast.plugins.base_plugin import BasePlugin
 import click
 
@@ -343,7 +344,7 @@ class MyPlugin(BasePlugin):
     @classmethod
     def execute(cls, **kwargs):
         option = kwargs.get("option")
-        click.echo(f"Executing with option: {option}")
+        ui.result(f"Executing with option: {option}")
 ```
 
 ## Aliases
@@ -375,15 +376,41 @@ eval "$(toast completion bash)"   # ~/.bashrc
 toast completion fish | source    # ~/.config/fish/config.fish
 ```
 
-## Failure behavior
+## Output and exit status
 
-Invalid command arguments exit with status 2. Operational failures exit nonzero
-and print to stderr. A cancelled selection performs no action. `cdw` writes only
-the selected path to stdout, so shell functions can safely capture it.
+A command writes its result to stdout: a path, a value, a table or JSON. It writes
+status, warnings, errors, prompts and pickers to stderr. A pipe or `$(...)` therefore
+receives only the result:
 
-`ctx`, `env` and `region` accept a name to skip the picker, such as `toast ctx prod`.
-Pickers use `fzf`. Without `fzf`, a built-in picker runs in a terminal; a script gets
-an error that names the fix.
+```bash
+cd "$(toast cdw)"
+token="$(toast ssm get /app/token --reveal)"
+toast env prod | jq -r .Arn
+```
+
+In a pipe, tables are tab-separated and never cut at the terminal width. Set
+`NO_COLOR` to turn off colors.
+
+| Exit status | Meaning |
+|-------------|---------|
+| 0 | Success. A cancelled picker or a declined confirmation also returns 0 and changes nothing |
+| 1 | The operation failed |
+| 2 | The command line is invalid |
+| 130 | Ctrl-C or end of input at a prompt |
+
+## Pickers
+
+Type to filter a list. Letters can be scattered, and spaces separate terms that must
+all match. Use `↑`/`↓` to move, `Enter` to select, `Ctrl-U` to clear the filter and
+`Esc` to quit. `clean` uses `Space` to select several rows.
+
+A picker needs a terminal. In a script, name the value: `toast ctx prod`, `toast env
+prod` or `toast region ap-northeast-2`. `toast dot sync` has no such form, so use
+`toast dot up` or `toast dot down`.
+
+`ssm put` and `ssm diff` take a value from stdin or a hidden prompt, which keeps it
+out of shell history: `pbpaste | toast ssm put /app/key`. A pipe cannot answer a
+confirmation, so add `--yes` to overwrite an existing parameter.
 
 `git REPO rm` asks for a confirmation and names uncommitted changes and unpushed
 commits. Use `--yes` in scripts.

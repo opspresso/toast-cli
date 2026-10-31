@@ -7,7 +7,21 @@ import click
 from toast import ui
 from toast.plugins.am_plugin import show_identity
 from toast.plugins.base_plugin import BasePlugin
-from toast.plugins.utils import select_from_list, write_private_file
+from toast.plugins.utils import write_private_file
+
+
+def credentials_file():
+    return os.path.expanduser(os.environ.get("AWS_SHARED_CREDENTIALS_FILE", "~/.aws/credentials"))
+
+
+def complete_profiles(ctx, param, incomplete):
+    config = configparser.ConfigParser(interpolation=None)
+    # A completion must stay silent, so an unreadable file offers nothing.
+    try:
+        config.read(credentials_file(), encoding="utf-8")
+    except (OSError, ValueError, configparser.Error):
+        return []
+    return [name for name in config.sections() if name.startswith(incomplete)]
 
 
 class EnvPlugin(BasePlugin):
@@ -23,12 +37,11 @@ class EnvPlugin(BasePlugin):
 
     @classmethod
     def get_arguments(cls, func):
-        return click.argument("profile", required=False)(func)
+        return click.argument("profile", required=False, shell_complete=complete_profiles)(func)
 
     @classmethod
     def execute(cls, profile=None, **kwargs):
-        # AWS credentials file path
-        credentials_path = os.path.expanduser(os.environ.get("AWS_SHARED_CREDENTIALS_FILE", "~/.aws/credentials"))
+        credentials_path = credentials_file()
 
         # Check if file exists
         if not os.path.exists(credentials_path):
@@ -48,11 +61,11 @@ class EnvPlugin(BasePlugin):
             raise click.ClickException(f"Profile '{profile}' is not in {credentials_path}")
 
         # User selects profile
-        selected_profile = profile or select_from_list(profiles, "Select AWS Profile", current="default" if "default" in profiles else None)
+        selected_profile = profile or ui.choose(profiles, "Select an AWS profile", current="default" if "default" in profiles else None)
 
         if selected_profile:
             if selected_profile == "default":
-                ui.muted("Already the default profile.")
+                ui.muted("Already the default profile")
                 return
 
             # Get credentials from selected profile
@@ -87,8 +100,8 @@ class EnvPlugin(BasePlugin):
             config.write(serialized)
             write_private_file(credentials_path, serialized.getvalue())
 
-            ui.success(f"Set '{selected_profile}' as default profile.")
+            ui.success(f"Set {selected_profile} as the default profile")
 
             show_identity(profile="default")
         else:
-            ui.muted("No profile selected.")
+            ui.cancelled()

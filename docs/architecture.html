@@ -45,8 +45,8 @@
                     <li><strong>Click command group</strong><br><code>toast/__init__.py</code> discovers plugins; <code>helpers.py</code> supplies help and version output.</li>
                     <li><strong>BasePlugin</strong><br>Registers command arguments and converts expected failures into nonzero CLI exits.</li>
                     <li><strong>Plugins</strong><br><code>am · cdw · ctx · dot · env · git · prompt · region · ssm</code></li>
-                    <li><strong>Shared operations</strong><br><code>utils.py</code>: command execution, selection, secret masking, atomic file writes.<br><code>storage.py</code>: parallel S3 + SSM reads for dot and prompt; writes to S3.</li>
-                    <li><strong>External tools</strong><br>Git, fzf, kubectl, AWS CLI (STS, EC2, EKS, S3, SSM).</li>
+                    <li><strong>Shared operations</strong><br><code>utils.py</code>: command execution, secret masking, atomic file writes.<br><code>storage.py</code>: parallel S3 + SSM reads for dot and prompt; writes to S3.</li>
+                    <li><strong>External tools</strong><br>Git, kubectl, AWS CLI (STS, EC2, EKS, S3, SSM).</li>
                 </ol>
                 <figcaption id="architecture-caption">Commands flow through a shared plugin boundary. Each plugin calls only the tools it needs.</figcaption>
             </figure>
@@ -99,7 +99,8 @@
                 <p>The plugin will be automatically discovered and loaded when the application starts.</p>
 
                 <div class="code-block">
-                    <pre><code>from toast.plugins.base_plugin import BasePlugin
+                    <pre><code>from toast import ui
+from toast.plugins.base_plugin import BasePlugin
 import click
 
 class MyPlugin(BasePlugin):
@@ -117,9 +118,9 @@ class MyPlugin(BasePlugin):
         # Command implementation
         option = kwargs.get("option")
         if option:
-            click.echo(f"Executing with option: {option}")
+            ui.result(f"Executing with option: {option}")
         else:
-            click.echo("My custom command execution")</code></pre>
+            ui.result("My custom command execution")</code></pre>
                     <button class="copy-btn" type="button" aria-live="polite">Copy</button>
                 </div>
             </div>

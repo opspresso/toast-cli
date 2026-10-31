@@ -5,6 +5,8 @@
 import unittest
 from unittest import mock
 
+from test_cli import separate_streams_runner
+from toast.plugins import ssm_plugin
 from toast.plugins.ssm_plugin import SsmPlugin
 
 
@@ -12,14 +14,14 @@ class SsmDiffTests(unittest.TestCase):
     def test_missing_parameter_does_not_print_diff(self):
         with mock.patch.object(
             SsmPlugin, "_fetch_parameter_value", return_value=(None, None)
-        ), mock.patch("toast.plugins.ssm_plugin.print_unified_diff") as print_diff:
+        ), mock.patch("toast.ui.diff") as print_diff:
             SsmPlugin._diff_parameter("/x", "new", lambda args: args)
         print_diff.assert_not_called()
 
     def test_identical_parameter_does_not_print_diff(self):
         with mock.patch.object(
             SsmPlugin, "_fetch_parameter_value", return_value=("same", None)
-        ), mock.patch("toast.plugins.ssm_plugin.print_unified_diff") as print_diff:
+        ), mock.patch("toast.ui.diff") as print_diff:
             SsmPlugin._diff_parameter("/x", "same", lambda args: args)
         print_diff.assert_not_called()
 
@@ -27,7 +29,7 @@ class SsmDiffTests(unittest.TestCase):
         with mock.patch.object(
             SsmPlugin, "_fetch_parameter_value", return_value=("oldsecret", None)
         ), mock.patch("toast.plugins.ssm_plugin.show_diff") as show_diff, mock.patch(
-            "toast.plugins.ssm_plugin.print_unified_diff"
+            "toast.ui.diff"
         ) as print_diff:
             show_diff.return_value = ["diff"]
             SsmPlugin._diff_parameter("/x", "newsecret", lambda args: args)
@@ -53,7 +55,7 @@ class SsmPutTests(unittest.TestCase):
         with mock.patch.object(
             SsmPlugin, "_fetch_parameter_value", return_value=(None, None)
         ), mock.patch(
-            "toast.plugins.ssm_plugin.subprocess.run",
+            "subprocess.run",
             return_value=self._fake_put_run(),
         ) as run_mock, mock.patch(
             "toast.plugins.ssm_plugin.click.confirm"
@@ -66,7 +68,7 @@ class SsmPutTests(unittest.TestCase):
         with mock.patch.object(
             SsmPlugin, "_fetch_parameter_value", return_value=("old", None)
         ), mock.patch(
-            "toast.plugins.ssm_plugin.subprocess.run",
+            "subprocess.run",
             return_value=self._fake_put_run(),
         ) as run_mock, mock.patch(
             "toast.plugins.ssm_plugin.click.confirm", return_value=False
@@ -150,11 +152,50 @@ class SsmCliTests(unittest.TestCase):
     def test_empty_account_can_create_first_parameter(self):
         import subprocess
         with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, '{"Parameters": []}', "")), mock.patch(
-            "toast.plugins.ssm_plugin.select_from_list", return_value="[New] Create new parameter..."
+            "toast.ui.choose", return_value=ssm_plugin.NEW
         ), mock.patch.object(SsmPlugin, "_create_new_parameter") as create:
             result = self.runner.invoke(self.cli, ["ssm"])
         self.assertEqual(result.exit_code, 0)
         create.assert_called_once()
+
+    def test_put_reads_the_value_from_stdin(self):
+        with mock.patch.object(SsmPlugin, "_put_parameter") as put:
+            result = self.runner.invoke(self.cli, ["ssm", "put", "/x"], input="piped-secret\n")
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(put.call_args.args[:2], ("/x", "piped-secret"))
+        self.assertNotIn("piped-secret", result.output)
+
+    def test_stdin_loses_only_the_final_newline(self):
+        with mock.patch.object(SsmPlugin, "_put_parameter") as put:
+            self.runner.invoke(self.cli, ["ssm", "put", "/x"], input="alpha\n\n")
+        self.assertEqual(put.call_args.args[1], "alpha\n")
+
+    def test_piped_value_needs_yes_to_overwrite(self):
+        import subprocess
+        existing = '{"Parameter": {"Value": "old", "Type": "SecureString"}}'
+
+        def run(args, **kwargs):
+            return subprocess.CompletedProcess(args, 0, existing if "get-parameter" in args else '{"Version": 2}', "")
+
+        with mock.patch("subprocess.run", side_effect=run) as process:
+            refused = self.runner.invoke(self.cli, ["ssm", "put", "/x"], input="new-secret\n")
+            self.assertEqual(refused.exit_code, 1)
+            self.assertIn("--yes", refused.output)
+            self.assertFalse(any("put-parameter" in call.args[0] for call in process.call_args_list))
+            accepted = self.runner.invoke(self.cli, ["ssm", "put", "/x", "--yes"], input="new-secret\n")
+        self.assertEqual(accepted.exit_code, 0, accepted.output)
+        self.assertTrue(any("put-parameter" in call.args[0] for call in process.call_args_list))
+
+    def test_put_without_any_value_is_a_usage_error(self):
+        result = self.runner.invoke(self.cli, ["ssm", "put", "/x"], input="")
+        self.assertEqual(result.exit_code, 2)
+
+    def test_get_sends_only_the_value_to_stdout(self):
+        import subprocess
+        response = '{"Parameter": {"Value": "plain", "Type": "SecureString"}}'
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, response, "")):
+            result = separate_streams_runner().invoke(self.cli, ["ssm", "get", "/x", "--reveal"])
+        self.assertEqual(result.stdout, "plain\n")
 
     def test_get_rejects_malformed_success_response(self):
         import subprocess

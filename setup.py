@@ -23,8 +23,8 @@ setup(
     include_package_data=True,
     python_requires=">=3.9",
     install_requires=[
-        "click",
-        "rich",
+        "click>=8.1",
+        "rich>=13",
     ],
     entry_points={
         "console_scripts": [

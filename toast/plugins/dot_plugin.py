@@ -11,6 +11,13 @@ class DotPlugin(BasePlugin):
     name = "dot"
     help = "Manage .env.local files"
     category = "Workspace"
+    commands = (
+        ("sync", "Compare, then choose a direction (default)"),
+        ("up", "Upload to the env-store"),
+        ("down", "Download from the env-store (alias: dn)"),
+        ("diff", "Show the masked differences"),
+        ("ls", "List the entries in the env-store"),
+    )
     examples = (
         ("toast dot", "Sync .env.local with the env-store"),
         ("toast dot up", "Upload .env.local"),
@@ -18,7 +25,7 @@ class DotPlugin(BasePlugin):
 
     @classmethod
     def get_arguments(cls, func):
-        func = click.argument("command", required=False)(func)
+        func = click.argument("command", required=False, shell_complete=cls.complete_command)(func)
         return func
 
     @classmethod

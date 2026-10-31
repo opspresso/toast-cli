@@ -3,23 +3,38 @@
 import subprocess
 import click
 import json
-import hashlib
-import difflib
 import re
 import os
-import shutil
 import tempfile
 
-from toast import ui
+
+# hashlib, difflib and concurrent.futures load inside the functions that need them.
+# Every command and every shell completion would pay for them otherwise.
+
+
+def spawn(args, **kwargs):
+    """Run a command and return its result, whatever its exit status."""
+    try:
+        return subprocess.run(args, capture_output=True, text=True, **kwargs)
+    except FileNotFoundError as exc:
+        raise click.ClickException(f"{args[0]} is not installed") from exc
 
 
 def run_command(args, **kwargs):
     """Run a command and report failures without including its arguments."""
-    result = subprocess.run(args, capture_output=True, text=True, **kwargs)
+    result = spawn(args, **kwargs)
     if result.returncode:
         detail = result.stderr.strip() or f"exit status {result.returncode}"
         raise click.ClickException(f"{args[0]} failed: {detail}")
     return result
+
+
+def read_local_file(path):
+    """Return a UTF-8 file with its line endings intact, or None when it is absent."""
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        return f.read()
 
 
 def write_private_file(path, content):
@@ -34,29 +49,6 @@ def write_private_file(path, content):
             os.unlink(temporary)
 
 
-def select_from_list(options, prompt="Select an option", current=None):
-    """Return the chosen option, or None after a cancel. CURRENT is shown as a header."""
-    if not options:
-        return None
-    if not shutil.which("fzf"):
-        if ui.is_interactive():
-            return ui.select_one(options, prompt)
-        raise click.ClickException("fzf is required without a terminal. Install it: brew install fzf")
-    args = ["fzf", "--height=40%", "--min-height=10", "--reverse", "--border=rounded", "--cycle", "--info=inline", "--prompt", prompt + ": "]
-    if current:
-        args += ["--header", f"Current: {current}"]
-    fzf_proc = subprocess.run(args, input="\n".join(options), capture_output=True, text=True)
-    # fzf: 1 = no match, 130 = user cancellation; other failures are errors.
-    if fzf_proc.returncode in (1, 130):
-        return None
-    if fzf_proc.returncode:
-        raise click.ClickException(f"fzf failed: {fzf_proc.stderr.strip()}")
-    selected = fzf_proc.stdout.rstrip("\n")
-    if selected and selected not in options:
-        raise click.ClickException("fzf returned an unknown selection")
-    return selected or None
-
-
 def aws_error_code(stderr):
     """Extract the service error code, without mistaking message text for a code."""
     match = re.search(r"An error occurred \(([^)]+)\)", stderr or "")
@@ -65,7 +57,7 @@ def aws_error_code(stderr):
 
 def fetch_ssm_parameter(args):
     """Return a decrypted Parameter object, or None only for ParameterNotFound."""
-    result = subprocess.run(args, capture_output=True, text=True)
+    result = spawn(args)
     if result.returncode:
         if aws_error_code(result.stderr) == "ParameterNotFound":
             return None
@@ -96,6 +88,8 @@ def compute_hash(content):
     """Compute SHA256 hash of content."""
     if content is None:
         return None
+    import hashlib
+
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
 
 
@@ -175,6 +169,8 @@ def show_diff(local_content, remote_content, local_name="LOCAL", remote_name="RE
     Returns:
         list: Diff lines for display
     """
+    import difflib
+
     local_lines = (local_content or "").splitlines(keepends=True)
     remote_lines = (remote_content or "").splitlines(keepends=True)
 
@@ -189,19 +185,6 @@ def show_diff(local_content, remote_content, local_name="LOCAL", remote_name="RE
     )
 
     return diff
-
-
-def print_unified_diff(diff_lines, limit=50):
-    """Print unified-diff lines with +/- colored, capped at `limit` lines."""
-    for line in diff_lines[:limit]:
-        if line.startswith("+") and not line.startswith("+++"):
-            click.secho(line.rstrip(), fg="green")
-        elif line.startswith("-") and not line.startswith("---"):
-            click.secho(line.rstrip(), fg="red")
-        else:
-            click.echo(line.rstrip())
-    if len(diff_lines) > limit:
-        click.echo(f"... ({len(diff_lines) - limit} more lines)")
 
 
 def compare_contents(local_content, remote_content):
@@ -221,62 +204,3 @@ def compare_contents(local_content, remote_content):
         return "identical"
     else:
         return "different"
-
-
-def select_sync_action(status, file_name):
-    """
-    Present sync action options to user via fzf.
-
-    Args:
-        status: Comparison status ('identical', 'different', 'local_only', 'remote_only')
-        file_name: Name of the file being synced
-
-    Returns:
-        str: Selected action ('upload', 'download', 'cancel', or None)
-    """
-    if status == "identical":
-        click.echo(f"'{file_name}' is identical between local and env-store.")
-        return None
-
-    options = []
-    descriptions = {}
-
-    if status == "different":
-        options = [
-            "⬆ Upload (local → env-store)",
-            "⬇ Download (env-store → local)",
-            "✗ Cancel",
-        ]
-        descriptions = {
-            "⬆ Upload (local → env-store)": "upload",
-            "⬇ Download (env-store → local)": "download",
-            "✗ Cancel": "cancel",
-        }
-    elif status == "local_only":
-        options = [
-            "⬆ Upload (local → env-store)",
-            "✗ Cancel",
-        ]
-        descriptions = {
-            "⬆ Upload (local → env-store)": "upload",
-            "✗ Cancel": "cancel",
-        }
-    elif status == "remote_only":
-        options = [
-            "⬇ Download (env-store → local)",
-            "✗ Cancel",
-        ]
-        descriptions = {
-            "⬇ Download (env-store → local)": "download",
-            "✗ Cancel": "cancel",
-        }
-
-    if not options:
-        return None
-
-    selected = select_from_list(options, f"Select action for {file_name}")
-
-    if selected and selected in descriptions:
-        return descriptions[selected]
-
-    return "cancel"

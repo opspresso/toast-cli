@@ -8,7 +8,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > Note: a `vMAJOR.MINOR.PATCH` tag on `main` publishes a release. Versions up to
 > 4.1.16 were published per push, so not every patch version has a section here.
 
-## [Unreleased]
+## [5.0.0] - 2026-10-31
+
+### Changed
+- **Breaking: stdout now holds only the result.** Status, warnings, prompts and pickers go to stderr. A script that parsed a status line must read stderr or use the exit status
+- **Breaking: `fzf` is gone.** One built-in picker serves every command, with type-to-filter, match highlighting, and the cursor on the current value. A picker needs a terminal; a script names the value, or uses `dot up` and `dot down` instead of `dot sync`
+- **Breaking: exit status 130** for Ctrl-C or end of input at a prompt. A declined `git rm` now exits 0
+- `ssm get` prints only the value to stdout, and the details to stderr
+- Tables are tab-separated in a pipe; `ssm ls` and `dot ls` use the same table as `clean --list`
+- `toast` without arguments shows help and exits 0; `--version` and `version` print the same line
+- Sizes below 1 GiB use MiB
+- Clearer picker entries: `+ Add an EKS cluster`, `- Delete a context`, `+ Create a parameter`, `Print the value`
+
+### Added
+- One look across commands: shared palette, symbols (`✓ ! ✗`), messages, colored help and errors; `NO_COLOR` is honored
+- `ctx` asks before it deletes one or all contexts
+- `ssm put` and `ssm diff` read the value from stdin or a hidden prompt; `ssm put --yes` overwrites without a confirmation
+- A spinner during AWS, Git and env-store calls; `git pull` and `push` show Git's result
+- Every usage error shows the usage line and the help command; a typo suggests the command
+- `Commands` section in help, and completion for subcommands, contexts and profiles
+
+### Fixed
+- A picker stops at end of input instead of looping forever
+- A long name no longer wraps at 80 columns in a pipe
+- A missing tool reports `aws is not installed` instead of an OS error
+
+## [4.2.0] - 2026-10-31
 
 ### Changed
 - **`toast git REPO rm` now asks first** and names uncommitted changes and unpushed commits; use `--yes` in scripts

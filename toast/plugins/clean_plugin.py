@@ -5,14 +5,13 @@ import shutil
 from pathlib import Path
 
 import click
-from rich.table import Table
 from rich.text import Text
 
 from toast import ui
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.clean_catalog import CACHE, DATA, DOWNLOAD, blocked_reason, catalog, list_processes, readable, scan
 
-RISK_STYLES = {CACHE: "green", DOWNLOAD: "yellow", DATA: "bold red"}
+RISK_STYLES = {CACHE: ui.GOOD, DOWNLOAD: ui.WARN, DATA: f"bold {ui.BAD}"}
 
 
 def total_size(items):
@@ -25,18 +24,13 @@ def space_summary(selected_size, free):
 
 def show_table(items, home):
     processes = list_processes()
-    table = Table(box=None, pad_edge=False, header_style="bold")
-    table.add_column("#", justify="right", style="dim", no_wrap=True, min_width=2)
-    table.add_column("SIZE", justify="right", no_wrap=True, min_width=9)
-    table.add_column("RISK", no_wrap=True, min_width=8)
-    table.add_column("NAME", no_wrap=True, min_width=18)
-    table.add_column("DESCRIPTION", overflow="ellipsis", no_wrap=True)
+    rows = []
     for number, item in enumerate(items, 1):
         reason = blocked_reason(item, processes)
         # The reason goes first: a narrow terminal cuts the end of this column.
         description = Text.assemble((f"blocked: {reason} · ", "yellow") if reason else "", item.description)
-        table.add_row(str(number), ui.format_size(item.bytes), Text(item.risk, style=RISK_STYLES[item.risk]), item.name, description)
-    ui.console.print(table)
+        rows.append((str(number).rjust(2), ui.format_size(item.bytes).rjust(9), Text(item.risk, style=RISK_STYLES[item.risk]), item.name, description))
+    ui.table(("#", "SIZE", "RISK", "NAME", "DESCRIPTION"), rows, min_widths=(2, 9, 8, 18))
     free = shutil.disk_usage(home).free
     ui.info(f"Reclaimable {ui.format_size(total_size(items))} · {space_summary(total_size(items), free)}")
     show_access_notice(home)
@@ -57,7 +51,7 @@ def choose_with_picker(items, home):
             Text(ui.format_size(item.bytes).rjust(9)),
             Text(item.risk.ljust(8), style=RISK_STYLES[item.risk]),
             Text(item.name.ljust(19)),
-            Text(item.description, style="dim"),
+            Text(item.description, style=ui.MUTED),
         ]
         rows.append(ui.Row(item.name, cells, blocked=blocked_reason(item, processes), value=item))
 
@@ -78,10 +72,7 @@ def choose_with_picker(items, home):
 def choose_with_prompt(items, home):
     """Serve pipes and terminals without a key-by-key input mode."""
     show_table(items, home)
-    try:
-        answer = click.prompt("Enter numbers or names (1 3 5), a for all except data, q to quit", default="q", show_default=False)
-    except click.Abort:
-        return None
+    answer = ui.prompt("Enter numbers or names (1 3 5), a for all except data, q to quit", default="q", show_default=False)
     tokens = answer.replace(",", " ").split()
     if not tokens or any(token.lower() == "q" for token in tokens):
         return None
@@ -105,14 +96,10 @@ def select(items, tokens):
 
 
 def confirm(chosen):
-    for item in chosen:
-        ui.console.print(Text.assemble("  ", (ui.format_size(item.bytes).rjust(9)), "  ", item.name))
+    ui.fields([(ui.format_size(item.bytes).rjust(9), item.name) for item in chosen])
     if any(item.risk == DATA for item in chosen):
         ui.warning("The selection includes data that cannot be restored.")
-    try:
-        return click.confirm(f"Remove {len(chosen)} items ({ui.format_size(total_size(chosen))})?", default=False)
-    except click.Abort:
-        return False
+    return ui.confirm(f"Remove {len(chosen)} items ({ui.format_size(total_size(chosen))})?")
 
 
 def remove(chosen, home):
@@ -124,11 +111,11 @@ def remove(chosen, home):
             ui.warning(f"Skipped {item.name}: {reason}")
             continue
         try:
-            with ui.console.status(f"Removing {item.name}"):
+            with ui.status(f"Removing {item.name}"):
                 item.remove(home)
         except (OSError, click.ClickException) as exc:
             message = exc.format_message() if isinstance(exc, click.ClickException) else str(exc)
-            ui.console.print(Text(f"✗ {item.name}: {message}", style="bold red"))
+            ui.error(f"{item.name}: {message}")
             failed.append(item.name)
         else:
             ui.success(f"{item.name} ({ui.format_size(item.bytes)})")
@@ -167,14 +154,11 @@ class CleanPlugin(BasePlugin):
         if yes and not names:
             raise click.UsageError("--yes needs item names; see toast clean --list")
         home = Path.home()
-        if ui.is_interactive() and not as_json:
-            with ui.error_console.status("Measuring disk usage"):
-                items = scan(home)
-        else:
+        with ui.status("Measuring disk usage"):
             items = scan(home)
         if as_json:
             processes = list_processes()
-            click.echo(json.dumps([
+            ui.result(json.dumps([
                 {"name": item.name, "bytes": item.bytes, "risk": item.risk, "description": item.description, "blocked": blocked_reason(item, processes)}
                 for item in items
             ], indent=2))
@@ -193,6 +177,6 @@ class CleanPlugin(BasePlugin):
         else:
             chosen = choose_with_prompt(items, home)
         if not chosen or not (yes or confirm(chosen)):
-            ui.muted("Nothing removed")
+            ui.cancelled()
             return
         remove(chosen, home)

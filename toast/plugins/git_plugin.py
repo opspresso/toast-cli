@@ -3,14 +3,11 @@
 import click
 import os
 import shutil
-import subprocess
 import re
 from urllib.parse import urlsplit
-from rich.console import Console
+from toast import ui
 from toast.plugins.base_plugin import BasePlugin
-from toast.plugins.utils import run_command
-
-console = Console()
+from toast.plugins.utils import run_command, spawn
 
 
 def get_github_host():
@@ -67,6 +64,13 @@ class GitPlugin(BasePlugin):
     name = "git"
     help = "Manage Git repositories"
     category = "Workspace"
+    commands = (
+        ("clone", "Clone into this namespace (alias: cl)"),
+        ("pull", "Pull the current branch (alias: p)"),
+        ("push", "Push the current branch (alias: ps)"),
+        ("branch", "Create and switch to --branch (alias: b)"),
+        ("rm", "Remove the checkout after a confirmation"),
+    )
     examples = (
         ("toast git my-repo clone", "Clone into this namespace"),
         ("toast git my-repo pull -r", "Pull with rebase"),
@@ -75,7 +79,7 @@ class GitPlugin(BasePlugin):
 
     @classmethod
     def get_arguments(cls, func):
-        func = click.argument("command", required=True)(func)
+        func = click.argument("command", required=True, shell_complete=cls.complete_command)(func)
         func = click.argument("repo_name", required=True)(func)
         func = click.option("--branch", "-b", help="Branch name for branch operation")(
             func
@@ -98,14 +102,14 @@ class GitPlugin(BasePlugin):
     @staticmethod
     def _confirm_remove(repo_name, repo_path):
         """Name what would be lost, because the removal cannot be undone."""
-        status = subprocess.run(["git", "status", "--short", "--branch"], cwd=repo_path, capture_output=True, text=True)
+        status = spawn(["git", "status", "--short", "--branch"], cwd=repo_path)
         lines = status.stdout.splitlines()
         changed = sum(1 for line in lines if not line.startswith("##"))
         if changed:
-            console.print(f"! {repo_name} has {changed} uncommitted changes.", style="bold yellow", markup=False)
+            ui.warning(f"{repo_name} has {changed} uncommitted changes")
         if lines and "ahead" in lines[0]:
-            console.print(f"! {repo_name} has commits that are not pushed.", style="bold yellow", markup=False)
-        click.confirm(f"Remove {repo_path}? This cannot be undone.", abort=True)
+            ui.warning(f"{repo_name} has commits that are not pushed")
+        return ui.confirm(f"Remove {repo_path}? This cannot be undone.")
 
     @classmethod
     def execute(
@@ -122,7 +126,7 @@ class GitPlugin(BasePlugin):
         aliases = {"cl": "clone", "b": "branch", "p": "pull", "ps": "push"}
         command = aliases.get(command, command)
         if command not in ("clone", "rm", "branch", "pull", "push"):
-            raise click.UsageError(f"Unknown git command: {command}")
+            raise click.UsageError(f"Unknown git command: {command}. Use clone, pull, push, branch or rm")
         if target is not None and command != "clone":
             raise click.UsageError("--target requires clone")
         if branch is not None and command != "branch":
@@ -161,9 +165,9 @@ class GitPlugin(BasePlugin):
                 raise click.ClickException(f"Target directory '{target or repo_name}' already exists")
             if repo_url is None:
                 repo_url = f"git@{get_github_host()}:{namespace}/{repo_name}.git"
-            console.print(f"Cloning {repo_name} into {target_path}...", style="cyan", markup=False)
-            run_command(["git", "clone", repo_url, target_path])
-            console.print(f"✓ Successfully cloned {repo_name} to {target_path}", style="bold green", markup=False)
+            with ui.status(f"Cloning {repo_name}"):
+                run_command(["git", "clone", repo_url, target_path])
+            ui.success(f"Cloned {repo_name} to {target_path}")
             return
 
         # Never rewrite the name of an existing repository: it could select a
@@ -179,10 +183,11 @@ class GitPlugin(BasePlugin):
             raise click.ClickException(f"'{repo_name}' is not a Git repository")
 
         if command == "rm":
-            if not yes:
-                cls._confirm_remove(repo_name, repo_path)
+            if not (yes or cls._confirm_remove(repo_name, repo_path)):
+                ui.cancelled()
+                return
             shutil.rmtree(repo_path)
-            console.print(f"✓ Successfully removed {repo_path}", style="bold green", markup=False)
+            ui.success(f"Removed {repo_path}")
             return
         if command == "branch":
             if not branch:
@@ -196,5 +201,9 @@ class GitPlugin(BasePlugin):
             args = ["git", "push", "--mirror", repo_url]
         else:
             args = ["git", "push"]
-        run_command(args, cwd=repo_path)
-        console.print(f"✓ Successfully completed {command} for {repo_name}", style="bold green", markup=False)
+        with ui.status(f"Running git {command} in {repo_name}"):
+            result = run_command(args, cwd=repo_path)
+        ui.success(f"Finished {command} in {repo_name}")
+        # Git writes the outcome to one stream or the other, depending on the command.
+        for line in (result.stdout + result.stderr).strip().splitlines():
+            ui.muted(f"  {line}")

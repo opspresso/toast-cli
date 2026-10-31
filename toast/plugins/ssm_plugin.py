@@ -2,24 +2,26 @@
 
 import json
 import os
-import subprocess
+import sys
 import tempfile
 
 import click
-from rich.console import Console
+from toast import ui
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.utils import (
     aws_error_code,
     fetch_ssm_parameter,
     run_command,
-    select_from_list,
+    spawn,
     mask_secret,
     mask_lines,
     show_diff,
-    print_unified_diff,
 )
 
-console = Console(markup=False, highlight=False)
+NEW = "+ Create a parameter"
+PRINT = "Print the value"
+UPDATE = "Update the value"
+DELETE = "Delete the parameter"
 
 
 class SsmPlugin(BasePlugin):
@@ -28,9 +30,17 @@ class SsmPlugin(BasePlugin):
     name = "ssm"
     help = "AWS SSM Parameter Store operations"
     category = "AWS"
+    commands = (
+        ("get", "Show a masked value; --reveal prints it (alias: g)"),
+        ("put", "Store a SecureString; the value can come from stdin (alias: p)"),
+        ("diff", "Compare a value with the stored one"),
+        ("delete", "Delete after a confirmation (aliases: d, rm)"),
+        ("ls", "List parameters, optionally under a path"),
+    )
     examples = (
         ("toast ssm", "Browse parameters"),
         ("toast ssm get /app/key --reveal", "Print a value"),
+        ("pbpaste | toast ssm put /app/key --yes", "Store a value without shell history"),
         ("toast ssm ls /app", "List a path"),
     )
 
@@ -39,13 +49,14 @@ class SsmPlugin(BasePlugin):
         # Click reverses decorators when it constructs the command parameters.
         func = click.argument("value", required=False)(func)
         func = click.argument("name", required=False)(func)
-        func = click.argument("command", required=False)(func)
+        func = click.argument("command", required=False, shell_complete=cls.complete_command)(func)
         func = click.option("--region", "-r", help="AWS region")(func)
         func = click.option("--reveal", is_flag=True, help="Show secret values in plaintext")(func)
+        func = click.option("--yes", "-y", is_flag=True, help="Overwrite with put without a confirmation")(func)
         return func
 
     @classmethod
-    def execute(cls, command=None, name=None, value=None, region=None, reveal=False, **kwargs):
+    def execute(cls, command=None, name=None, value=None, region=None, reveal=False, yes=False, **kwargs):
         def aws_cmd(args):
             return ["aws", "ssm"] + args + (["--region", region] if region else [])
 
@@ -61,13 +72,17 @@ class SsmPlugin(BasePlugin):
             raise click.UsageError(f"{command} does not accept a value")
         if command in ("get", "delete", "put", "diff") and not name:
             raise click.UsageError("Parameter name is required")
+        if yes and command != "put":
+            raise click.UsageError("--yes requires put")
+        # A value read from a pipe consumes stdin, so no confirmation can follow.
+        can_confirm = bool(value) or sys.stdin.isatty()
         if command in ("put", "diff") and not value:
-            raise click.UsageError("Parameter value is required")
+            value = cls._read_value()
 
         if command == "get":
             cls._get_parameter(name, aws_cmd, reveal)
         elif command == "put":
-            cls._put_parameter(name, value, aws_cmd)
+            cls._put_parameter(name, value, aws_cmd, yes=yes, can_confirm=can_confirm)
         elif command == "diff":
             cls._diff_parameter(name, value, aws_cmd)
         elif command == "delete":
@@ -78,10 +93,21 @@ class SsmPlugin(BasePlugin):
             cls._interactive_mode(aws_cmd, reveal)
 
     @staticmethod
+    def _read_value():
+        """Read a value without placing it in the command line or shell history."""
+        if sys.stdin.isatty():
+            return ui.prompt("Parameter value", hide_input=True)
+        value = sys.stdin.read().removesuffix("\n")
+        if not value:
+            raise click.UsageError("Parameter value is required")
+        return value
+
+    @staticmethod
     def _fetch_parameter(name, aws_cmd):
-        return fetch_ssm_parameter(aws_cmd([
-            "get-parameter", "--name", name, "--with-decryption", "--output", "json",
-        ]))
+        with ui.status(f"Reading {name}"):
+            return fetch_ssm_parameter(aws_cmd([
+                "get-parameter", "--name", name, "--with-decryption", "--output", "json",
+            ]))
 
     @classmethod
     def _require_parameter(cls, name, aws_cmd):
@@ -92,15 +118,13 @@ class SsmPlugin(BasePlugin):
 
     @staticmethod
     def _display_parameter(name, parameter, reveal=False):
-        console.print(f"Name: {name}")
-        console.print(f"Type: {parameter.get('Type', '')}")
+        details = [("Name", name), ("Type", parameter.get("Type", ""))]
         if parameter.get("LastModifiedDate"):
-            console.print(f"Last Modified: {parameter['LastModifiedDate']}")
-        console.print("-" * 40)
-        # click.echo preserves markup-like text, whitespace, and long values.
-        click.echo(parameter["Value"] if reveal else mask_secret(parameter["Value"]))
+            details.append(("Modified", str(parameter["LastModifiedDate"])))
+        ui.fields(details)
+        ui.result(parameter["Value"] if reveal else mask_secret(parameter["Value"]))
         if not reveal:
-            console.print("(masked — use --reveal to show full value)", style="yellow")
+            ui.muted("Masked. Use --reveal to print the value.")
 
     @classmethod
     def _get_parameter(cls, name, aws_cmd, reveal=False):
@@ -116,25 +140,27 @@ class SsmPlugin(BasePlugin):
 
     @staticmethod
     def _print_diff(name, value, existing):
-        console.print(f"'{name}' differences (masked):")
-        console.print("-" * 40)
-        print_unified_diff(show_diff(
+        ui.info(f"{name} differences (masked)")
+        ui.rule()
+        ui.diff(show_diff(
             mask_lines(value), mask_lines(existing), local_name="NEW", remote_name="CURRENT",
         ))
-        console.print("-" * 40)
+        ui.rule()
 
     @classmethod
-    def _put_parameter(cls, name, value, aws_cmd):
+    def _put_parameter(cls, name, value, aws_cmd, yes=False, can_confirm=True):
         existing, error = cls._fetch_parameter_value(name, aws_cmd)
         if error:
             raise click.ClickException(f"Could not read current value: {error}")
         if existing == value:
-            console.print(f"✓ '{name}' already has this value. Nothing to do.", style="bold green")
+            ui.success(f"{name} already has this value")
             return
         if existing is not None:
             cls._print_diff(name, value, existing)
-            if not click.confirm(f"Store '{name}' as SecureString (overwrites current value)?"):
-                console.print("Operation cancelled.")
+            if not (yes or can_confirm):
+                raise click.ClickException(f"{name} already exists. Add --yes to overwrite it.")
+            if not (yes or ui.confirm(f"Overwrite {name} as a SecureString?")):
+                ui.cancelled()
                 return
 
         # Keep plaintext out of the child process command line. A private file
@@ -143,10 +169,8 @@ class SsmPlugin(BasePlugin):
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
                 json.dump({"Name": name, "Value": value, "Type": "SecureString", "Overwrite": existing is not None}, stream)
-            result = subprocess.run(
-                aws_cmd(["put-parameter", "--cli-input-json", f"file://{path}", "--output", "json"]),
-                capture_output=True, text=True,
-            )
+            with ui.status(f"Storing {name}"):
+                result = spawn(aws_cmd(["put-parameter", "--cli-input-json", f"file://{path}", "--output", "json"]))
             if result.returncode:
                 # Validation errors may echo the payload, so show only the code.
                 code = aws_error_code(result.stderr) or f"exit status {result.returncode}"
@@ -154,7 +178,7 @@ class SsmPlugin(BasePlugin):
             version = json.loads(result.stdout)["Version"]
         finally:
             os.unlink(path)
-        console.print(f"✓ Successfully stored '{name}' (Version: {version})", style="bold green")
+        ui.success(f"Stored {name} (version {version})")
 
     @classmethod
     def _diff_parameter(cls, name, value, aws_cmd):
@@ -162,63 +186,62 @@ class SsmPlugin(BasePlugin):
         if error:
             raise click.ClickException(f"Could not read current value: {error}")
         if existing is None:
-            console.print(f"'{name}' does not exist. New value would create it.")
+            ui.info(f"{name} does not exist. This value would create it.")
         elif existing == value:
-            console.print(f"✓ '{name}' already has this value. No differences.", style="bold green")
+            ui.success(f"{name} already has this value")
         else:
             cls._print_diff(name, value, existing)
 
     @classmethod
     def _delete_parameter(cls, name, aws_cmd):
-        if not click.confirm(f"Delete parameter '{name}'? This cannot be undone."):
-            console.print("Operation cancelled.")
+        if not ui.confirm(f"Delete {name}? This cannot be undone."):
+            ui.cancelled()
             return
-        run_command(aws_cmd(["delete-parameter", "--name", name]))
-        console.print(f"✓ Successfully deleted '{name}'", style="bold green")
+        with ui.status(f"Deleting {name}"):
+            run_command(aws_cmd(["delete-parameter", "--name", name]))
+        ui.success(f"Deleted {name}")
 
     @classmethod
     def _list_parameters(cls, path, aws_cmd):
         args = (["get-parameters-by-path", "--path", path, "--recursive"] if path else ["describe-parameters"])
-        parameters = json.loads(run_command(aws_cmd(args + ["--output", "json"])).stdout)["Parameters"]
+        with ui.status("Listing parameters"):
+            parameters = json.loads(run_command(aws_cmd(args + ["--output", "json"])).stdout)["Parameters"]
         if not parameters:
-            console.print("No parameters found.", style="yellow")
+            ui.warning(f"No parameters under {path}" if path else "No parameters")
             return
-        console.print(f"AWS SSM Parameters{' under ' + path if path else ''}:")
-        for parameter in parameters:
-            console.print(parameter["Name"])
-            console.print(f"  Type: {parameter.get('Type', '')}, Modified: {parameter.get('LastModifiedDate', '')}")
+        ui.table(
+            ("TYPE", "MODIFIED", "NAME"),
+            [(parameter.get("Type", ""), str(parameter.get("LastModifiedDate", "")), parameter["Name"]) for parameter in parameters],
+        )
 
     @classmethod
     def _interactive_mode(cls, aws_cmd, reveal=False):
-        console.print("Loading parameters from AWS SSM...")
-        parameters = json.loads(run_command(aws_cmd(["describe-parameters", "--output", "json"])).stdout)["Parameters"]
-        options = ["[New] Create new parameter..."] + sorted(p["Name"] for p in parameters)
-        selected = select_from_list(options, "Select parameter")
-        if selected == options[0]:
+        with ui.status("Listing parameters"):
+            parameters = json.loads(run_command(aws_cmd(["describe-parameters", "--output", "json"])).stdout)["Parameters"]
+        selected = ui.choose(sorted(p["Name"] for p in parameters) + [NEW], "Select a parameter")
+        if selected == NEW:
             cls._create_new_parameter(aws_cmd)
         elif selected:
             cls._parameter_actions(selected, aws_cmd, reveal)
         else:
-            console.print("No selection made.", style="yellow")
+            ui.cancelled()
 
     @classmethod
     def _create_new_parameter(cls, aws_cmd):
-        name = click.prompt("Parameter name (e.g., /my/secret)")
-        value = click.prompt("Parameter value", hide_input=True)
+        name = ui.prompt("Parameter name (for example, /my/secret)")
+        value = ui.prompt("Parameter value", hide_input=True)
         cls._put_parameter(name, value, aws_cmd)
 
     @classmethod
     def _parameter_actions(cls, name, aws_cmd, reveal=False):
         parameter = cls._require_parameter(name, aws_cmd)
         cls._display_parameter(name, parameter, reveal)
-        selected = select_from_list(
-            ["Copy value (print only)", "Update value", "Delete parameter", "Cancel"], "Select action",
-        )
-        if selected == "Update value":
-            cls._put_parameter(name, click.prompt("New value", hide_input=True), aws_cmd)
-        elif selected == "Delete parameter":
+        selected = ui.choose([PRINT, UPDATE, DELETE], f"Select an action for {name}")
+        if selected == UPDATE:
+            cls._put_parameter(name, ui.prompt("New value", hide_input=True), aws_cmd)
+        elif selected == DELETE:
             cls._delete_parameter(name, aws_cmd)
-        elif selected == "Copy value (print only)":
-            click.echo(parameter["Value"])
+        elif selected == PRINT:
+            ui.result(parameter["Value"])
         else:
-            console.print("Operation cancelled.")
+            ui.cancelled()

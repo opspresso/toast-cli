@@ -45,20 +45,26 @@ the next version.
 - Search existing helpers and callers before introducing another abstraction.
 - Keep plugins focused on their command; shared subprocess, masking, and file
   operations belong in `toast/plugins/utils.py`.
-- Terminal output and pickers belong in `toast/ui.py`. Keep `Picker` free of terminal
-  access so tests can drive it; `tests/test_ui.py` covers the real key loop in a PTY.
+- All terminal output goes through `toast/ui.py`. Do not create a `Console`, set a
+  style or call `click.echo` in a plugin. Send a result to stdout with `ui.result`,
+  `ui.table` or `ui.json_result`. Send status to stderr with `ui.success`, `ui.warning`,
+  `ui.info` or `ui.muted`. Report a cancel with `ui.cancelled` and exit 0. Word a message
+  as a past-tense fact, such as `Deleted x`, not `Successfully deleted x`.
+- Wrap work that can take more than a moment in `ui.status`, and ask for a destructive
+  action with `ui.confirm`, which defaults to no.
+- Keep `Picker` free of terminal access so tests can drive it; `tests/test_ui.py`
+  covers the real key loop in a PTY.
 - Every `clean` target must stay inside the home directory given to `catalog()` or
   come from a tool or environment value. A hardcoded absolute path would let a test
   in a temporary home reach real data.
 - Use `run_command()` for subprocesses whose nonzero status is a failure.
-  Handle documented special exit codes at the call site, such as fzf cancel.
+  Use `spawn()` when the call site handles a nonzero status itself.
 - Raise `click.UsageError` for invalid arguments and `click.ClickException` for
   operational failures. `BasePlugin` converts expected OS, value, and config
   errors at the command boundary. Do not print an error and return success.
 - Do not patch Click globals or catch unexpected exceptions to hide defects.
 - Preserve `toast git <repo> <command>` and `toast ssm <command> [name] [value]`.
   Click applies dynamically added argument decorators in reverse order.
-- Keep `cdw` stdout limited to the selected path; status belongs on stderr.
 - Sanitize names only when deriving a new clone directory. Validate existing
   repository names without rewriting them, especially before deletion.
 - Compare real values; mask only display output. Treat multiline dotenv
@@ -74,7 +80,8 @@ the next version.
 ## Adding a plugin
 
 Create a module under `toast/plugins/`, define a `BasePlugin` subclass with a
-unique `name` and `help`, set `category` and `examples` for the help screen, and
+unique `name` and `help`, set `category`, `commands` and `examples` for the help
+screen and completion, and
 implement `execute()`. Override `get_arguments()`
 for Click options or arguments. Discovery registers classes defined in that
 module; imported classes are not registered again.
