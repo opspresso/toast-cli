@@ -69,27 +69,40 @@ toast git            # Manage Git repositories
 toast prompt         # Manage .prompt.md files
 toast region         # Manage AWS region
 toast clean          # Show reclaimable disk data and remove selected items
+toast completion     # Print the shell completion script
 toast ssm            # AWS SSM Parameter Store operations
 toast version        # Display version
 ```
 
 ### Disk cleanup
 
-`toast clean` lists removable data by size, largest first. Enter numbers or names,
-then confirm. Only the selected items are removed.
+`toast clean` measures removable data and opens a picker, largest item first. The
+footer shows the selected size and the free space after removal.
 
 ```text
-#     SIZE  RISK      NAME         DESCRIPTION
-1  7.9 GiB  download  runner-work  GitHub Actions runner workspaces
-2  5.0 GiB  cache     go-cache     Go build cache
-Reclaimable: 12.9 GiB. Free now: 100.0 GiB, after: 112.9 GiB.
-Enter numbers or names (1 3 5), a for all except data, q to quit:
+Reclaimable 84.1 GiB
+  ◉   6.2 GiB  download  arduino-packages     Arduino board toolchains
+❯ ○   2.6 GiB  cache     go-cache             Go build cache
+  ○   2.3 GiB  cache     vscode-cache         blocked: VS Code running · VS Code logs
+
+Selected 1 · 6.2 GiB · Free now 166.3 GiB · after 172.5 GiB
+↑↓ move · space select · a all except data · n clear · enter confirm · q quit
 ```
+
+| Key | Action |
+| --- | --- |
+| `↑` `↓` or `j` `k` | Move. Blocked rows are skipped. |
+| `Space` | Select or clear the row, then move down. |
+| `a` | Select everything except `data` items. Press again to clear. |
+| `n` | Clear the selection. |
+| `Enter` | Review the selection and confirm it. |
+| `q` or `Esc` | Quit without removing anything. |
 
 | Command | Action |
 | --- | --- |
-| `toast clean` | Show the list, ask for a selection and a confirmation, then remove. |
-| `toast clean --list` | Show the list only. |
+| `toast clean` | Open the picker. Without a terminal, ask for numbers or names. |
+| `toast clean --list` | Show the items and exit. |
+| `toast clean --json` | Print the items as JSON and exit. |
 | `toast clean NAME...` | Remove the named items after a confirmation. |
 | `toast clean NAME... --yes` | Remove the named items without a confirmation. |
 
@@ -97,7 +110,7 @@ Enter numbers or names (1 3 5), a for all except data, q to quit:
 | --- | --- |
 | `cache` | Rebuilt on demand. |
 | `download` | Fetched again, so the first use is slow. |
-| `data` | Cannot be restored: iOS simulator data, Android virtual devices, stopped Docker containers and unused volumes. `a` does not select these items. |
+| `data` | Cannot be restored: iOS simulator data, Android virtual devices, the Trash, project build output, stopped Docker containers and unused volumes. `a` does not select these items. |
 
 Project items cover `~/workspace` and only directories that Git ignores.
 `project-builds` can hold release files, so it is a `data` item. `old-*` items keep
@@ -107,12 +120,12 @@ recently used runtime of each platform. Installed apps and photos are not listed
 If macOS blocks a protected folder, the command says so; grant the terminal Full Disk
 Access to include it.
 
-An item marked `[blocked: ...]` stays. A running GitHub Actions job or `xcodebuild`
-blocks Docker, simulator, DerivedData, Gradle, project and runner items. A running
-Chrome or VS Code blocks its own items, and a booted simulator blocks `simulators`. The check runs again right before
-removal. On DGX Spark, Docker images and volumes are not listed. If one item fails,
-the others continue and the command exits nonzero. Docker runtimes can return freed
-space late, so the free-space figure may not rise at once.
+A blocked item stays. A running GitHub Actions job or `xcodebuild` blocks Docker,
+simulator, DerivedData, Gradle, project and runner items. A running Chrome or VS Code
+blocks its own items, and a booted simulator blocks `simulators`. The check runs again
+right before removal. On DGX Spark, Docker images and volumes are not listed. If one
+item fails, the others continue and the command exits nonzero. Docker runtimes can
+return freed space late, so the free-space figure may not rise at once.
 
 ### Examples
 
@@ -352,11 +365,28 @@ alias r='toast region'       # AWS region
 alias ssm='toast ssm'        # SSM Parameter Store
 ```
 
+## Shell completion
+
+Add one line to your shell startup file:
+
+```bash
+eval "$(toast completion zsh)"    # ~/.zshrc
+eval "$(toast completion bash)"   # ~/.bashrc
+toast completion fish | source    # ~/.config/fish/config.fish
+```
+
 ## Failure behavior
 
 Invalid command arguments exit with status 2. Operational failures exit nonzero
 and print to stderr. A cancelled selection performs no action. `cdw` writes only
 the selected path to stdout, so shell functions can safely capture it.
+
+`ctx`, `env` and `region` accept a name to skip the picker, such as `toast ctx prod`.
+Pickers use `fzf`. Without `fzf`, a built-in picker runs in a terminal; a script gets
+an error that names the fix.
+
+`git REPO rm` asks for a confirmation and names uncommitted changes and unpushed
+commits. Use `--yes` in scripts.
 
 `env` manages static profiles in `AWS_SHARED_CREDENTIALS_FILE` (default
 `~/.aws/credentials`). It requires both access key fields before replacing the

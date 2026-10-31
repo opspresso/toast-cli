@@ -32,6 +32,11 @@ bump the version, publish to PyPI, and create a release tagged at the built comm
 - Search existing helpers and callers before introducing another abstraction.
 - Keep plugins focused on their command; shared subprocess, masking, and file
   operations belong in `toast/plugins/utils.py`.
+- Terminal output and pickers belong in `toast/ui.py`. Keep `Picker` free of terminal
+  access so tests can drive it; `tests/test_ui.py` covers the real key loop in a PTY.
+- Every `clean` target must stay inside the home directory given to `catalog()` or
+  come from a tool or environment value. A hardcoded absolute path would let a test
+  in a temporary home reach real data.
 - Use `run_command()` for subprocesses whose nonzero status is a failure.
   Handle documented special exit codes at the call site, such as fzf cancel.
 - Raise `click.UsageError` for invalid arguments and `click.ClickException` for
@@ -56,7 +61,8 @@ bump the version, publish to PyPI, and create a release tagged at the built comm
 ## Adding a plugin
 
 Create a module under `toast/plugins/`, define a `BasePlugin` subclass with a
-unique `name` and `help`, and implement `execute()`. Override `get_arguments()`
+unique `name` and `help`, set `category` and `examples` for the help screen, and
+implement `execute()`. Override `get_arguments()`
 for Click options or arguments. Discovery registers classes defined in that
 module; imported classes are not registered again.
 

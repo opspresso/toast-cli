@@ -11,7 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`toast git REPO rm` now asks first** and names uncommitted changes and unpushed commits; use `--yes` in scripts
+- `toast clean` measures items in parallel and shows sizes in MB below 1 GiB
+- Pickers show the current context, region or profile as a header
+
 ### Added
+- **Space-bar picker** for `toast clean` with a live size and free-space footer, blocked rows, Hangul-layout shortcuts and terminal restore on every exit path
+- **`toast completion`** for bash, zsh and fish, including `clean` item names
+- **`toast clean --json`**, `toast --version`, `-h`, and grouped help with per-command examples
+- **Name arguments**: `toast ctx NAME`, `toast env PROFILE`, `toast region NAME`
+- **Built-in picker fallback** when `fzf` is not installed
 - **`toast clean`** — lists reclaimable disk data with sizes and removes the selected items; running builds, Chrome and booted simulators block the affected items
 - **GitLab clone support** — explicit HTTPS/SSH URLs (including custom SSH ports), workspace domain detection, and nested group paths for name-based clones
 - **Secret masking** for `dot`/`prompt`/`ssm`
