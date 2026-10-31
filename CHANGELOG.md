@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`toast clean`** — lists reclaimable disk data with sizes and removes the selected items; running builds, Chrome and booted simulators block the affected items
 - **GitLab clone support** — explicit HTTPS/SSH URLs (including custom SSH ports), workspace domain detection, and nested group paths for name-based clones
 - **Secret masking** for `dot`/`prompt`/`ssm`
   - `.env.local` values masked in diffs (`KEY=ab****yz`); `.prompt.md` shown as-is

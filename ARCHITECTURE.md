@@ -39,6 +39,7 @@ are unchanged. `toast/helpers.py` supplies the help logo and version lookup
 | `dot`, `prompt` | Shared env-store flow described below |
 | `env` | Copy a complete static profile to default in the AWS credentials file; atomic mode 0600 write; verify the default identity |
 | `git` | Clone, branch, pull, push, mirror push, remove; Git and Python filesystem operations |
+| `clean` | Item catalog, size scan, selection, activity guards and removal of reclaimable disk data |
 | `region` | AWS EC2 region discovery and AWS CLI default configuration |
 | `ssm` | Direct get/put/diff/delete/list and interactive browsing through AWS CLI |
 | `version` | Installed package version |
