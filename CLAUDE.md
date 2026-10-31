@@ -23,9 +23,22 @@ boundaries. They must not read or modify real AWS resources or credentials.
 Exercise commands through Click when changing arguments or exit behavior;
 calling `execute()` directly does not test argument order.
 
-CI checks the supported minimum and current Python versions on Linux and macOS.
-It builds source and wheel packages on PRs. Pushes to the release branch also
-bump the version, publish to PyPI, and create a release tagged at the built commit.
+Pull requests and pushes to `main` do not start CI. A release tag starts it, or
+run the `CI` workflow by hand. CI checks the supported minimum and current Python
+versions on Linux and macOS.
+
+## Release
+
+Push a `vMAJOR.MINOR.PATCH` tag on `main`:
+
+```bash
+git tag v4.2.0 && git push origin v4.2.0
+```
+
+`release.yml` runs CI, checks the tag, writes the tag version to `VERSION` for the
+build, publishes to PyPI, and creates a GitHub Release. If a step fails, nothing
+after it runs. PyPI never accepts the same version twice, so fix the cause and push
+the next version.
 
 ## Implementation rules
 
