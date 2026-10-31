@@ -1,38 +1,19 @@
 #!/usr/bin/env python3
 
-import click
 import os
-from importlib.metadata import PackageNotFoundError, version
-from rich.console import Console
+import sys
 
-console = Console()
+import click
 
-
-def display_logo():
-    """Display the toast-cli ASCII logo"""
-    logo_lines = [
-        r" _                  _           _ _",
-        r"| |_ ___   __ _ ___| |_     ___| (_)",
-        r"| __/ _ \ / _` / __| __|__ / __| | |",
-        r"| || (_) | (_| \__ \ ||___| (__| | |",
-        r" \__\___/ \__,_|___/\__|   \___|_|_|",
-    ]
-
-    console.print()
-    for i, line in enumerate(logo_lines):
-        if i == len(logo_lines) - 1:
-            # Last line: append version on the same line
-            console.print(line, style="bold yellow", end="")
-            console.print(f"   {get_version()}", style="bold cyan", highlight=False)
-        else:
-            console.print(line, style="bold yellow", highlight=False)
-    console.print("─" * min(console.width, 80), style="dim")
+from toast import ui
 
 
 def get_version():
-    """Get the version from package metadata"""
+    """Get the version from package metadata."""
+    # Imported here because the metadata machinery slows every shell completion.
+    from importlib.metadata import PackageNotFoundError, version
+
     try:
-        # Get version from installed package metadata
         return version("toast-cli")
     except PackageNotFoundError:
         # Fallback to VERSION file for development environment
@@ -43,29 +24,81 @@ def get_version():
         return "unknown"
 
 
-def format_examples(formatter, examples):
-    if examples:
-        with formatter.section("Examples"):
-            formatter.write_dl(examples)
+class ToastFormatter(click.HelpFormatter):
+    """Click's help layout in the colors of the rest of the interface."""
+
+    def write_usage(self, prog, args="", prefix=None):
+        super().write_usage(prog, args, ui.paint("Usage: ", fg=ui.ACCENT, bold=True))
+
+    def write_heading(self, heading):
+        self.write(f"{'':>{self.current_indent}}{ui.paint(heading + ':', fg=ui.ACCENT, bold=True)}\n")
+
+    def write_dl(self, rows, col_max=30, col_spacing=2):
+        super().write_dl([(ui.paint(term, bold=True), text) for term, text in rows], col_max, col_spacing)
+
+
+class ToastContext(click.Context):
+    formatter_class = ToastFormatter
 
 
 class CustomHelpCommand(click.Command):
-    """Help for one command, with the plugin's usage examples."""
+    """Help for one command, with its subcommands and usage examples."""
 
-    def __init__(self, *args, examples=(), **kwargs):
+    context_class = ToastContext
+
+    def __init__(self, *args, examples=(), commands=(), **kwargs):
         super().__init__(*args, **kwargs)
         self.examples = examples
+        self.subcommands = commands
 
     def format_epilog(self, ctx, formatter):
-        format_examples(formatter, self.examples)
+        for title, rows in (("Commands", self.subcommands), ("Examples", self.examples)):
+            if rows:
+                with formatter.section(title):
+                    formatter.write_dl(rows)
         super().format_epilog(ctx, formatter)
 
 
 class CustomHelpGroup(click.Group):
-    """Top-level help: the logo, then commands grouped by what they act on."""
+    """The top level: the logo, commands by topic, and errors in the toast style."""
+
+    context_class = ToastContext
+    command_class = CustomHelpCommand
+
+    def main(self, *args, standalone_mode=True, **extra):
+        """Report failures through ui. Exit status: 1 failure, 2 usage, 130 cancelled."""
+        if not standalone_mode:
+            return super().main(*args, standalone_mode=False, **extra)
+        try:
+            code = super().main(*args, standalone_mode=False, **extra)
+        except click.UsageError as exc:
+            hints = []
+            if exc.ctx is not None:
+                hints = [click.unstyle(exc.ctx.get_usage()), f"Run: {exc.ctx.command_path} --help"]
+            ui.error(exc.format_message(), *hints)
+            sys.exit(exc.exit_code)
+        except click.ClickException as exc:
+            ui.error(exc.format_message())
+            sys.exit(exc.exit_code)
+        except click.Abort:
+            ui.cancelled()
+            sys.exit(130)
+        sys.exit(code if isinstance(code, int) else 0)
+
+    def resolve_command(self, ctx, args):
+        try:
+            return super().resolve_command(ctx, args)
+        except click.UsageError as exc:
+            import difflib
+
+            close = difflib.get_close_matches(args[0], self.list_commands(ctx), n=1)
+            # Newer Click versions add this suggestion themselves.
+            if close and "Did you mean" not in exc.format_message():
+                raise click.UsageError(f"{exc.format_message()} Did you mean '{close[0]}'?", ctx) from exc
+            raise
 
     def get_help(self, ctx):
-        display_logo()
+        ui.banner(get_version())
         return super().get_help(ctx)
 
     def format_commands(self, ctx, formatter):
