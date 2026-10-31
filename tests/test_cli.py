@@ -21,6 +21,14 @@ from toast.plugins import cdw_plugin, ctx_plugin, env_plugin
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def separate_streams_runner():
+    """Click 8.1 mixes stderr into stdout by default; Click 8.2 removed the option."""
+    try:
+        return CliRunner(mix_stderr=False)
+    except TypeError:
+        return CliRunner()
+
+
 def make_cli():
     cli = click.Group()
     for plugin in discover_and_load_plugins():
@@ -122,7 +130,7 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp, mock.patch.object(
             cdw_plugin.os.path, "expanduser", return_value=str(Path(temp) / "workspace")
         ):
-            result = self.runner.invoke(self.cli, ["cdw"])
+            result = separate_streams_runner().invoke(self.cli, ["cdw"])
             self.assertEqual(result.exit_code, 0)
             self.assertEqual(result.stdout, "")
 
@@ -200,8 +208,8 @@ class InterfaceTests(unittest.TestCase):
 
     def test_status_stays_out_of_stdout(self):
         with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")):
-            result = self.runner.invoke(self.cli, ["ctx", "dev"])
-        self.assertEqual(result.exit_code, 0, result.output)
+            result = separate_streams_runner().invoke(self.cli, ["ctx", "dev"])
+        self.assertEqual(result.exit_code, 0, result.stderr)
         self.assertEqual(result.stdout, "")
         self.assertIn("✓ Switched", result.stderr)
 

@@ -5,6 +5,7 @@
 import unittest
 from unittest import mock
 
+from test_cli import separate_streams_runner
 from toast.plugins import ssm_plugin
 from toast.plugins.ssm_plugin import SsmPlugin
 
@@ -172,7 +173,7 @@ class SsmCliTests(unittest.TestCase):
         import subprocess
         response = '{"Parameter": {"Value": "plain", "Type": "SecureString"}}'
         with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, response, "")):
-            result = self.runner.invoke(self.cli, ["ssm", "get", "/x", "--reveal"])
+            result = separate_streams_runner().invoke(self.cli, ["ssm", "get", "/x", "--reveal"])
         self.assertEqual(result.stdout, "plain\n")
 
     def test_get_rejects_malformed_success_response(self):
