@@ -11,7 +11,7 @@ from unittest import mock
 import click
 from click.testing import CliRunner
 
-from toast.plugins import clean_plugin
+from toast.plugins import clean_catalog, clean_plugin
 from toast.plugins.clean_plugin import CleanPlugin
 
 
@@ -43,8 +43,8 @@ class CleanTests(unittest.TestCase):
         for target, replacement in (
             ("platform.system", mock.Mock(return_value="Darwin")),
             ("subprocess.run", self.run_stub),
-            ("toast.plugins.clean_plugin.is_dgx", mock.Mock(return_value=False)),
-            ("toast.plugins.clean_plugin.path_size", lambda path: 1024 if path.exists() else 0),
+            ("toast.plugins.clean_catalog.is_dgx", mock.Mock(return_value=False)),
+            ("toast.plugins.clean_catalog.path_size", lambda path: 1024 if path.exists() else 0),
             ("shutil.which", lambda name: f"/stub/{name}" if name in ("go", "docker", "xcrun") else None),
             ("pathlib.Path.home", mock.Mock(return_value=self.home)),
         ):
@@ -88,9 +88,8 @@ class CleanTests(unittest.TestCase):
     def number(self, name):
         listing = self.invoke("--list").output
         for line in listing.splitlines():
-            fields = line.split()
-            if len(fields) > 4 and fields[4] == name:
-                return fields[0]
+            if f" {name} " in line:
+                return line.split()[0]
         self.fail(f"{name} not listed:\n{listing}")
 
     def test_list_shows_sizes_and_removes_nothing(self):
@@ -98,7 +97,7 @@ class CleanTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertRegex(result.output, r"2\.0 GiB\s+download\s+docker-images")
         self.assertRegex(result.output, r"1\.5 GiB\s+data\s+docker-volumes")
-        self.assertIn("Reclaimable:", result.output)
+        self.assertIn("Reclaimable", result.output)
         self.assertEqual(self.commands, [])
         self.assertTrue(self.cache.exists())
 
@@ -151,7 +150,7 @@ class CleanTests(unittest.TestCase):
 
     def test_active_build_blocks_build_items_only(self):
         self.processes = "/runner/bin/Runner.Worker\n"
-        self.assertIn("build running", self.invoke("--list").output)
+        self.assertIn("blocked: build running", self.invoke("--list").output)
         result = self.invoke("xcode-derived", "runner-work", "docker-images", "dev-caches", "--yes")
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertFalse(self.cache.exists())
@@ -270,12 +269,12 @@ class CleanTests(unittest.TestCase):
             self.assertIn("Full Disk Access", self.invoke("--list").output)
 
     def test_every_target_stays_inside_the_temporary_home(self):
-        for item in clean_plugin.catalog(self.home):
+        for item in clean_catalog.catalog(self.home):
             for path in item.targets(self.home):
                 self.assertIn(self.home, path.parents, item.name)
 
     def test_dgx_hides_docker_images_and_volumes(self):
-        with mock.patch.object(clean_plugin, "is_dgx", return_value=True):
+        with mock.patch.object(clean_catalog, "is_dgx", return_value=True):
             output = self.invoke("--list").output
         self.assertIn("docker-cache", output)
         self.assertNotIn("docker-images", output)
