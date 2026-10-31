@@ -8,9 +8,9 @@ import tempfile
 import unittest
 from unittest import mock
 
-import click
 from click.testing import CliRunner
 
+from toast.helpers import CustomHelpGroup
 from toast.plugins import clean_catalog, clean_plugin
 from toast.plugins.clean_plugin import CleanPlugin
 
@@ -25,7 +25,7 @@ class CleanTests(unittest.TestCase):
         self.failing = ()
         self.runtimes = {}
         self.commands = []
-        self.cli = click.Group()
+        self.cli = CustomHelpGroup()
         CleanPlugin.register(self.cli)
 
         self.cache = self.put("Library/Caches/pnpm/data")
