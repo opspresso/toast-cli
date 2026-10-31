@@ -21,8 +21,10 @@ are unchanged. `toast/helpers.py` supplies the help logo and version lookup
 
 | File | Responsibility |
 |------|----------------|
-| `toast/plugins/base_plugin.py` | Registration and expected-error boundary |
-| `toast/plugins/utils.py` | Checked subprocesses, fzf selection, SSM reads, secret masking, diffs, atomic private files |
+| `toast/ui.py` | Messages, size format, and the key-driven picker. `Picker` holds state only; `run_picker` owns the terminal and always restores it |
+| `toast/plugins/base_plugin.py` | Registration, help metadata (`category`, `examples`) and expected-error boundary |
+| `toast/plugins/clean_catalog.py` | `clean` item catalog, parallel size scan and activity guards |
+| `toast/plugins/utils.py` | Checked subprocesses, fzf selection with a built-in fallback, SSM reads, secret masking, diffs, atomic private files |
 | `toast/plugins/storage.py` | Shared dot/prompt configuration and S3/SSM synchronization |
 | `toast/plugins/*_plugin.py` | Individual command arguments and behavior |
 | `setup.py`, `pyproject.toml`, `MANIFEST.in` | Package metadata, build configuration, source distribution |
@@ -39,7 +41,8 @@ are unchanged. `toast/helpers.py` supplies the help logo and version lookup
 | `dot`, `prompt` | Shared env-store flow described below |
 | `env` | Copy a complete static profile to default in the AWS credentials file; atomic mode 0600 write; verify the default identity |
 | `git` | Clone, branch, pull, push, mirror push, remove; Git and Python filesystem operations |
-| `clean` | Item catalog, size scan, selection, activity guards and removal of reclaimable disk data |
+| `clean` | Picker, prompt fallback, confirmation and removal; the catalog is in `clean_catalog.py` |
+| `completion` | Prints the Click completion script for bash, zsh or fish |
 | `region` | AWS EC2 region discovery and AWS CLI default configuration |
 | `ssm` | Direct get/put/diff/delete/list and interactive browsing through AWS CLI |
 | `version` | Installed package version |

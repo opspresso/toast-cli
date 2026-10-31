@@ -21,6 +21,10 @@ class AmPlugin(BasePlugin):
 
     name = "am"
     help = "Show AWS caller identity"
+    category = "AWS"
+    examples = (
+        ("toast am", "Show the current account and role"),
+    )
 
     @classmethod
     def execute(cls, **kwargs):

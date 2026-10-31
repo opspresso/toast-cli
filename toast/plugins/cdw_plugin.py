@@ -14,6 +14,10 @@ class CdwPlugin(BasePlugin):
 
     name = "cdw"
     help = "Navigate to a workspace directory"
+    category = "Workspace"
+    examples = (
+        ('cd "$(toast cdw)"', 'Go to a repository'),
+    )
 
     @classmethod
     def execute(cls, **kwargs):
@@ -54,4 +58,4 @@ class CdwPlugin(BasePlugin):
         if selected_dir:
             click.echo(selected_dir)
         else:
-            console.print("No directory selected.", style="bold red")
+            console.print("No directory selected.", style="dim")

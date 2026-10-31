@@ -2,11 +2,9 @@
 
 import click
 import subprocess
-from rich.console import Console
+from toast import ui
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.utils import run_command, select_from_list
-
-console = Console()
 
 
 class RegionPlugin(BasePlugin):
@@ -14,24 +12,36 @@ class RegionPlugin(BasePlugin):
 
     name = "region"
     help = "Set AWS region"
+    category = "AWS"
+    examples = (
+        ("toast region", "Pick the default region"),
+        ("toast region ap-northeast-2", "Switch to a named region"),
+    )
 
     @classmethod
-    def execute(cls, **kwargs):
-        # Check current AWS region setting
-        current_region_result = subprocess.run(
+    def get_arguments(cls, func):
+        return click.argument("region", required=False)(func)
+
+    @staticmethod
+    def _apply(region):
+        run_command(["aws", "configure", "set", "default.region", region])
+        run_command(["aws", "configure", "set", "default.output", "json"])
+        ui.success(f"Set AWS region to {region}")
+
+    @classmethod
+    def execute(cls, region=None, **kwargs):
+        if region:
+            cls._apply(region)
+            return
+
+        current = subprocess.run(
             ["aws", "configure", "get", "default.region"],
             capture_output=True,
             text=True,
         )
-        if current_region_result.returncode and current_region_result.stderr.strip():
-            raise click.ClickException(current_region_result.stderr.strip())
-        current_region = current_region_result.stdout.strip()
-        if current_region:
-            console.print(f"Current AWS region: {current_region}", style="bold cyan")
-        else:
-            console.print("No AWS region is currently set.", style="yellow")
+        if current.returncode and current.stderr.strip():
+            raise click.ClickException(current.stderr.strip())
 
-        # Get available region list
         result = run_command(
             [
                 "aws",
@@ -47,13 +57,8 @@ class RegionPlugin(BasePlugin):
         if not regions:
             raise click.ClickException("No regions found")
 
-        selected_region = select_from_list(regions, "Select AWS Region")
-
-        if selected_region:
-            run_command(
-                ["aws", "configure", "set", "default.region", selected_region]
-            )
-            run_command(["aws", "configure", "set", "default.output", "json"])
-            console.print(f"✓ Set AWS region to {selected_region}", style="bold green")
+        selected = select_from_list(regions, "Select AWS Region", current=current.stdout.strip())
+        if selected:
+            cls._apply(selected)
         else:
-            console.print("No region selected.", style="yellow")
+            ui.muted("No region selected.")

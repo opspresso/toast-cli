@@ -130,19 +130,19 @@ class RepositoryOperationsTests(unittest.TestCase):
     def test_destructive_names_are_rejected_without_rewriting(self):
         for name in ("../repo", "re/po", "repo ", "..", "", "-repo"):
             with self.subTest(name=name), self.assertRaises(click.UsageError):
-                git_plugin.GitPlugin.execute("rm", name)
+                git_plugin.GitPlugin.execute("rm", name, yes=True)
             self.assertTrue(self.repo.exists())
 
     def test_non_repository_cannot_be_removed(self):
         with self.assertRaisesRegex(click.ClickException, "not a Git repository"):
-            git_plugin.GitPlugin.execute("rm", "repo")
+            git_plugin.GitPlugin.execute("rm", "repo", yes=True)
         self.assertTrue(self.repo.exists())
 
     def test_symlink_cannot_target_another_repository(self):
         (self.repo / ".git").mkdir()
         (self.namespace / "linked").symlink_to(self.repo, target_is_directory=True)
         with self.assertRaisesRegex(click.ClickException, "symlink"):
-            git_plugin.GitPlugin.execute("rm", "linked")
+            git_plugin.GitPlugin.execute("rm", "linked", yes=True)
         self.assertTrue(self.repo.exists())
 
     def test_mirror_uses_nested_namespace_without_mutating_remotes(self):
@@ -167,6 +167,15 @@ class RepositoryOperationsTests(unittest.TestCase):
         git_plugin.GitPlugin.execute("push", "repo")
         git_plugin.GitPlugin.execute("branch", "repo", branch="feature")
         self.assertEqual(git("branch", "--show-current", cwd=self.repo).stdout.strip(), "feature")
-        git_plugin.GitPlugin.execute("rm", "repo")
+        git_plugin.GitPlugin.execute("rm", "repo", yes=True)
         self.assertFalse(self.repo.exists())
         self.assertTrue(remote.exists())
+
+    def test_rm_asks_first_and_names_uncommitted_work(self):
+        subprocess.run(["git", "init", str(self.repo)], check=True, capture_output=True)
+        (self.repo / "note.txt").write_text("work")
+        with mock.patch("click.confirm", side_effect=click.Abort), mock.patch.object(git_plugin, "console") as console:
+            with self.assertRaises(click.Abort):
+                git_plugin.GitPlugin.execute("rm", "repo")
+        self.assertTrue(self.repo.exists())
+        self.assertIn("1 uncommitted changes", console.print.call_args_list[0].args[0])

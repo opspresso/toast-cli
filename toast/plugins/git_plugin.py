@@ -3,6 +3,7 @@
 import click
 import os
 import shutil
+import subprocess
 import re
 from urllib.parse import urlsplit
 from rich.console import Console
@@ -65,6 +66,12 @@ class GitPlugin(BasePlugin):
 
     name = "git"
     help = "Manage Git repositories"
+    category = "Workspace"
+    examples = (
+        ("toast git my-repo clone", "Clone into this namespace"),
+        ("toast git my-repo pull -r", "Pull with rebase"),
+        ("toast git my-repo rm", "Remove a checkout after a confirmation"),
+    )
 
     @classmethod
     def get_arguments(cls, func):
@@ -85,7 +92,20 @@ class GitPlugin(BasePlugin):
             is_flag=True,
             help="Push with --mirror flag for repository migration",
         )(func)
+        func = click.option("--yes", "-y", is_flag=True, help="Remove without a confirmation")(func)
         return func
+
+    @staticmethod
+    def _confirm_remove(repo_name, repo_path):
+        """Name what would be lost, because the removal cannot be undone."""
+        status = subprocess.run(["git", "status", "--short", "--branch"], cwd=repo_path, capture_output=True, text=True)
+        lines = status.stdout.splitlines()
+        changed = sum(1 for line in lines if not line.startswith("##"))
+        if changed:
+            console.print(f"! {repo_name} has {changed} uncommitted changes.", style="bold yellow", markup=False)
+        if lines and "ahead" in lines[0]:
+            console.print(f"! {repo_name} has commits that are not pushed.", style="bold yellow", markup=False)
+        click.confirm(f"Remove {repo_path}? This cannot be undone.", abort=True)
 
     @classmethod
     def execute(
@@ -96,6 +116,7 @@ class GitPlugin(BasePlugin):
         target=None,
         rebase=False,
         mirror=False,
+        yes=False,
         **kwargs,
     ):
         aliases = {"cl": "clone", "b": "branch", "p": "pull", "ps": "push"}
@@ -110,6 +131,8 @@ class GitPlugin(BasePlugin):
             raise click.UsageError("--rebase requires pull")
         if mirror and command != "push":
             raise click.UsageError("--mirror requires push")
+        if yes and command != "rm":
+            raise click.UsageError("--yes requires rm")
 
         current_path = os.getcwd()
         match = re.fullmatch(r".*/workspace/([^/]+)/(.+)", current_path)
@@ -156,6 +179,8 @@ class GitPlugin(BasePlugin):
             raise click.ClickException(f"'{repo_name}' is not a Git repository")
 
         if command == "rm":
+            if not yes:
+                cls._confirm_remove(repo_name, repo_path)
             shutil.rmtree(repo_path)
             console.print(f"✓ Successfully removed {repo_path}", style="bold green", markup=False)
             return
