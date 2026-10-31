@@ -1,6 +1,7 @@
 """Exercise `toast clean` in a temporary home with mocked process boundaries."""
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -22,6 +23,7 @@ class CleanTests(unittest.TestCase):
         self.processes = ""
         self.devices = ""
         self.failing = ()
+        self.runtimes = {}
         self.commands = []
         self.cli = click.Group()
         CleanPlugin.register(self.cli)
@@ -32,6 +34,11 @@ class CleanTests(unittest.TestCase):
         self.avd = self.put(".android/avd/phone.avd/data")
         self.put("Library/Developer/CoreSimulator/Devices/ABC/data")
         self.put("gocache/data")
+
+        environment = mock.patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop("ANDROID_HOME", None)
 
         for target, replacement in (
             ("platform.system", mock.Mock(return_value="Darwin")),
@@ -59,6 +66,10 @@ class CleanTests(unittest.TestCase):
 
         if args[0] == "ps":
             return ok(self.processes)
+        if args[:4] == ["xcrun", "simctl", "runtime", "list"]:
+            return ok(json.dumps(self.runtimes))
+        if args[0] == "git":
+            return subprocess.CompletedProcess(args, 1 if Path(args[2]).name == "tracked" else 0, "", "")
         if args[:3] == ["xcrun", "simctl", "list"]:
             return ok(self.devices)
         if args[:2] == ["go", "env"]:
@@ -164,6 +175,104 @@ class CleanTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("Could not remove: go-cache", result.output)
         self.assertFalse(self.cache.exists())
+
+    def test_old_versions_keep_newest_and_current(self):
+        for version in ("2.1.9", "2.1.10", "2.1.11"):
+            self.put(f".local/share/claude/versions/{version}/data")
+        link = self.home / ".local/bin/claude"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(self.home / ".local/share/claude/versions/2.1.9")
+        result = self.invoke("old-claude", "--yes")
+        self.assertEqual(result.exit_code, 0, result.output)
+        versions = sorted(path.name for path in (self.home / ".local/share/claude/versions").iterdir())
+        self.assertEqual(versions, ["2.1.11", "2.1.9"])
+
+    def test_old_node_keeps_newest_of_each_major_and_default(self):
+        for version in ("v22.1.0", "v24.1.0", "v24.2.0", "v24.10.0"):
+            self.put(f".nvm/versions/node/{version}/data")
+        self.put(".nvm/alias/default").write_text("v24.1.0\n")
+        result = self.invoke("old-node", "--yes")
+        self.assertEqual(result.exit_code, 0, result.output)
+        versions = sorted(path.name for path in (self.home / ".nvm/versions/node").iterdir())
+        self.assertEqual(versions, ["v22.1.0", "v24.1.0", "v24.10.0"])
+
+    def test_old_extensions_group_by_extension(self):
+        for name in ("a.b-1.2.0-darwin-arm64", "a.b-1.10.0-darwin-arm64", "c.d-1.0.0"):
+            self.put(f".vscode/extensions/{name}/data")
+        self.put(".vscode/extensions/extensions.json")
+        result = self.invoke("old-extensions", "--yes")
+        self.assertEqual(result.exit_code, 0, result.output)
+        names = sorted(path.name for path in (self.home / ".vscode/extensions").iterdir())
+        self.assertEqual(names, ["a.b-1.10.0-darwin-arm64", "c.d-1.0.0", "extensions.json"])
+
+    def test_vscode_running_blocks_its_items(self):
+        self.processes = "/Applications/Visual Studio Code.app/Contents/MacOS/Electron\n"
+        path = self.put("Library/Application Support/Code/logs/data")
+        result = self.invoke("vscode-cache", "--yes")
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("VS Code running", result.output)
+        self.assertTrue(path.exists())
+
+    def test_recent_codex_install_stays(self):
+        stale = self.put(".cache/codex-runtimes/codex-runtime-install-old/data").parent
+        fresh = self.put(".cache/codex-runtimes/codex-runtime-install-new/data").parent
+        os.utime(stale, (1, 1))
+        result = self.invoke("codex-installs", "--yes")
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertFalse(stale.exists())
+        self.assertTrue(fresh.exists())
+
+    def test_project_items_skip_tracked_directories(self):
+        modules = self.put("workspace/app/node_modules/pkg/data")
+        tracked = self.put("workspace/tracked/node_modules/data")
+        terraform = self.put("workspace/infra/.terraform/provider")
+        result = self.invoke("project-deps", "project-terraform", "--yes")
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertFalse(modules.exists())
+        self.assertFalse(terraform.exists())
+        self.assertTrue(tracked.exists())
+
+    def test_derived_data_is_listed_apart_from_build_output(self):
+        derived = self.put("workspace/ios/build/run/DerivedData/data")
+        keep = self.put("workspace/ios/build/run/App.ipa")
+        self.assertIn("project-derived", self.invoke("--list").output)
+        result = self.invoke("project-derived", "--yes")
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertFalse(derived.exists())
+        self.assertTrue(keep.exists())
+
+    def test_a_keeps_project_builds(self):
+        keep = self.put("workspace/ios/build/run/App.ipa")
+        result = self.invoke(input="a\ny\n")
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertTrue(keep.exists())
+
+    def test_android_images_follow_android_home(self):
+        images = self.put("sdk/system-images/android-36/data")
+        os.environ["ANDROID_HOME"] = str(self.home / "sdk")
+        result = self.invoke("android-images", "--yes")
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertFalse(images.exists())
+
+    def test_simulator_runtimes_keep_latest_used_per_platform(self):
+        self.runtimes = {
+            "A": {"platformIdentifier": "ios", "lastUsedAt": "2026-10-01", "sizeBytes": 2 * 1024**3},
+            "B": {"platformIdentifier": "ios", "lastUsedAt": "2026-10-30", "sizeBytes": 1024**3},
+            "C": {"platformIdentifier": "watch", "lastUsedAt": "2026-10-01", "sizeBytes": 1024**3},
+        }
+        self.assertRegex(self.invoke("--list").output, r"2\.0 GiB\s+download\s+simulator-runtimes")
+        result = self.invoke("simulator-runtimes", "--yes")
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(self.commands, ["xcrun simctl runtime delete A"])
+
+    def test_protected_trash_prints_guidance(self):
+        with mock.patch.object(clean_plugin, "readable", return_value=False):
+            self.assertIn("Full Disk Access", self.invoke("--list").output)
+
+    def test_every_target_stays_inside_the_temporary_home(self):
+        for item in clean_plugin.catalog(self.home):
+            for path in item.targets(self.home):
+                self.assertIn(self.home, path.parents, item.name)
 
     def test_dgx_hides_docker_images_and_volumes(self):
         with mock.patch.object(clean_plugin, "is_dgx", return_value=True):
