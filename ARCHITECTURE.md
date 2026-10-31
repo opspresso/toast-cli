@@ -98,4 +98,4 @@ Use `get_arguments()` for Click parameters. No registry edit is required.
 See [CLAUDE.md](CLAUDE.md) for setup and validation commands. CI tests supported
 Python endpoints on Linux and macOS and builds both distribution formats before
 publication. Package build and release configuration is in
-[`.github/workflows/push.yml`](.github/workflows/push.yml).
+[`.github/workflows/release.yml`](.github/workflows/release.yml).

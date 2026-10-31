@@ -5,9 +5,8 @@ All notable changes to toast-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> Note: releases are auto-published per push to `main` (CI bumps `VERSION`), so
-> intermediate patch versions may not each have a section here. Entries are
-> grouped by the meaningful change set.
+> Note: a `vMAJOR.MINOR.PATCH` tag on `main` publishes a release. Versions up to
+> 4.1.16 were published per push, so not every patch version has a section here.
 
 ## [Unreleased]
 
@@ -22,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fetch the env-store copy first and compare against local: identical → no-op, different → masked diff + confirm before overwriting
   - `up` no-op is decided against the S3 copy, so a stale SSM-only parameter still migrates into the bucket
 - **Unit tests** for masking, `compare_contents`, git helpers (`sanitize_repo_name`, `get_github_host`), and the `up` no-op decision
-- **CI quality gate** — `ruff` lint + `unittest` run on push and pull requests before publishing
+- **CI quality gate** — `ruff` lint + `unittest` run on release tags and manual dispatch, before publishing
 - **`ruff`** linter configuration (`pyproject.toml`)
 
 ### Fixed

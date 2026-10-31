@@ -9,7 +9,7 @@
 
 ```
 
-[![build](https://img.shields.io/github/actions/workflow/status/opspresso/toast-cli/push.yml?branch=main&style=for-the-badge&logo=github)](https://github.com/opspresso/toast-cli/actions/workflows/push.yml)
+[![build](https://img.shields.io/github/actions/workflow/status/opspresso/toast-cli/release.yml?style=for-the-badge&logo=github)](https://github.com/opspresso/toast-cli/actions/workflows/release.yml)
 [![release](https://img.shields.io/github/v/release/opspresso/toast-cli?style=for-the-badge&logo=github)](https://github.com/opspresso/toast-cli/releases)
 [![PyPI](https://img.shields.io/pypi/v/toast-cli?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/toast-cli/)
 [![website](https://img.shields.io/badge/website-toast--cli-blue?style=for-the-badge&logo=github)](https://cli.toast.sh/)
