@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - One look across commands: shared palette, symbols (`✓ ! ✗`), messages, colored help and errors; `NO_COLOR` is honored
 - `ctx` asks before it deletes one or all contexts
-- `ssm put` and `ssm diff` read the value from stdin or a hidden prompt
+- `ssm put` and `ssm diff` read the value from stdin or a hidden prompt; `ssm put --yes` overwrites without a confirmation
 - A spinner during AWS, Git and env-store calls; `git pull` and `push` show Git's result
 - Every usage error shows the usage line and the help command; a typo suggests the command
 - `Commands` section in help, and completion for subcommands, contexts and profiles

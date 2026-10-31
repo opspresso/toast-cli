@@ -165,6 +165,11 @@ class SsmCliTests(unittest.TestCase):
         self.assertEqual(put.call_args.args[:2], ("/x", "piped-secret"))
         self.assertNotIn("piped-secret", result.output)
 
+    def test_stdin_loses_only_the_final_newline(self):
+        with mock.patch.object(SsmPlugin, "_put_parameter") as put:
+            self.runner.invoke(self.cli, ["ssm", "put", "/x"], input="alpha\n\n")
+        self.assertEqual(put.call_args.args[1], "alpha\n")
+
     def test_piped_value_needs_yes_to_overwrite(self):
         import subprocess
         existing = '{"Parameter": {"Value": "old", "Type": "SecureString"}}'

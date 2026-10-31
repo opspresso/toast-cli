@@ -45,7 +45,11 @@ class CtxPlugin(BasePlugin):
 
     @staticmethod
     def _add_cluster():
-        region = run_command(["aws", "configure", "get", "region"]).stdout.strip()
+        # `aws configure get` exits 1 without output when no region is set.
+        current = spawn(["aws", "configure", "get", "region"])
+        if current.returncode and current.stderr.strip():
+            raise click.ClickException(current.stderr.strip())
+        region = current.stdout.strip()
         if not region:
             raise click.ClickException("No AWS region is set. Run: toast region")
         with ui.status(f"Listing EKS clusters in {region}"):

@@ -131,11 +131,11 @@ class PickerTests(unittest.TestCase):
         self.assertIn("No match", console.export_text())
 
     def test_fuzzy_prefers_a_word_start_over_scattered_letters(self):
-        names = ["otacos-tacked", "acme/toast-cli", "ta-ost"]
+        names = ["t-o-a-s-t", "xtoast", "acme/toast-cli"]
         picker = ui.Picker(rows(*names), multiple=False)
         for key in "toast":
             picker.handle(key)
-        self.assertEqual(picker.rows[picker.view[0]].key, "acme/toast-cli")
+        self.assertEqual([picker.rows[index].key for index in picker.view], ["acme/toast-cli", "xtoast", "t-o-a-s-t"])
 
     def test_every_term_must_match(self):
         self.assertIsNotNone(ui.fuzzy("toast cli", "opspresso/toast-cli"))

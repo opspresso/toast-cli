@@ -241,6 +241,17 @@ class InterfaceTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"AWS_SHARED_CREDENTIALS_FILE": str(path)}):
                 self.assertEqual(env_plugin.complete_profiles(None, None, ""), [])
 
+    def test_a_pipe_receives_the_complete_diff(self):
+        output = io.StringIO()
+        with mock.patch.object(ui, "console", Console(file=output)):
+            ui.diff([f"+{number}" for number in range(60)], limit=50)
+        self.assertEqual(len(output.getvalue().splitlines()), 60)
+
+    def test_unset_region_names_the_fix(self):
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 1, "", "")):
+            with self.assertRaisesRegex(click.ClickException, "toast region"):
+                ctx_plugin.CtxPlugin._add_cluster()
+
     def test_table_cells_are_literal_text(self):
         console = Console(file=io.StringIO(), force_terminal=True, width=60)
         with mock.patch.object(ui, "console", console):

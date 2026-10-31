@@ -97,7 +97,7 @@ class SsmPlugin(BasePlugin):
         """Read a value without placing it in the command line or shell history."""
         if sys.stdin.isatty():
             return ui.prompt("Parameter value", hide_input=True)
-        value = sys.stdin.read().rstrip("\n")
+        value = sys.stdin.read().removesuffix("\n")
         if not value:
             raise click.UsageError("Parameter value is required")
         return value

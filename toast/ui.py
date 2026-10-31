@@ -120,7 +120,12 @@ def table(headers, rows, min_widths=()):
 
 
 def diff(lines, limit=50):
-    """Print unified-diff lines, a result, with additions and removals colored."""
+    """Print unified-diff lines, a result, with additions and removals colored.
+
+    A terminal shows the first LIMIT lines. A pipe receives the complete diff.
+    """
+    if not console.is_terminal:
+        limit = len(lines)
     for line in lines[:limit]:
         line = line.rstrip()
         if line.startswith("+") and not line.startswith("+++"):

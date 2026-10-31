@@ -29,6 +29,14 @@ def run_command(args, **kwargs):
     return result
 
 
+def read_local_file(path):
+    """Return a UTF-8 file with its line endings intact, or None when it is absent."""
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        return f.read()
+
+
 def write_private_file(path, content):
     """Atomically replace a UTF-8 file with a private, complete copy."""
     fd, temporary = tempfile.mkstemp(prefix=".toast-", dir=os.path.dirname(os.path.abspath(path)))

@@ -328,6 +328,7 @@ ENV_STORE_REGION=
 4. Set name and help variables
 
 ```python
+from toast import ui
 from toast.plugins.base_plugin import BasePlugin
 import click
 
@@ -343,7 +344,7 @@ class MyPlugin(BasePlugin):
     @classmethod
     def execute(cls, **kwargs):
         option = kwargs.get("option")
-        click.echo(f"Executing with option: {option}")
+        ui.result(f"Executing with option: {option}")
 ```
 
 ## Aliases

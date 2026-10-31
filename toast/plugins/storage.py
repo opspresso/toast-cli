@@ -27,6 +27,7 @@ from toast import ui
 from toast.plugins.utils import (
     get_ssm_parameter,
     aws_error_code,
+    read_local_file,
     write_private_file,
     compute_hash,
     show_diff,
@@ -729,13 +730,6 @@ def _require_complete_read(result):
     return result
 
 
-def _read_local(local_path):
-    if not os.path.exists(local_path):
-        return None
-    with open(local_path, "r", encoding="utf-8", newline="") as f:
-        return f.read()
-
-
 def _read_store(config, org, project, kind):
     with ui.status("Reading the env-store"):
         return _require_complete_read(store_read(config, org, project, kind))
@@ -757,7 +751,7 @@ def _report_one_sided(status, source):
 
 
 def _cmd_up(config, org, project, kind, filename, local_path):
-    content = _read_local(local_path)
+    content = read_local_file(local_path)
     if content is None:
         raise click.ClickException(f"{filename} not found in project root")
 
@@ -795,7 +789,7 @@ def _cmd_down(config, org, project, kind, filename, local_path):
         raise click.ClickException(f"{filename} not found in env-store (S3 or SSM)")
 
     source = result.source.upper()
-    local_content = _read_local(local_path)
+    local_content = read_local_file(local_path)
     if local_content is not None:
         if compare_contents(local_content, result.value) == "identical":
             ui.success("Local already matches the env-store")
@@ -812,7 +806,7 @@ def _cmd_down(config, org, project, kind, filename, local_path):
 
 
 def _cmd_diff(config, org, project, kind, filename, local_path):
-    local_content = _read_local(local_path)
+    local_content = read_local_file(local_path)
     result = _read_store(config, org, project, kind)
     status = compare_contents(local_content, result.value)
 
@@ -828,7 +822,7 @@ def _cmd_diff(config, org, project, kind, filename, local_path):
 
 
 def _cmd_sync(config, org, project, kind, filename, local_path):
-    local_content = _read_local(local_path)
+    local_content = read_local_file(local_path)
     result = _read_store(config, org, project, kind)
 
     def describe(value, modified):

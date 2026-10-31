@@ -99,7 +99,8 @@
                 <p>The plugin will be automatically discovered and loaded when the application starts.</p>
 
                 <div class="code-block">
-                    <pre><code>from toast.plugins.base_plugin import BasePlugin
+                    <pre><code>from toast import ui
+from toast.plugins.base_plugin import BasePlugin
 import click
 
 class MyPlugin(BasePlugin):
@@ -117,9 +118,9 @@ class MyPlugin(BasePlugin):
         # Command implementation
         option = kwargs.get("option")
         if option:
-            click.echo(f"Executing with option: {option}")
+            ui.result(f"Executing with option: {option}")
         else:
-            click.echo("My custom command execution")</code></pre>
+            ui.result("My custom command execution")</code></pre>
                     <button class="copy-btn" type="button" aria-live="polite">Copy</button>
                 </div>
             </div>
