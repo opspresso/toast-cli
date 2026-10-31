@@ -33,7 +33,6 @@ class FileSyncIntegrationTests(unittest.TestCase):
         }
         self.executable("toast", "from toast import main\nmain()\n")
         self.executable("kubectl", "import sys\nprint('fixture denied', file=sys.stderr)\nsys.exit(1)\n")
-        self.executable("fzf", "import sys\nprint(sys.stdin.read().splitlines()[0])\n")
         self.executable("aws", textwrap.dedent('''\
             import json, os, shutil, sys
             from pathlib import Path
@@ -90,7 +89,7 @@ class FileSyncIntegrationTests(unittest.TestCase):
                 uploaded = self.command(alias, "up")
                 self.assertEqual(uploaded.returncode, 0, uploaded.stderr)
                 self.assertEqual((self.remote / kind).read_bytes(), content.encode())
-                for command in ("down", "dn", "sync"):
+                for command in ("down", "dn"):
                     local.unlink()
                     downloaded = self.command(alias, command)
                     self.assertEqual(downloaded.returncode, 0, downloaded.stderr)
@@ -107,6 +106,13 @@ class FileSyncIntegrationTests(unittest.TestCase):
                 listed = self.command(alias, "ls")
                 self.assertEqual(listed.returncode, 0, listed.stderr)
                 self.assertIn("org/project", listed.stdout)
+
+    def test_sync_without_a_terminal_changes_nothing(self):
+        (self.remote / "env-local").write_text("KEY=remote")
+        result = self.command("d", "sync")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("needs a terminal", result.stderr)
+        self.assertFalse((self.project / ".env.local").exists())
 
     def test_denied_store_read_preserves_local_and_remote_through_alias(self):
         local = self.project / ".env.local"

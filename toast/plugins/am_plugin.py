@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 
 import json
-from rich.console import Console
+
+from toast import ui
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.utils import run_command
-
-console = Console()
 
 
 def show_identity(profile=None):
     args = ["aws", "sts", "get-caller-identity", "--output", "json"]
     if profile:
         args += ["--profile", profile]
-    result = run_command(args)
-    console.print_json(data=json.loads(result.stdout))
+    with ui.status("Reading the AWS identity"):
+        result = run_command(args)
+    ui.json_result(json.loads(result.stdout))
 
 
 class AmPlugin(BasePlugin):

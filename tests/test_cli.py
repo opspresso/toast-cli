@@ -1,7 +1,7 @@
 """Exercise Click entry points and subprocess failures without external writes."""
 
 import configparser
-import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -11,12 +11,14 @@ import unittest
 from unittest import mock
 
 import click
+from click.shell_completion import ShellComplete
 from click.testing import CliRunner
-from rich.console import Console
 
-from toast import discover_and_load_plugins
-from toast.helpers import CustomHelpGroup
-from toast.plugins import cdw_plugin, env_plugin, utils
+from toast import discover_and_load_plugins, ui
+from toast.helpers import CustomHelpCommand, CustomHelpGroup
+from toast.plugins import cdw_plugin, ctx_plugin, env_plugin
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def make_cli():
@@ -63,12 +65,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertIn("_TOAST_COMPLETE", result.output)
 
-    def test_missing_fzf_without_terminal_names_the_fix(self):
-        with mock.patch("shutil.which", return_value=None):
-            with self.assertRaises(click.ClickException) as raised:
-                utils.select_from_list(["a"], "Pick")
-        self.assertIn("brew install fzf", raised.exception.message)
-
     def test_missing_executable_exits_nonzero(self):
         for command in ("am", "ctx", "region"):
             with self.subTest(command=command), mock.patch(
@@ -76,21 +72,31 @@ class CliTests(unittest.TestCase):
             ):
                 result = self.runner.invoke(self.cli, [command])
                 self.assertEqual(result.exit_code, 1)
-                self.assertIn("Executable not found", result.output)
+                self.assertIn("is not installed", result.output)
 
     def test_context_mutation_failure_never_reports_success(self):
-        for selections in (["dev"], ["[Del...]", "dev"], ["[Del...]", "[All...]"]):
+        for selections in (["dev"], [ctx_plugin.DELETE, "dev"], [ctx_plugin.DELETE, ctx_plugin.ALL]):
             with self.subTest(selections=selections), mock.patch(
                 "subprocess.run", side_effect=[
                     subprocess.CompletedProcess([], 0, "dev\n", ""),
                     subprocess.CompletedProcess([], 0, "dev\n", ""),
                     subprocess.CompletedProcess([], 1, "", "permission denied"),
                 ]
-            ), mock.patch("toast.plugins.ctx_plugin.select_from_list", side_effect=selections):
+            ), mock.patch("toast.ui.choose", side_effect=selections), mock.patch("click.confirm", return_value=True):
                 result = self.runner.invoke(self.cli, ["ctx"])
                 self.assertEqual(result.exit_code, 1)
                 self.assertIn("permission denied", result.output)
                 self.assertNotIn("✓", result.output)
+
+    def test_declined_context_deletion_changes_nothing(self):
+        for selections in ([ctx_plugin.DELETE, "dev"], [ctx_plugin.DELETE, ctx_plugin.ALL]):
+            with self.subTest(selections=selections), mock.patch(
+                "subprocess.run", return_value=subprocess.CompletedProcess([], 0, "dev\n", "")
+            ) as run, mock.patch("toast.ui.choose", side_effect=selections), mock.patch("click.confirm", return_value=False):
+                result = self.runner.invoke(self.cli, ["ctx"])
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("Cancelled", result.output)
+            self.assertEqual(run.call_count, 2)
 
     def test_aws_api_failure_exits_nonzero(self):
         with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 255, "", "AccessDenied")):
@@ -104,8 +110,8 @@ class CliTests(unittest.TestCase):
             repo = workspace / "gitlab.com" / "org" / "group" / "repo"
             (repo / ".git" / "objects").mkdir(parents=True)
             (repo / "node_modules").mkdir()
-            with mock.patch.object(cdw_plugin.os.path, "expanduser", return_value=str(workspace)), mock.patch.object(
-                cdw_plugin, "select_from_list", return_value=str(repo)
+            with mock.patch.object(cdw_plugin.os.path, "expanduser", return_value=str(workspace)), mock.patch(
+                "toast.ui.choose", return_value=str(repo)
             ) as select:
                 result = self.runner.invoke(self.cli, ["cdw"])
             self.assertEqual(result.stdout, str(repo) + "\n")
@@ -115,7 +121,7 @@ class CliTests(unittest.TestCase):
     def test_cdw_initial_setup_only_writes_stderr(self):
         with tempfile.TemporaryDirectory() as temp, mock.patch.object(
             cdw_plugin.os.path, "expanduser", return_value=str(Path(temp) / "workspace")
-        ), mock.patch.object(cdw_plugin, "console", Console(file=io.StringIO())):
+        ):
             result = self.runner.invoke(self.cli, ["cdw"])
             self.assertEqual(result.exit_code, 0)
             self.assertEqual(result.stdout, "")
@@ -126,7 +132,7 @@ class CliTests(unittest.TestCase):
             original = "[default]\naws_access_key_id=old\naws_secret_access_key=oldsecret\n[broken]\naws_access_key_id=new\n"
             path.write_text(original)
             with mock.patch.dict(os.environ, {"AWS_SHARED_CREDENTIALS_FILE": str(path)}), mock.patch.object(
-                env_plugin, "select_from_list", return_value="broken"
+                env_plugin.ui, "choose", return_value="broken"
             ):
                 result = self.runner.invoke(self.cli, ["env"])
             self.assertEqual(result.exit_code, 1)
@@ -137,7 +143,7 @@ class CliTests(unittest.TestCase):
             path = Path(temp) / "credentials"
             path.write_text("[default]\naws_session_token=old\n[new]\naws_access_key_id=id\naws_secret_access_key=ab%c\n")
             with mock.patch.dict(os.environ, {"AWS_SHARED_CREDENTIALS_FILE": str(path)}), mock.patch.object(
-                env_plugin, "select_from_list", return_value="new"
+                env_plugin.ui, "choose", return_value="new"
             ), mock.patch.object(env_plugin, "show_identity") as identity:
                 result = self.runner.invoke(self.cli, ["env"])
             self.assertEqual(result.exit_code, 0, result.output)
@@ -149,22 +155,85 @@ class CliTests(unittest.TestCase):
             identity.assert_called_once_with(profile="default")
 
 
-class SelectionTests(unittest.TestCase):
+class InterfaceTests(unittest.TestCase):
+    """The contract shared by every command: streams, exit codes and wording."""
+
     def setUp(self):
-        patcher = mock.patch("shutil.which", return_value="/stub/fzf")
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        self.cli = make_cli()
+        self.runner = CliRunner()
 
-    def test_cancel_and_no_match_are_not_failures(self):
-        for code in (1, 130):
-            with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], code, "", "")):
-                self.assertIsNone(utils.select_from_list(["dev"]))
+    def run_cli(self, *arguments, env=None):
+        return subprocess.run(
+            [sys.executable, "-m", "toast", *arguments], capture_output=True, text=True,
+            env={**os.environ, "PYTHONPATH": str(ROOT), **(env or {})},
+        )
 
-    def test_fzf_failure_is_not_cancellation(self):
-        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 2, "", "invalid flag")):
-            with self.assertRaisesRegex(click.ClickException, "invalid flag"):
-                utils.select_from_list(["dev"])
+    def test_no_arguments_show_help_and_succeed(self):
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Workspace:", result.stdout)
 
-    def test_selection_preserves_spaces(self):
-        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, " dev \n", "")):
-            self.assertEqual(utils.select_from_list([" dev "]), " dev ")
+    def test_a_typo_suggests_the_command(self):
+        result = self.run_cli("ctxx")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("✗", result.stderr)
+        self.assertIn("Did you mean 'ctx'?", result.stderr)
+        self.assertEqual(result.stdout, "")
+
+    def test_usage_error_names_the_help_command(self):
+        result = self.run_cli("git")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Run: toast git --help", result.stderr.replace("python -m toast", "toast").replace("__main__.py", "toast"))
+
+    def test_version_forms_agree(self):
+        self.assertEqual(self.run_cli("--version").stdout, self.run_cli("version").stdout)
+
+    def test_help_has_no_color_in_a_pipe_or_with_no_color(self):
+        self.assertNotIn("\x1b", self.run_cli("ctx", "--help").stdout)
+        with mock.patch.dict(os.environ, {"NO_COLOR": "1"}):
+            self.assertEqual(ui.paint("x", bold=True), "x")
+
+    def test_subcommands_appear_in_help_and_completion(self):
+        self.assertIn("Commands:", self.runner.invoke(self.cli, ["dot", "--help"]).output)
+        names = [item.value for item in ShellComplete(self.cli, {}, "toast", "_TOAST_COMPLETE").get_completions(["git", "repo"], "p")]
+        self.assertEqual(names, ["pull", "push"])
+
+    def test_status_stays_out_of_stdout(self):
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")):
+            result = self.runner.invoke(self.cli, ["ctx", "dev"])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("✓ Switched", result.stderr)
+
+    def test_long_messages_do_not_wrap_in_a_pipe(self):
+        name = "/" + "x" * 200
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, json.dumps({"Parameters": [{"Name": name, "Type": "String"}]}), "")):
+            result = self.runner.invoke(self.cli, ["ssm", "ls"])
+        self.assertEqual(result.stdout.split("\t")[-1].strip(), name)
+
+    def test_abort_exits_130(self):
+        @click.command(cls=CustomHelpCommand)
+        def stop():
+            raise click.Abort()
+
+        group = CustomHelpGroup()
+        group.add_command(stop)
+        result = self.runner.invoke(group, ["stop"])
+        self.assertEqual(result.exit_code, 130)
+        self.assertIn("Cancelled", result.output)
+
+
+class ChoiceTests(unittest.TestCase):
+    def test_no_terminal_is_an_error_that_names_the_way_out(self):
+        with mock.patch.object(ui, "is_interactive", return_value=False):
+            with self.assertRaisesRegex(click.ClickException, "needs a terminal"):
+                ui.choose(["a"], "Pick")
+
+    def test_no_options_need_no_terminal(self):
+        self.assertIsNone(ui.choose([], "Pick"))
+
+    def test_options_keep_their_exact_text(self):
+        def pick(picker, *args, **kwargs):
+            return picker.rows
+        with mock.patch.object(ui, "is_interactive", return_value=True), mock.patch.object(ui, "run_picker", side_effect=pick):
+            self.assertEqual(ui.choose([" dev "], "Pick"), " dev ")

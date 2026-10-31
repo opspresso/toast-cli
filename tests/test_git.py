@@ -174,8 +174,7 @@ class RepositoryOperationsTests(unittest.TestCase):
     def test_rm_asks_first_and_names_uncommitted_work(self):
         subprocess.run(["git", "init", str(self.repo)], check=True, capture_output=True)
         (self.repo / "note.txt").write_text("work")
-        with mock.patch("click.confirm", side_effect=click.Abort), mock.patch.object(git_plugin, "console") as console:
-            with self.assertRaises(click.Abort):
-                git_plugin.GitPlugin.execute("rm", "repo")
+        with mock.patch("click.confirm", return_value=False), mock.patch.object(git_plugin.ui, "warning") as warning:
+            git_plugin.GitPlugin.execute("rm", "repo")
         self.assertTrue(self.repo.exists())
-        self.assertIn("1 uncommitted changes", console.print.call_args_list[0].args[0])
+        self.assertIn("1 uncommitted changes", warning.call_args_list[0].args[0])

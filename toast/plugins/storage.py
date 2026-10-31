@@ -20,11 +20,10 @@ import getpass
 import tempfile
 import subprocess
 from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor
 
 import click
-from rich.console import Console
 
+from toast import ui
 from toast.plugins.utils import (
     get_ssm_parameter,
     aws_error_code,
@@ -32,12 +31,8 @@ from toast.plugins.utils import (
     compute_hash,
     show_diff,
     compare_contents,
-    select_sync_action,
     mask_env_content,
-    print_unified_diff,
 )
-
-console = Console(markup=False, highlight=False)
 
 # Defaults (overridable via environment variables or the config file).
 # - profile defaults to {username}-admin (see default_profile())
@@ -87,30 +82,30 @@ def prompt_and_create_config(path=None):
     non-interactive session or if the user declines.
     """
     path = path or config_file_path()
-    console.print(f"Config file not found: {path}", style="yellow")
+    ui.warning(f"Config file not found: {path}")
 
     if not sys.stdin.isatty():
         return False
 
-    if not click.confirm("Create it now?", default=True):
+    if not ui.confirm("Create it now?", default=True):
         return False
 
-    profile = click.prompt(
+    profile = ui.prompt(
         "ENV_STORE_PROFILE",
         default=os.environ.get("TOAST_ENV_STORE_PROFILE") or default_profile(),
     )
-    region = click.prompt(
+    region = ui.prompt(
         "ENV_STORE_REGION (blank for default)",
         default=os.environ.get("TOAST_ENV_STORE_REGION", ""),
         show_default=False,
     )
-    bucket = click.prompt(
+    bucket = ui.prompt(
         "ENV_STORE_BUCKET",
         default=os.environ.get("TOAST_ENV_STORE_BUCKET")
         or default_bucket(profile, region or None)
         or "",
     )
-    kms_key = click.prompt(
+    kms_key = ui.prompt(
         "ENV_STORE_KMS_KEY (blank for default)",
         default=os.environ.get("TOAST_ENV_STORE_KMS_KEY", ""),
         show_default=False,
@@ -119,7 +114,7 @@ def prompt_and_create_config(path=None):
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         write_private_file(path, render_config(bucket, profile, kms_key, region))
-        console.print(f"✓ Saved config file: {path}", style="bold green")
+        ui.success(f"Saved {path}")
         return True
     except OSError as e:
         raise click.ClickException(f"Could not write {path}: {e}") from e
@@ -529,6 +524,8 @@ class ReadResult:
 
 def store_read(config, org, project, kind):
     """Read from both backends and return whichever copy is newest."""
+    from concurrent.futures import ThreadPoolExecutor
+
     with ThreadPoolExecutor(max_workers=2) as executor:
         s3_future = executor.submit(s3_get, config, s3_key(org, project, kind))
         ssm_future = executor.submit(ssm_get, config, ssm_path(org, project, kind))
@@ -585,6 +582,8 @@ def store_list(config, kind):
     """
     errors = []
     merged = {}
+
+    from concurrent.futures import ThreadPoolExecutor
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         s3_future = executor.submit(s3_list, config)
@@ -668,26 +667,27 @@ def _print_masked_diff(local_content, remote_content, kind, incoming=False):
     store). Pass incoming=True for the download direction (LOCAL ->
     ENV-STORE), so lines arriving from the env-store render as additions.
     """
-    console.print("Differences found:")
-    console.print("-" * 40)
     local_masked = _mask_for_display(local_content, kind)
     remote_masked = _mask_for_display(remote_content, kind)
+    ui.rule()
     if incoming:
-        diff_lines = show_diff(
-            remote_masked,
-            local_masked,
-            local_name="ENV-STORE",
-            remote_name="LOCAL",
-        )
+        ui.diff(show_diff(remote_masked, local_masked, local_name="ENV-STORE", remote_name="LOCAL"))
     else:
-        diff_lines = show_diff(
-            local_masked,
-            remote_masked,
-            local_name="LOCAL",
-            remote_name="ENV-STORE",
-        )
-    print_unified_diff(diff_lines)
-    console.print("-" * 40)
+        ui.diff(show_diff(local_masked, remote_masked, local_name="LOCAL", remote_name="ENV-STORE"))
+    ui.rule()
+
+
+def select_sync_action(status, filename):
+    """Return 'upload', 'download' or None for a cancel."""
+    actions = {
+        "⬆ Upload local to the env-store": "upload",
+        "⬇ Download the env-store copy": "download",
+    }
+    if status == "local_only":
+        del actions["⬇ Download the env-store copy"]
+    elif status == "remote_only":
+        del actions["⬆ Upload local to the env-store"]
+    return actions.get(ui.choose(list(actions), f"Select an action for {filename}"))
 
 
 def run_file_sync(kind, filename, command):
@@ -729,238 +729,165 @@ def _require_complete_read(result):
     return result
 
 
-def _cmd_up(config, org, project, kind, filename, local_path):
+def _read_local(local_path):
     if not os.path.exists(local_path):
+        return None
+    with open(local_path, "r", encoding="utf-8", newline="") as f:
+        return f.read()
+
+
+def _read_store(config, org, project, kind):
+    with ui.status("Reading the env-store"):
+        return _require_complete_read(store_read(config, org, project, kind))
+
+
+def _write_store(config, org, project, kind, content, filename, target):
+    with ui.status(f"Uploading {filename}"):
+        ok, err = store_write(config, org, project, kind, content)
+    if not ok:
+        raise click.ClickException(f"Could not upload {filename}: {err}")
+    ui.success(f"Uploaded {filename} to {target}")
+
+
+def _report_one_sided(status, source):
+    if status == "local_only":
+        ui.info("Only the local file exists.")
+    elif status == "remote_only":
+        ui.info(f"Only the env-store copy ({source.upper()}) exists.")
+
+
+def _cmd_up(config, org, project, kind, filename, local_path):
+    content = _read_local(local_path)
+    if content is None:
         raise click.ClickException(f"{filename} not found in project root")
 
-    key = s3_key(org, project, kind)
-    target = f"s3://{config.bucket}/{key}"
-
-    with open(local_path, "r", encoding="utf-8", newline="") as f:
-        content = f.read()
-
-    result = _require_complete_read(store_read(config, org, project, kind))
+    target = f"s3://{config.bucket}/{s3_key(org, project, kind)}"
+    result = _read_store(config, org, project, kind)
 
     # The upload target is S3, so the no-op decision is made against the S3 copy
     # (not the newest copy): when the newest copy is a stale SSM parameter, an
     # `up` still needs to migrate the content into the bucket.
     if result.s3_value is not None and content == result.s3_value:
-        console.print(
-            "✓ S3 already matches local. No upload needed.", style="bold green"
-        )
+        ui.success("S3 already matches local")
         return
 
-    overwrite_msg = ""
     if result.value is not None:
         if compare_contents(content, result.value) == "different":
-            console.print(
-                f"env-store newest ({result.source.upper()}) differs from local."
-            )
+            ui.info(f"The env-store copy ({result.source.upper()}, newest) differs from local.")
             _print_masked_diff(content, result.value, kind)
-            overwrite_msg = " (overwrites env-store)"
         else:
             # Local matches the newest copy (SSM) but S3 is stale/missing.
-            console.print(
-                "ℹ Local matches SSM (newest); uploading to migrate it into S3."
-            )
-            overwrite_msg = " (migrate to S3)"
+            ui.info("Local matches SSM (newest). The upload moves it into S3.")
 
     # Confirm only when the upload target (S3) already holds a copy; a brand-new
     # destination is uploaded immediately without asking.
-    if result.s3_value is not None and not click.confirm(
-        f"Upload {filename} to {target}{overwrite_msg}?"
-    ):
-        console.print("Operation cancelled.")
+    if result.s3_value is not None and not ui.confirm(f"Overwrite {target}?"):
+        ui.cancelled()
         return
 
-    console.print(f"Uploading {filename} to {target}...")
-    ok, err = store_write(config, org, project, kind, content)
-    if ok:
-        console.print(
-            f"✓ Successfully uploaded {filename} to {target}", style="bold green"
-        )
-    else:
-        raise click.ClickException(f"Error uploading to S3: {err}")
+    _write_store(config, org, project, kind, content, filename, target)
 
 
 def _cmd_down(config, org, project, kind, filename, local_path):
-    result = _require_complete_read(store_read(config, org, project, kind))
+    result = _read_store(config, org, project, kind)
 
     if result.value is None:
         raise click.ClickException(f"{filename} not found in env-store (S3 or SSM)")
 
-    local_exists = os.path.exists(local_path)
-    overwrite_msg = ""
-    if local_exists:
-        with open(local_path, "r", encoding="utf-8", newline="") as f:
-            local_content = f.read()
-        status = compare_contents(local_content, result.value)
-        if status == "identical":
-            console.print(
-                "✓ Local already matches env-store (newest). No download needed.",
-                style="bold green",
-            )
+    source = result.source.upper()
+    local_content = _read_local(local_path)
+    if local_content is not None:
+        if compare_contents(local_content, result.value) == "identical":
+            ui.success("Local already matches the env-store")
             return
-        console.print("Local file differs from env-store (newest).")
+        ui.info(f"The local file differs from the env-store copy ({source}, newest).")
         _print_masked_diff(local_content, result.value, kind, incoming=True)
-        overwrite_msg = " (will overwrite existing file)"
-
-    src_label = result.source.upper()
-    # Confirm only when a local file already exists; a brand-new destination is
-    # downloaded immediately without asking.
-    if local_exists and not click.confirm(
-        f"Download {filename} from {src_label} (newest){overwrite_msg}?"
-    ):
-        console.print("Operation cancelled.")
-        return
+        # Confirm only when a local file exists; a new file is written without asking.
+        if not ui.confirm(f"Overwrite local {filename} with the {source} copy?"):
+            ui.cancelled()
+            return
 
     write_private_file(local_path, result.value)
-    console.print(
-        f"✓ Successfully downloaded {filename} from {src_label} to {local_path}",
-        style="bold green",
-    )
+    ui.success(f"Downloaded {filename} from {source} to {local_path}")
 
 
 def _cmd_diff(config, org, project, kind, filename, local_path):
-    local_content = None
-    if os.path.exists(local_path):
-        with open(local_path, "r", encoding="utf-8", newline="") as f:
-            local_content = f.read()
-
-    result = _require_complete_read(store_read(config, org, project, kind))
-
-    remote_content = result.value
-    status = compare_contents(local_content, remote_content)
+    local_content = _read_local(local_path)
+    result = _read_store(config, org, project, kind)
+    status = compare_contents(local_content, result.value)
 
     if status == "both_missing":
-        console.print("Neither local file nor env-store has this file.")
-        return
-
-    if status == "identical":
-        console.print(
-            "✓ Local matches env-store (newest). No differences.",
-            style="bold green",
-        )
-        return
-
-    if status == "different":
-        console.print(
-            f"Local {filename} differs from env-store (newest: {result.source.upper()})."
-        )
-        _print_masked_diff(local_content, remote_content, kind)
-    elif status == "local_only":
-        console.print("Local file exists, but env-store does not.")
-    elif status == "remote_only":
-        console.print(
-            f"env-store has this file (newest: {result.source.upper()}), but local does not."
-        )
+        ui.warning(f"Neither local nor the env-store has {filename}")
+    elif status == "identical":
+        ui.success("Local matches the env-store")
+    elif status == "different":
+        ui.info(f"Local {filename} differs from the env-store copy ({result.source.upper()}, newest).")
+        _print_masked_diff(local_content, result.value, kind)
+    else:
+        _report_one_sided(status, result.source)
 
 
 def _cmd_sync(config, org, project, kind, filename, local_path):
-    key = s3_key(org, project, kind)
-    console.print(f"Comparing {filename} with env-store: s3://{config.bucket}/{key}")
-    console.print("=" * 60)
+    local_content = _read_local(local_path)
+    result = _read_store(config, org, project, kind)
 
-    local_content = None
-    if os.path.exists(local_path):
-        with open(local_path, "r", encoding="utf-8", newline="") as f:
-            local_content = f.read()
+    def describe(value, modified):
+        if value is None:
+            return "not found"
+        return f"{compute_hash(value)}  {modified}" if modified else compute_hash(value)
 
-    result = _require_complete_read(store_read(config, org, project, kind))
+    ui.info(f"{filename} · s3://{config.bucket}/{s3_key(org, project, kind)}")
+    ui.fields([
+        ("Local", describe(local_content, None)),
+        ("S3", describe(result.s3_value, result.s3_last)),
+        ("SSM", describe(result.ssm_value, result.ssm_last)),
+    ])
 
-    remote_content = result.value
-
-    local_hash = compute_hash(local_content) if local_content is not None else "-"
-    s3_hash = compute_hash(result.s3_value) if result.s3_value is not None else "-"
-    ssm_hash = compute_hash(result.ssm_value) if result.ssm_value is not None else "-"
-
-    console.print(f"Local: {local_hash if local_content is not None else '(not found)'}")
-    console.print(
-        f"S3:    {s3_hash if result.s3_value is not None else '(not found)'}"
-        + (f"  {result.s3_last}" if result.s3_last else "")
-    )
-    console.print(
-        f"SSM:   {ssm_hash if result.ssm_value is not None else '(not found)'}"
-        + (f"  {result.ssm_last}" if result.ssm_last else "")
-    )
-    if result.source:
-        console.print(f"→ current (newest): {result.source.upper()}", style="bold cyan")
-    console.print("")
-
-    status = compare_contents(local_content, remote_content)
+    status = compare_contents(local_content, result.value)
 
     if status == "both_missing":
-        console.print("Neither local file nor env-store has this file.")
+        ui.warning(f"Neither local nor the env-store has {filename}")
         return
 
     if status == "identical":
-        console.print(
-            "✓ Local matches env-store (newest). No action needed.", style="bold green"
-        )
+        ui.success("Local matches the env-store")
         if result.status == "both" and result.source == "ssm":
-            console.print(
-                "ℹ SSM is newer than S3; run `up` to migrate to the bucket.",
-                style="yellow",
-            )
+            ui.warning("SSM is newer than S3. Run `up` to move it into the bucket.")
         elif result.status == "ssm_only":
-            console.print(
-                "ℹ This file exists only in SSM; run `up` to migrate to the bucket.",
-                style="yellow",
-            )
+            ui.warning("This file exists only in SSM. Run `up` to move it into the bucket.")
         return
 
     if status == "different":
-        _print_masked_diff(local_content, remote_content, kind)
-    elif status == "local_only":
-        console.print("Local file exists, but env-store does not.")
-    elif status == "remote_only":
-        console.print("env-store has this file, but local does not.")
-
-    console.print("")
+        _print_masked_diff(local_content, result.value, kind)
+    else:
+        _report_one_sided(status, result.source)
 
     action = select_sync_action(status, filename)
 
     if action == "upload":
-        console.print(f"Uploading {filename} to S3...")
-        ok, err = store_write(config, org, project, kind, local_content)
-        if ok:
-            console.print(
-                f"✓ Successfully uploaded to s3://{config.bucket}/{key}",
-                style="bold green",
-            )
-        else:
-            raise click.ClickException(f"Error uploading: {err}")
+        _write_store(config, org, project, kind, local_content, filename, f"s3://{config.bucket}/{s3_key(org, project, kind)}")
     elif action == "download":
-        console.print(f"Downloading from {result.source.upper()} to {filename}...")
-        write_private_file(local_path, remote_content)
-        console.print(f"✓ Successfully downloaded to {local_path}", style="bold green")
+        write_private_file(local_path, result.value)
+        ui.success(f"Downloaded {filename} from {result.source.upper()} to {local_path}")
     else:
-        console.print("Operation cancelled.")
+        ui.cancelled()
 
 
 def _cmd_ls(config, kind, filename):
-    console.print(f"Listing {filename} entries in env-store (S3 + SSM)...")
-    rows, errors = store_list(config, kind)
+    with ui.status(f"Listing {filename} entries"):
+        rows, errors = store_list(config, kind)
     if errors:
         details = "; ".join(f"{source.upper()}: {message}" for source, message in errors)
         raise click.ClickException(f"Cannot list env-store copies: {details}")
 
     if not rows:
-        console.print("No entries found.", style="yellow")
+        ui.warning(f"No {filename} entries in the env-store")
         return
 
-    console.print("")
-    console.print(f"env-store entries ({filename}):")
-    console.print("=" * 60)
-    for r in rows:
-        backends = []
-        if r["in_s3"]:
-            backends.append("S3")
-        if r["in_ssm"]:
-            backends.append("SSM")
-        backends_str = "+".join(backends)
-        console.print(
-            f"{r['path']}  [current: {r['source'].upper()}, in: {backends_str}]"
-            + (f"  {r['last_modified']}" if r["last_modified"] else ""),
-            markup=False,
-        )
+    ui.table(
+        ("SOURCE", "IN", "MODIFIED", "PATH"),
+        [
+            (r["source"].upper(), "+".join(name for name, present in (("S3", r["in_s3"]), ("SSM", r["in_ssm"])) if present), r["last_modified"] or "", r["path"])
+            for r in rows
+        ],
+    )

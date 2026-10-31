@@ -88,7 +88,7 @@ class CleanTests(unittest.TestCase):
     def number(self, name):
         listing = self.invoke("--list").output
         for line in listing.splitlines():
-            if f" {name} " in line:
+            if name in line.split():
                 return line.split()[0]
         self.fail(f"{name} not listed:\n{listing}")
 
@@ -104,7 +104,7 @@ class CleanTests(unittest.TestCase):
     def test_no_input_removes_nothing(self):
         result = self.invoke()
         self.assertEqual(result.exit_code, 0, result.output)
-        self.assertIn("Nothing removed", result.output)
+        self.assertIn("Cancelled", result.output)
         self.assertTrue(self.cache.exists())
 
     def test_selected_numbers_are_the_only_items_removed(self):
@@ -118,7 +118,7 @@ class CleanTests(unittest.TestCase):
     def test_declined_confirmation_removes_nothing(self):
         result = self.invoke(input="a\nn\n")
         self.assertEqual(result.exit_code, 0, result.output)
-        self.assertIn("Nothing removed", result.output)
+        self.assertIn("Cancelled", result.output)
         self.assertEqual(self.commands, [])
         self.assertTrue(self.cache.exists())
 

@@ -9,7 +9,6 @@ import re
 import shutil
 import subprocess
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -318,6 +317,8 @@ def scan(home):
     """Measure every item in parallel: each one waits on du or a tool, not the CPU."""
     project_directories.cache_clear()
     project_directories(home)
+    from concurrent.futures import ThreadPoolExecutor
+
     items = [item for item in catalog(home) if item.available()]
     with ThreadPoolExecutor(max_workers=8) as pool:
         for item, size in zip(items, pool.map(lambda item: item.measure(home), items)):

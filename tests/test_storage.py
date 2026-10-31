@@ -712,10 +712,10 @@ class StorageSafetyTests(unittest.TestCase):
             local = Path(temp) / ".env.local"
             local.write_text("")
             output = io.StringIO()
-            with mock.patch.object(storage, "store_read", return_value=remote), mock.patch.object(storage, "console", Console(file=output)):
+            with mock.patch.object(storage, "store_read", return_value=remote), mock.patch.object(storage.ui, "error_console", Console(file=output, width=120)):
                 storage._cmd_sync(self.cfg, "o", "p", "env-local", ".env.local", str(local))
-            self.assertIn("Local: e3b0c44298fc", output.getvalue())
-            self.assertIn("S3:    e3b0c44298fc", output.getvalue())
+            self.assertRegex(output.getvalue(), r"Local\s+e3b0c44298fc")
+            self.assertRegex(output.getvalue(), r"S3\s+e3b0c44298fc")
 
     def test_backends_are_read_concurrently(self):
         barrier = threading.Barrier(2)
