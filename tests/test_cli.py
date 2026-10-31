@@ -150,6 +150,11 @@ class CliTests(unittest.TestCase):
 
 
 class SelectionTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch("shutil.which", return_value="/stub/fzf")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_cancel_and_no_match_are_not_failures(self):
         for code in (1, 130):
             with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], code, "", "")):
