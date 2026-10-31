@@ -14,17 +14,17 @@ command-line tools instead of adding Python SDK dependencies.
    stops dependent work; it must not produce a success message.
 
 Plugin import or registration failures stop startup. Click's global functions
-are unchanged. `toast/helpers.py` supplies the help logo and version lookup
+are unchanged. `toast/helpers.py` supplies the help layout, error reporting and version lookup
 (installed metadata, with a local `VERSION` fallback when not installed).
 
 ## Components
 
 | File | Responsibility |
 |------|----------------|
-| `toast/ui.py` | Messages, size format, and the key-driven picker. `Picker` holds state only; `run_picker` owns the terminal and always restores it |
-| `toast/plugins/base_plugin.py` | Registration, help metadata (`category`, `examples`) and expected-error boundary |
+| `toast/ui.py` | The only module that writes to the terminal: palette, messages, tables, diffs, spinners, prompts and pickers. Results go to stdout and everything else to stderr. `Picker` holds state only; `run_picker` owns the terminal and always restores it |
+| `toast/plugins/base_plugin.py` | Registration, help metadata (`category`, `commands`, `examples`) and expected-error boundary |
 | `toast/plugins/clean_catalog.py` | `clean` item catalog, parallel size scan and activity guards |
-| `toast/plugins/utils.py` | Checked subprocesses, fzf selection with a built-in fallback, SSM reads, secret masking, diffs, atomic private files |
+| `toast/plugins/utils.py` | Checked subprocesses, SSM reads, secret masking, diffs, atomic private files |
 | `toast/plugins/storage.py` | Shared dot/prompt configuration and S3/SSM synchronization |
 | `toast/plugins/*_plugin.py` | Individual command arguments and behavior |
 | `setup.py`, `pyproject.toml`, `MANIFEST.in` | Package metadata, build configuration, source distribution |
@@ -36,7 +36,7 @@ are unchanged. `toast/helpers.py` supplies the help logo and version lookup
 | Command | Behavior and external tools |
 |---------|-----------------------------|
 | `am` | AWS STS identity, explicit JSON output |
-| `cdw` | Walk workspace namespaces until repository roots; fzf selection; only the selected path goes to stdout |
+| `cdw` | Walk workspace namespaces until repository roots; filtering picker; only the selected path goes to stdout |
 | `ctx` | kubectl contexts; AWS EKS discovery and kubeconfig update |
 | `dot`, `prompt` | Shared env-store flow described below |
 | `env` | Copy a complete static profile to default in the AWS credentials file; atomic mode 0600 write; verify the default identity |
@@ -56,8 +56,8 @@ symlinks. Mirror push uses a destination URL without modifying remotes.
 `ssm` uses `toast ssm <command> [name] [value]`. A read error stops put/diff.
 Creation sends `Overwrite=false`; updating requires a successful comparison and
 confirmation. Put payloads use a private temporary JSON file, so values are
-literal and are not added to the AWS child process arguments. Direct CLI value
-arguments can still appear in shell history; interactive creation hides input.
+literal and are not added to the AWS child process arguments. A value given as an
+argument can appear in shell history; stdin and the hidden prompt avoid that.
 
 ## Env-store contracts
 
