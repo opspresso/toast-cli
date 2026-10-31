@@ -62,7 +62,7 @@ def discover_and_load_plugins(
 
 def show_version(ctx, param, value):
     if value and not ctx.resilient_parsing:
-        click.echo(f"toast-cli {get_version()}")
+        ui.result(f"toast-cli {get_version()}")
         ctx.exit()
 
 
@@ -74,13 +74,13 @@ def toast_cli(ctx):
     Daily commands for AWS, Kubernetes, Git and your workspace.
     """
     if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
+        ui.result(ctx.get_help())
 
 
 @toast_cli.command()
 def version():
     """Show the version."""
-    click.echo(f"toast-cli {get_version()}")
+    ui.result(f"toast-cli {get_version()}")
 
 
 def main():

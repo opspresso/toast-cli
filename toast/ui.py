@@ -115,7 +115,7 @@ def table(headers, rows, min_widths=()):
         wide = index == len(headers) - 1
         view.add_column(header, no_wrap=True, overflow="ellipsis" if wide else None, min_width=min_widths[index] if index < len(min_widths) else None)
     for row in rows:
-        view.add_row(*row)
+        view.add_row(*(cell if isinstance(cell, Text) else Text(cell) for cell in row))
     console.print(view)
 
 
@@ -257,8 +257,13 @@ class Picker:
             self.selected.add(self.cursor)
 
     def _apply_filter(self):
-        ranked = []
         self.matches = {}
+        if not self.query.strip():
+            self.view = list(range(len(self.rows)))
+            self.cursor = self.offset = 0
+            self._move_to(next((index for index, row in enumerate(self.rows) if row.key == self.current), 0), 1)
+            return
+        ranked = []
         for index, row in enumerate(self.rows):
             match = fuzzy(self.query, row.plain)
             if match:

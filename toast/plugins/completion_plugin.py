@@ -5,6 +5,7 @@ import os
 import click
 from click.shell_completion import get_completion_class
 
+from toast import ui
 from toast.plugins.base_plugin import BasePlugin
 
 
@@ -29,4 +30,4 @@ class CompletionPlugin(BasePlugin):
         if completion is None:
             raise click.UsageError("Name a shell: bash, zsh or fish")
         root = click.get_current_context().find_root().command
-        click.echo(completion(root, {}, "toast", "_TOAST_COMPLETE").source())
+        ui.result(completion(root, {}, "toast", "_TOAST_COMPLETE").source())

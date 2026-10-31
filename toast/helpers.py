@@ -86,12 +86,13 @@ class CustomHelpGroup(click.Group):
         sys.exit(code if isinstance(code, int) else 0)
 
     def resolve_command(self, ctx, args):
+        typed = args[0] if args else ""  # Click consumes args when it reports the error.
         try:
             return super().resolve_command(ctx, args)
         except click.UsageError as exc:
             import difflib
 
-            close = difflib.get_close_matches(args[0], self.list_commands(ctx), n=1)
+            close = difflib.get_close_matches(typed, self.list_commands(ctx), n=1)
             # Newer Click versions add this suggestion themselves.
             if close and "Did you mean" not in exc.format_message():
                 raise click.UsageError(f"{exc.format_message()} Did you mean '{close[0]}'?", ctx) from exc

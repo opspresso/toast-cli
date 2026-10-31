@@ -40,7 +40,7 @@ class SsmPlugin(BasePlugin):
     examples = (
         ("toast ssm", "Browse parameters"),
         ("toast ssm get /app/key --reveal", "Print a value"),
-        ("pbpaste | toast ssm put /app/key", "Store a value without shell history"),
+        ("pbpaste | toast ssm put /app/key --yes", "Store a value without shell history"),
         ("toast ssm ls /app", "List a path"),
     )
 
@@ -52,10 +52,11 @@ class SsmPlugin(BasePlugin):
         func = click.argument("command", required=False, shell_complete=cls.complete_command)(func)
         func = click.option("--region", "-r", help="AWS region")(func)
         func = click.option("--reveal", is_flag=True, help="Show secret values in plaintext")(func)
+        func = click.option("--yes", "-y", is_flag=True, help="Overwrite with put without a confirmation")(func)
         return func
 
     @classmethod
-    def execute(cls, command=None, name=None, value=None, region=None, reveal=False, **kwargs):
+    def execute(cls, command=None, name=None, value=None, region=None, reveal=False, yes=False, **kwargs):
         def aws_cmd(args):
             return ["aws", "ssm"] + args + (["--region", region] if region else [])
 
@@ -71,13 +72,17 @@ class SsmPlugin(BasePlugin):
             raise click.UsageError(f"{command} does not accept a value")
         if command in ("get", "delete", "put", "diff") and not name:
             raise click.UsageError("Parameter name is required")
+        if yes and command != "put":
+            raise click.UsageError("--yes requires put")
+        # A value read from a pipe consumes stdin, so no confirmation can follow.
+        can_confirm = bool(value) or sys.stdin.isatty()
         if command in ("put", "diff") and not value:
             value = cls._read_value()
 
         if command == "get":
             cls._get_parameter(name, aws_cmd, reveal)
         elif command == "put":
-            cls._put_parameter(name, value, aws_cmd)
+            cls._put_parameter(name, value, aws_cmd, yes=yes, can_confirm=can_confirm)
         elif command == "diff":
             cls._diff_parameter(name, value, aws_cmd)
         elif command == "delete":
@@ -143,7 +148,7 @@ class SsmPlugin(BasePlugin):
         ui.rule()
 
     @classmethod
-    def _put_parameter(cls, name, value, aws_cmd):
+    def _put_parameter(cls, name, value, aws_cmd, yes=False, can_confirm=True):
         existing, error = cls._fetch_parameter_value(name, aws_cmd)
         if error:
             raise click.ClickException(f"Could not read current value: {error}")
@@ -152,7 +157,9 @@ class SsmPlugin(BasePlugin):
             return
         if existing is not None:
             cls._print_diff(name, value, existing)
-            if not ui.confirm(f"Overwrite {name} as a SecureString?"):
+            if not (yes or can_confirm):
+                raise click.ClickException(f"{name} already exists. Add --yes to overwrite it.")
+            if not (yes or ui.confirm(f"Overwrite {name} as a SecureString?")):
                 ui.cancelled()
                 return
 

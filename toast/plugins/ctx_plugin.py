@@ -16,7 +16,10 @@ def list_contexts():
 
 def complete_contexts(ctx, param, incomplete):
     # A completion must stay silent, so a failed kubectl offers nothing.
-    result = spawn(["kubectl", "config", "get-contexts", "-o=name"])
+    try:
+        result = spawn(["kubectl", "config", "get-contexts", "-o=name"])
+    except click.ClickException:
+        return []
     return [name for name in result.stdout.splitlines() if name.startswith(incomplete)]
 
 

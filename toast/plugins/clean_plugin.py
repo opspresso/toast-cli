@@ -72,10 +72,7 @@ def choose_with_picker(items, home):
 def choose_with_prompt(items, home):
     """Serve pipes and terminals without a key-by-key input mode."""
     show_table(items, home)
-    try:
-        answer = ui.prompt("Enter numbers or names (1 3 5), a for all except data, q to quit", default="q", show_default=False)
-    except click.Abort:
-        return None
+    answer = ui.prompt("Enter numbers or names (1 3 5), a for all except data, q to quit", default="q", show_default=False)
     tokens = answer.replace(",", " ").split()
     if not tokens or any(token.lower() == "q" for token in tokens):
         return None
@@ -99,14 +96,10 @@ def select(items, tokens):
 
 
 def confirm(chosen):
-    for item in chosen:
-        ui.error_console.print(Text.assemble("  ", (ui.format_size(item.bytes).rjust(9)), "  ", item.name))
+    ui.fields([(ui.format_size(item.bytes).rjust(9), item.name) for item in chosen])
     if any(item.risk == DATA for item in chosen):
         ui.warning("The selection includes data that cannot be restored.")
-    try:
-        return ui.confirm(f"Remove {len(chosen)} items ({ui.format_size(total_size(chosen))})?")
-    except click.Abort:
-        return False
+    return ui.confirm(f"Remove {len(chosen)} items ({ui.format_size(total_size(chosen))})?")
 
 
 def remove(chosen, home):

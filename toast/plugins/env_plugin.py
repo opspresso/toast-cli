@@ -16,7 +16,11 @@ def credentials_file():
 
 def complete_profiles(ctx, param, incomplete):
     config = configparser.ConfigParser(interpolation=None)
-    config.read(credentials_file(), encoding="utf-8")
+    # A completion must stay silent, so an unreadable file offers nothing.
+    try:
+        config.read(credentials_file(), encoding="utf-8")
+    except (OSError, ValueError, configparser.Error):
+        return []
     return [name for name in config.sections() if name.startswith(incomplete)]
 
 

@@ -58,7 +58,7 @@ the next version.
   come from a tool or environment value. A hardcoded absolute path would let a test
   in a temporary home reach real data.
 - Use `run_command()` for subprocesses whose nonzero status is a failure.
-  Handle documented special exit codes at the call site, such as fzf cancel.
+  Use `spawn()` when the call site handles a nonzero status itself.
 - Raise `click.UsageError` for invalid arguments and `click.ClickException` for
   operational failures. `BasePlugin` converts expected OS, value, and config
   errors at the command boundary. Do not print an error and return success.

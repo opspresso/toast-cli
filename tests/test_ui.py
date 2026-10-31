@@ -110,6 +110,13 @@ class PickerTests(unittest.TestCase):
             picker.handle(key)
         self.assertEqual(len(picker.view), 2)
 
+    def test_clearing_the_filter_restores_order_and_current_value(self):
+        picker = ui.Picker(rows("long-name", "b", "c"), multiple=False, current="c")
+        for key in ("b", "\x7f"):
+            picker.handle(key)
+        self.assertEqual(picker.view, [0, 1, 2])
+        self.assertEqual(picker.result()[0].key, "c")
+
     def test_a_single_choice_starts_on_the_current_value(self):
         picker = ui.Picker(rows("a", "b", "c"), multiple=False, current="b")
         self.assertEqual(picker.result()[0].key, "b")

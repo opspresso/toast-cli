@@ -165,6 +165,22 @@ class SsmCliTests(unittest.TestCase):
         self.assertEqual(put.call_args.args[:2], ("/x", "piped-secret"))
         self.assertNotIn("piped-secret", result.output)
 
+    def test_piped_value_needs_yes_to_overwrite(self):
+        import subprocess
+        existing = '{"Parameter": {"Value": "old", "Type": "SecureString"}}'
+
+        def run(args, **kwargs):
+            return subprocess.CompletedProcess(args, 0, existing if "get-parameter" in args else '{"Version": 2}', "")
+
+        with mock.patch("subprocess.run", side_effect=run) as process:
+            refused = self.runner.invoke(self.cli, ["ssm", "put", "/x"], input="new-secret\n")
+            self.assertEqual(refused.exit_code, 1)
+            self.assertIn("--yes", refused.output)
+            self.assertFalse(any("put-parameter" in call.args[0] for call in process.call_args_list))
+            accepted = self.runner.invoke(self.cli, ["ssm", "put", "/x", "--yes"], input="new-secret\n")
+        self.assertEqual(accepted.exit_code, 0, accepted.output)
+        self.assertTrue(any("put-parameter" in call.args[0] for call in process.call_args_list))
+
     def test_put_without_any_value_is_a_usage_error(self):
         result = self.runner.invoke(self.cli, ["ssm", "put", "/x"], input="")
         self.assertEqual(result.exit_code, 2)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import configparser
+import errno
 
 import click
 
@@ -28,6 +29,9 @@ class BasePlugin:
             try:
                 return cls.execute(**kwargs)
             except (OSError, ValueError, configparser.Error) as exc:
+                # Click ends the run quietly when the reader of a pipe goes away.
+                if getattr(exc, "errno", None) == errno.EPIPE:
+                    raise
                 raise click.ClickException(str(exc)) from exc
 
         cli_group.commands[cls.name].category = cls.category

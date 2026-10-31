@@ -408,7 +408,8 @@ prod` or `toast region ap-northeast-2`. `toast dot sync` has no such form, so us
 `toast dot up` or `toast dot down`.
 
 `ssm put` and `ssm diff` take a value from stdin or a hidden prompt, which keeps it
-out of shell history: `pbpaste | toast ssm put /app/key`.
+out of shell history: `pbpaste | toast ssm put /app/key`. A pipe cannot answer a
+confirmation, so add `--yes` to overwrite an existing parameter.
 
 `git REPO rm` asks for a confirmation and names uncommitted changes and unpushed
 commits. Use `--yes` in scripts.

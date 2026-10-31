@@ -1,6 +1,7 @@
 """Exercise Click entry points and subprocess failures without external writes."""
 
 import configparser
+import io
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,7 @@ from unittest import mock
 import click
 from click.shell_completion import ShellComplete
 from click.testing import CliRunner
+from rich.console import Console
 
 from toast import discover_and_load_plugins, ui
 from toast.helpers import CustomHelpCommand, CustomHelpGroup
@@ -218,6 +220,32 @@ class InterfaceTests(unittest.TestCase):
         with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, json.dumps({"Parameters": [{"Name": name, "Type": "String"}]}), "")):
             result = self.runner.invoke(self.cli, ["ssm", "ls"])
         self.assertEqual(result.stdout.split("\t")[-1].strip(), name)
+
+    def test_a_bare_separator_is_a_usage_error(self):
+        result = self.run_cli("--", "--bogus")
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_a_closed_pipe_ends_quietly(self):
+        script = f"{sys.executable} -m toast completion zsh | true"
+        result = subprocess.run(["bash", "-c", "set -o pipefail; " + script], capture_output=True, text=True, env={**os.environ, "PYTHONPATH": str(ROOT)})
+        self.assertNotIn("✗", result.stderr)
+        self.assertNotIn("Broken pipe", result.stderr)
+
+    def test_completion_stays_silent_when_its_source_fails(self):
+        with mock.patch("subprocess.run", side_effect=FileNotFoundError):
+            self.assertEqual(ctx_plugin.complete_contexts(None, None, ""), [])
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "credentials"
+            path.write_text("not an ini file\n")
+            with mock.patch.dict(os.environ, {"AWS_SHARED_CREDENTIALS_FILE": str(path)}):
+                self.assertEqual(env_plugin.complete_profiles(None, None, ""), [])
+
+    def test_table_cells_are_literal_text(self):
+        console = Console(file=io.StringIO(), force_terminal=True, width=60)
+        with mock.patch.object(ui, "console", console):
+            ui.table(("NAME",), [("a/[/b]",)])
+        self.assertIn("a/[/b]", console.file.getvalue())
 
     def test_abort_exits_130(self):
         @click.command(cls=CustomHelpCommand)
