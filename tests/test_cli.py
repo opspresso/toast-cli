@@ -15,6 +15,7 @@ from click.testing import CliRunner
 from rich.console import Console
 
 from toast import discover_and_load_plugins
+from toast.helpers import CustomHelpGroup
 from toast.plugins import cdw_plugin, env_plugin, utils
 
 
@@ -37,6 +38,37 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_top_level_help_groups_commands(self):
+        group = CustomHelpGroup()
+        for plugin in discover_and_load_plugins():
+            plugin.register(group)
+        result = self.runner.invoke(group, ["--help"])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertLess(result.output.index("AWS:"), result.output.index("Kubernetes:"))
+
+    def test_command_help_shows_examples(self):
+        result = self.runner.invoke(self.cli, ["ctx", "--help"])
+        self.assertIn("Examples:", result.output)
+        self.assertIn("toast ctx prod", result.output)
+
+    def test_positional_shortcuts_skip_the_picker(self):
+        for arguments, expected in ((["ctx", "dev"], ["kubectl", "config", "use-context", "dev"]), (["region", "us-east-1"], ["aws", "configure", "set", "default.region", "us-east-1"])):
+            with self.subTest(arguments=arguments), mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run:
+                result = self.runner.invoke(self.cli, arguments)
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(run.call_args_list[0].args[0], expected)
+
+    def test_completion_prints_a_script(self):
+        result = self.runner.invoke(self.cli, ["completion", "zsh"])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("_TOAST_COMPLETE", result.output)
+
+    def test_missing_fzf_without_terminal_names_the_fix(self):
+        with mock.patch("shutil.which", return_value=None):
+            with self.assertRaises(click.ClickException) as raised:
+                utils.select_from_list(["a"], "Pick")
+        self.assertIn("brew install fzf", raised.exception.message)
+
     def test_missing_executable_exits_nonzero(self):
         for command in ("am", "ctx", "region"):
             with self.subTest(command=command), mock.patch(
@@ -50,6 +82,7 @@ class CliTests(unittest.TestCase):
         for selections in (["dev"], ["[Del...]", "dev"], ["[Del...]", "[All...]"]):
             with self.subTest(selections=selections), mock.patch(
                 "subprocess.run", side_effect=[
+                    subprocess.CompletedProcess([], 0, "dev\n", ""),
                     subprocess.CompletedProcess([], 0, "dev\n", ""),
                     subprocess.CompletedProcess([], 1, "", "permission denied"),
                 ]

@@ -10,6 +10,11 @@ class DotPlugin(BasePlugin):
 
     name = "dot"
     help = "Manage .env.local files"
+    category = "Workspace"
+    examples = (
+        ("toast dot", "Sync .env.local with the env-store"),
+        ("toast dot up", "Upload .env.local"),
+    )
 
     @classmethod
     def get_arguments(cls, func):

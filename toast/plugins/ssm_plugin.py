@@ -27,6 +27,12 @@ class SsmPlugin(BasePlugin):
 
     name = "ssm"
     help = "AWS SSM Parameter Store operations"
+    category = "AWS"
+    examples = (
+        ("toast ssm", "Browse parameters"),
+        ("toast ssm get /app/key --reveal", "Print a value"),
+        ("toast ssm ls /app", "List a path"),
+    )
 
     @classmethod
     def get_arguments(cls, func):

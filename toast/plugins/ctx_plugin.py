@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-from rich.console import Console
+import subprocess
+
+import click
+from toast import ui
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.utils import run_command, select_from_list
-
-console = Console()
 
 
 class CtxPlugin(BasePlugin):
@@ -12,9 +13,23 @@ class CtxPlugin(BasePlugin):
 
     name = "ctx"
     help = "Manage Kubernetes contexts"
+    category = "Kubernetes"
+    examples = (
+        ("toast ctx", "Pick a context"),
+        ("toast ctx prod", "Switch to a named context"),
+    )
 
     @classmethod
-    def execute(cls, **kwargs):
+    def get_arguments(cls, func):
+        return click.argument("context", required=False)(func)
+
+    @classmethod
+    def execute(cls, context=None, **kwargs):
+        if context:
+            run_command(["kubectl", "config", "use-context", context])
+            ui.success(f"Switched to Kubernetes context: {context}")
+            return
+
         result = run_command(
             ["kubectl", "config", "get-contexts", "-o=name"],
         )
@@ -23,13 +38,16 @@ class CtxPlugin(BasePlugin):
         if len(contexts) > 1:
             contexts.append("[Del...]")
 
-        selected_ctx = select_from_list(contexts, "Select a Kubernetes context")
+        current = subprocess.run(["kubectl", "config", "current-context"], capture_output=True, text=True).stdout.strip()
+        selected_ctx = select_from_list(contexts, "Select a Kubernetes context", current=current)
 
         if selected_ctx == "[New...]":
             region = run_command(
                 ["aws", "configure", "get", "region"]
             )
             region = region.stdout.strip()
+            if not region:
+                raise click.ClickException("No AWS region is set. Run: toast region")
 
             result = run_command(
                 [
@@ -46,7 +64,7 @@ class CtxPlugin(BasePlugin):
             )
             clusters = sorted(result.stdout.split())
             if not clusters:
-                console.print("No EKS clusters found.", style="yellow")
+                ui.warning("No EKS clusters found.")
                 return
 
             selected_cluster = select_from_list(clusters, "Select an EKS cluster")
@@ -65,9 +83,9 @@ class CtxPlugin(BasePlugin):
                         region,
                     ]
                 )
-                console.print(f"✓ Updated kubeconfig for {selected_cluster}", style="bold green")
+                ui.success(f"Updated kubeconfig for {selected_cluster}")
             else:
-                console.print("No cluster selected.", style="yellow")
+                ui.muted("No cluster selected.")
         elif selected_ctx == "[Del...]":
             delete_contexts = [
                 ctx for ctx in contexts if ctx not in ("[New...]", "[Del...]")
@@ -78,16 +96,16 @@ class CtxPlugin(BasePlugin):
             )
             if selected_to_delete == "[All...]":
                 run_command(["kubectl", "config", "unset", "contexts"])
-                console.print("✓ Deleted all Kubernetes contexts.", style="bold green")
+                ui.success("Deleted all Kubernetes contexts.")
             elif selected_to_delete:
                 run_command(
                     ["kubectl", "config", "delete-context", selected_to_delete]
                 )
-                console.print(f"✓ Deleted Kubernetes context: {selected_to_delete}", style="bold green")
+                ui.success(f"Deleted Kubernetes context: {selected_to_delete}")
             else:
-                console.print("No context selected for deletion.", style="yellow")
+                ui.muted("No context selected for deletion.")
         elif selected_ctx:
             run_command(["kubectl", "config", "use-context", selected_ctx])
-            console.print(f"✓ Switched to Kubernetes context: {selected_ctx}", style="bold green")
+            ui.success(f"Switched to Kubernetes context: {selected_ctx}")
         else:
-            console.print("No context selected.", style="yellow")
+            ui.muted("No context selected.")

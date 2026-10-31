@@ -7,7 +7,10 @@ import hashlib
 import difflib
 import re
 import os
+import shutil
 import tempfile
+
+from toast import ui
 
 
 def run_command(args, **kwargs):
@@ -31,15 +34,18 @@ def write_private_file(path, content):
             os.unlink(temporary)
 
 
-def select_from_list(options, prompt="Select an option"):
+def select_from_list(options, prompt="Select an option", current=None):
+    """Return the chosen option, or None after a cancel. CURRENT is shown as a header."""
     if not options:
         return None
-    fzf_proc = subprocess.run(
-        ["fzf", "--height=15", "--reverse", "--border", "--prompt", prompt + ": "],
-        input="\n".join(options),
-        capture_output=True,
-        text=True,
-    )
+    if not shutil.which("fzf"):
+        if ui.is_interactive():
+            return ui.select_one(options, prompt)
+        raise click.ClickException("fzf is required without a terminal. Install it: brew install fzf")
+    args = ["fzf", "--height=40%", "--min-height=10", "--reverse", "--border=rounded", "--cycle", "--info=inline", "--prompt", prompt + ": "]
+    if current:
+        args += ["--header", f"Current: {current}"]
+    fzf_proc = subprocess.run(args, input="\n".join(options), capture_output=True, text=True)
     # fzf: 1 = no match, 130 = user cancellation; other failures are errors.
     if fzf_proc.returncode in (1, 130):
         return None

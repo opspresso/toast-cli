@@ -8,7 +8,7 @@ import pkgutil
 import sys
 from typing import List, Type
 from rich.console import Console
-from toast.helpers import CustomHelpGroup
+from toast.helpers import CustomHelpGroup, get_version
 
 console = Console()
 
@@ -37,7 +37,7 @@ def discover_and_load_plugins(
         # Discover all modules in the plugins package
         for _, name, _ in pkgutil.iter_modules([plugins_path]):
             # Skip the base_plugin module and __init__.py
-            if name == "base_plugin" or name == "__init__" or name == "utils":
+            if name in ("base_plugin", "__init__", "utils"):
                 continue
 
             # Import the module
@@ -62,10 +62,11 @@ def discover_and_load_plugins(
     return discovered_plugins
 
 
-@click.group(cls=CustomHelpGroup)
+@click.group(cls=CustomHelpGroup, context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(version=get_version(), prog_name="toast-cli", message="%(prog)s version: %(version)s")
 def toast_cli():
     """
-    Toast command-line tool with dynamically loaded plugins.
+    Daily commands for AWS, Kubernetes, Git and your workspace.
     """
     pass
 
@@ -73,8 +74,6 @@ def toast_cli():
 @toast_cli.command()
 def version():
     """Display the current version of toast-cli."""
-    from toast.helpers import get_version
-
     console.print(f"toast-cli version: {get_version()}", style="bold cyan")
 
 

@@ -10,6 +10,11 @@ class PromptPlugin(BasePlugin):
 
     name = "prompt"
     help = "Manage .prompt.md files"
+    category = "Workspace"
+    examples = (
+        ("toast prompt", "Sync .prompt.md with the env-store"),
+        ("toast prompt down", "Download .prompt.md"),
+    )
 
     @classmethod
     def get_arguments(cls, func):
