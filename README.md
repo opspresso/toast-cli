@@ -68,9 +68,51 @@ toast env            # Manage AWS profiles
 toast git            # Manage Git repositories
 toast prompt         # Manage .prompt.md files
 toast region         # Manage AWS region
+toast clean          # Show reclaimable disk data and remove selected items
 toast ssm            # AWS SSM Parameter Store operations
 toast version        # Display version
 ```
+
+### Disk cleanup
+
+`toast clean` lists removable data by size, largest first. Enter numbers or names,
+then confirm. Only the selected items are removed.
+
+```text
+#     SIZE  RISK      NAME         DESCRIPTION
+1  7.9 GiB  download  runner-work  GitHub Actions runner workspaces
+2  5.0 GiB  cache     go-cache     Go build cache
+Reclaimable: 12.9 GiB. Free now: 100.0 GiB, after: 112.9 GiB.
+Enter numbers or names (1 3 5), a for all except data, q to quit:
+```
+
+| Command | Action |
+| --- | --- |
+| `toast clean` | Show the list, ask for a selection and a confirmation, then remove. |
+| `toast clean --list` | Show the list only. |
+| `toast clean NAME...` | Remove the named items after a confirmation. |
+| `toast clean NAME... --yes` | Remove the named items without a confirmation. |
+
+| RISK | Meaning |
+| --- | --- |
+| `cache` | Rebuilt on demand. |
+| `download` | Fetched again, so the first use is slow. |
+| `data` | Cannot be restored: iOS simulator data, Android virtual devices, stopped Docker containers and unused volumes. `a` does not select these items. |
+
+Project items cover `~/workspace` and only directories that Git ignores.
+`project-builds` can hold release files, so it is a `data` item. `old-*` items keep
+the newest version; `old-claude` also keeps the current one, and `old-node` keeps the
+newest of each major version and the nvm default. `simulator-runtimes` keeps the most
+recently used runtime of each platform. Installed apps and photos are not listed.
+If macOS blocks a protected folder, the command says so; grant the terminal Full Disk
+Access to include it.
+
+An item marked `[blocked: ...]` stays. A running GitHub Actions job or `xcodebuild`
+blocks Docker, simulator, DerivedData, Gradle, project and runner items. A running
+Chrome or VS Code blocks its own items, and a booted simulator blocks `simulators`. The check runs again right before
+removal. On DGX Spark, Docker images and volumes are not listed. If one item fails,
+the others continue and the command exits nonzero. Docker runtimes can return freed
+space late, so the free-space figure may not rise at once.
 
 ### Examples
 
