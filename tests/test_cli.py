@@ -192,6 +192,63 @@ class GitCliTests(unittest.TestCase):
         self.assertNotIn("✓", result.stderr)
         self.assertEqual(result.stdout, "")
 
+    SECRETS = ("u5er", "p4ss", "q-tok3n", "fr4g", "ghp_t0k")
+
+    def assert_hidden(self, result):
+        for secret in self.SECRETS:
+            self.assertNotIn(secret, result.stdout)
+            self.assertNotIn(secret, result.stderr)
+            self.assertNotIn(secret, str(result.exception or ""))
+
+    def test_git_failure_hides_url_secrets_and_exits_nonzero(self):
+        clone_url = "https://u5er:p4ss@127.0.0.1:9/org/repo.git?access_token=q-tok3n#fr4g"
+        # Git prints the remote URL even when it is not an argument, and rewrites it:
+        # it drops the user name and appends a slash.
+        refused = (
+            "fatal: unable to access 'https://127.0.0.1:9/org/repo.git?access_token=q-tok3n#fr4g/': "
+            "Failed to connect to 127.0.0.1 port 9 after 0 ms: Couldn't connect to server\n"
+        )
+        for arguments, expected in (
+            ([clone_url, "clone", "-t", "new"], ["git", "clone", clone_url, str(self.namespace / "new")]),
+            (["repo", "pull"], ["git", "pull"]),
+            (["repo", "push"], ["git", "push"]),
+        ):
+            with self.subTest(arguments=arguments), mock.patch(
+                "subprocess.run", return_value=subprocess.CompletedProcess([], 128, "", refused)
+            ) as run:
+                result = self.runner.invoke(self.cli, ["git", *arguments])
+                self.assertEqual(result.exit_code, 1, result.stderr)
+                self.assertEqual(run.call_args.args[0], expected)
+                self.assert_hidden(result)
+                self.assertEqual(result.stdout, "")
+                self.assertNotIn("✓", result.stderr)
+                self.assertIn("'https://127.0.0.1:9/org/repo.git?access_token=***#***'", result.stderr)
+                self.assertIn("Failed to connect to 127.0.0.1 port 9", result.stderr)
+
+    def test_successful_git_diagnostics_hide_url_secrets(self):
+        diagnostic = (
+            "From https://ghp_t0k@git.example.com/org/repo?access_token=q-tok3n\n"
+            "To ssh://git:p4ss@git.example.com:2222/org/repo.git, "
+            "https://u5er@mirror.example.com/org/repo.git#fr4g\n"
+        )
+        for arguments, expected in (
+            (["repo", "pull"], ["git", "pull"]),
+            (["repo", "push"], ["git", "push"]),
+        ):
+            with self.subTest(arguments=arguments):
+                result, run = self.invoke(*arguments, stdout="Already up to date.\n", stderr=diagnostic)
+                self.assertEqual(result.exit_code, 0, result.stderr)
+                self.assertEqual(run.call_args.args[0], expected)
+                self.assertEqual(result.stdout, "Already up to date.\n")
+                self.assert_hidden(result)
+                for shown in (
+                    "From https://***@git.example.com/org/repo?access_token=***",
+                    "ssh://git:***@git.example.com:2222/org/repo.git",
+                    "https://***@mirror.example.com/org/repo.git#***",
+                    "✓",
+                ):
+                    self.assertIn(shown, result.stderr)
+
     def test_mirror_runs_only_after_approval_or_yes(self):
         target = "git@gitlab.com:org/group/repo.git"
         for arguments, answer, pushed in (

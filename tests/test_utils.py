@@ -2,9 +2,14 @@
 
 """Unit tests for the secret-masking helpers (pure logic, no AWS access)."""
 
+import subprocess
 import unittest
+from unittest import mock
+
+import click
 
 from toast.plugins.utils import (
+    run_command,
     mask_secret,
     mask_env_content,
     mask_lines,
@@ -114,3 +119,43 @@ class MultilineMaskTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RunCommandTests(unittest.TestCase):
+    def test_success_returns_the_result_unchanged(self):
+        done = subprocess.CompletedProcess([], 0, "out https://u:p@h/x\n", "err https://u:p@h/x\n")
+        for redact in (None, lambda text: "hidden"):
+            with self.subTest(redact=redact), mock.patch("subprocess.run", return_value=done) as run:
+                result = run_command(["tool", "arg"], redact=redact, cwd="/tmp")
+                self.assertIs(result, done)
+                run.assert_called_once_with(["tool", "arg"], capture_output=True, text=True, cwd="/tmp")
+
+    def test_failure_names_the_tool_and_its_stderr(self):
+        failed = subprocess.CompletedProcess([], 254, "", "An error occurred (AccessDenied)\n")
+        with mock.patch("subprocess.run", return_value=failed):
+            with self.assertRaises(click.ClickException) as raised:
+                run_command(["aws", "ssm", "delete-parameter"])
+        self.assertEqual(raised.exception.message, "aws failed: An error occurred (AccessDenied)")
+
+    def test_failure_without_stderr_names_the_exit_status(self):
+        for redact in (None, lambda text: "hidden"):
+            with self.subTest(redact=redact), mock.patch(
+                "subprocess.run", return_value=subprocess.CompletedProcess([], 3, "", " \n")
+            ):
+                with self.assertRaises(click.ClickException) as raised:
+                    run_command(["kubectl", "config"], redact=redact)
+                self.assertEqual(raised.exception.message, "kubectl failed: exit status 3")
+
+    def test_redact_rewrites_only_the_failure_message(self):
+        failed = subprocess.CompletedProcess([], 1, "", "fatal: secret-value\n")
+        with mock.patch("subprocess.run", return_value=failed) as run:
+            with self.assertRaises(click.ClickException) as raised:
+                run_command(["git", "pull"], redact=lambda text: text.replace("secret-value", "***"))
+        self.assertEqual(raised.exception.message, "git failed: fatal: ***")
+        self.assertNotIn("redact", run.call_args.kwargs)
+
+    def test_missing_executable_is_reported(self):
+        with mock.patch("subprocess.run", side_effect=FileNotFoundError):
+            with self.assertRaises(click.ClickException) as raised:
+                run_command(["kubectl"], redact=str.upper)
+        self.assertEqual(raised.exception.message, "kubectl is not installed")

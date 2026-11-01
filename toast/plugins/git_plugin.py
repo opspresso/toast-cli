@@ -86,6 +86,26 @@ def redact_url(url):
     return parsed.geturl()
 
 
+# A URL in Git output ends at whitespace, a quote or an angle bracket. Git may
+# rewrite a URL before printing it, for example by dropping the user name or by
+# appending a slash, so the URLs are found in the text rather than in the arguments.
+URL_IN_TEXT = re.compile(r"""\b[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>`]+""")
+
+
+def redact_urls(text):
+    """Hide credentials in every URL inside Git output, as redact_url does."""
+
+    def replace(match):
+        url = match.group(0)
+        try:
+            return redact_url(url)
+        except ValueError:
+            # urlsplit rejects some malformed URLs; hide all of it but the scheme.
+            return url.split("://", 1)[0] + "://***"
+
+    return URL_IN_TEXT.sub(replace, text)
+
+
 class GitPlugin(BasePlugin):
     """Plugin for 'git' command - handles Git repository operations."""
 
@@ -152,13 +172,17 @@ class GitPlugin(BasePlugin):
 
     @staticmethod
     def _run_git(args, message, **kwargs):
-        """Run Git: its stdout is the result, its stderr is about the run."""
+        """Run Git: its stdout is the result, its stderr is about the run.
+
+        Git receives the original arguments. Git can print a remote URL that is not
+        in the arguments, so every displayed URL is redacted, on success and failure.
+        """
         with ui.status(message):
-            result = run_command(args, **kwargs)
-        for line in result.stderr.strip().splitlines():
+            result = run_command(args, redact=redact_urls, **kwargs)
+        for line in redact_urls(result.stderr.strip()).splitlines():
             ui.muted(f"  {line}")
         if result.stdout.strip():
-            ui.result(result.stdout.rstrip("\n"))
+            ui.result(redact_urls(result.stdout.rstrip("\n")))
 
     @classmethod
     def execute(
