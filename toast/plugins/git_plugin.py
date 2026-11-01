@@ -86,6 +86,36 @@ def redact_url(url):
     return parsed.geturl()
 
 
+# Git may rewrite a URL before printing it, for example by dropping the user name
+# or by appending a slash, so the URLs are found in the text rather than in the
+# arguments. A URL can itself contain a quote, so a quoted URL ends at the last
+# matching quote on its line that is followed by whitespace, punctuation or the end
+# of the text, as in "unable to access 'URL': reason". An unquoted URL ends at
+# whitespace. Hiding too much of a line is preferred to showing a secret.
+URL_IN_TEXT = re.compile(
+    r"""(?P<quote>['"])(?P<quoted>[A-Za-z][A-Za-z0-9+.-]*://[^\n]*)(?P=quote)(?=[\s:;,.)]|$)"""
+    r"""|\b[A-Za-z][A-Za-z0-9+.-]*://\S+"""
+)
+
+
+def redact_urls(text):
+    """Hide credentials in every URL inside Git output, as redact_url does."""
+
+    def hide(url):
+        try:
+            return redact_url(url)
+        except ValueError:
+            # urlsplit rejects some malformed URLs; hide all of it but the scheme.
+            return url.split("://", 1)[0] + "://***"
+
+    def replace(match):
+        if match.group("quote"):
+            return match.group("quote") + hide(match.group("quoted")) + match.group("quote")
+        return hide(match.group(0))
+
+    return URL_IN_TEXT.sub(replace, text)
+
+
 class GitPlugin(BasePlugin):
     """Plugin for 'git' command - handles Git repository operations."""
 
@@ -152,13 +182,17 @@ class GitPlugin(BasePlugin):
 
     @staticmethod
     def _run_git(args, message, **kwargs):
-        """Run Git: its stdout is the result, its stderr is about the run."""
+        """Run Git: its stdout is the result, its stderr is about the run.
+
+        Git receives the original arguments. Git can print a remote URL that is not
+        in the arguments, so every displayed URL is redacted, on success and failure.
+        """
         with ui.status(message):
-            result = run_command(args, **kwargs)
-        for line in result.stderr.strip().splitlines():
+            result = run_command(args, redact=redact_urls, **kwargs)
+        for line in redact_urls(result.stderr.strip()).splitlines():
             ui.muted(f"  {line}")
         if result.stdout.strip():
-            ui.result(result.stdout.rstrip("\n"))
+            ui.result(redact_urls(result.stdout.rstrip("\n")))
 
     @classmethod
     def execute(
