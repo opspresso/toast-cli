@@ -70,6 +70,7 @@ toast prompt         # Manage .prompt.md files
 toast region         # Manage AWS region
 toast clean          # Show reclaimable disk data and remove selected items
 toast completion     # Print the shell completion script
+toast shell-init     # Print the bash/zsh function that lets cdw change directory
 toast ssm            # AWS SSM Parameter Store operations
 toast version        # Display version
 ```
@@ -223,7 +224,8 @@ mkdir -p ~/workspace/github.com/{org}/{project}
 ### Navigating the workspace
 
 `toast cdw [QUERY]` prints the absolute path of a namespace or repository directory
-below `~/workspace`. The `c` function in [Aliases](#aliases) changes to that path.
+below `~/workspace`. With the [shell integration](#changing-directory-with-toast-cdw)
+loaded, `toast cdw` and the `c` alias in [Aliases](#aliases) change to that path.
 
 ```bash
 c                       # Pick from every namespace and repository
@@ -382,12 +384,9 @@ class MyPlugin(BasePlugin):
 ## Aliases
 
 ```bash
+eval "$(toast shell-init zsh)"  # bash: toast shell-init bash
 alias t='toast'
-c() {
-  local dir
-  dir="$(toast cdw "$@")" || return
-  [ -z "$dir" ] || cd -- "$dir"
-}                            # c [QUERY]: cd only when a path is printed
+alias c='toast cdw'          # c [QUERY]: change to the selected directory
 alias m='toast am'           # AWS identity
 alias x='toast ctx'          # Kubernetes contexts
 alias d='toast dot'          # .env.local files
@@ -408,6 +407,37 @@ eval "$(toast completion bash)"   # ~/.bashrc
 toast completion fish | source    # ~/.config/fish/config.fish
 ```
 
+### Changing directory with toast cdw
+
+A program cannot change the directory of the shell that started it, so `toast cdw`
+alone only prints a path. `toast shell-init` prints a `toast` shell function for
+bash or zsh. Add one line to your shell startup file, then open a new terminal:
+
+```bash
+eval "$(toast shell-init zsh)"    # ~/.zshrc
+eval "$(toast shell-init bash)"   # ~/.bashrc
+```
+
+```bash
+toast cdw              # Pick a directory; the shell changes to it
+toast cdw toast-cli    # Change to the only match without a picker
+dir="$(toast cdw api)" # Scripts and $(...) still receive the path
+```
+
+- The function changes directory only for `toast cdw` typed in an interactive shell
+  with stdout on the terminal. It passes the arguments to `toast cdw` unchanged, so
+  search and selection work as described in
+  [Navigating the workspace](#navigating-the-workspace).
+- Help, other commands, pipes, redirections, `$(...)`, scripts, `command toast` and
+  `python -m toast` run the executable and print the path as before.
+- A cancelled picker or the first-time setup keeps the current directory and returns
+  0. A failed `toast cdw`, or a directory that cannot be entered, keeps the current
+  directory and returns nonzero.
+- `toast shell-init` changes no file. To remove the integration, delete the `eval`
+  line from the startup file. To remove it from the current shell, run `unset -f toast`.
+- The integration supports bash and zsh. In other shells, change directory with
+  `cd "$(toast cdw)"`.
+
 ## Output and exit status
 
 A command writes its result to stdout: a path, a value, a table or JSON. It writes
@@ -419,6 +449,9 @@ cd "$(toast cdw)"
 token="$(toast ssm get /app/token --reveal)"
 toast env prod | jq -r .Arn
 ```
+
+The [shell integration](#changing-directory-with-toast-cdw) does not change this:
+`$(toast cdw)` still receives the path and leaves the directory unchanged.
 
 In a pipe, tables are tab-separated and never cut at the terminal width. Set
 `NO_COLOR` to turn off colors.

@@ -30,6 +30,11 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
+      # tests/test_shell_init.py runs bash and zsh, and fails in CI when one is missing.
+      - name: Install zsh
+        if: runner.os == 'Linux'
+        run: command -v zsh || { sudo apt-get update && sudo apt-get install -y zsh; }
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

@@ -79,17 +79,26 @@ pip install -e .</code></pre>
                         <li>rich - Terminal formatting and JSON output</li>
                     </ul></li>
                 </ul>
+                <h3>Shell Integration</h3>
+                <p>A program cannot change the directory of its shell, so <code>toast cdw</code> alone prints a path. Add one line to <code>~/.zshrc</code> or <code>~/.bashrc</code>, then open a new terminal. <code>toast cdw</code> typed at the terminal then changes to the selected directory; search and selection stay in <code>toast cdw</code>. A cancelled picker keeps the current directory.</p>
+                <div class="code-block">
+                    <pre><code>eval "$(toast shell-init zsh)"    # ~/.zshrc
+eval "$(toast shell-init bash)"   # ~/.bashrc
+
+toast cdw toast-cli               # Change directory
+dir="$(toast cdw toast-cli)"      # Scripts still receive the path
+unset -f toast                    # Remove from the current shell</code></pre>
+                    <button class="copy-btn" type="button" aria-live="polite">Copy</button>
+                </div>
+                <p>Only bash and zsh are supported. <code>toast shell-init</code> changes no file; to remove the integration, delete the <code>eval</code> line. Pipes, scripts, help and other commands run toast unchanged.</p>
                 <h3>Recommended Aliases</h3>
                 <div class="code-block">
                     <pre><code># Main alias
 alias t='toast'
 
-# Navigate workspace directories
-c() {
-  local dir
-  dir="$(toast cdw &quot;$@&quot;)" || return
-  [ -z "$dir" ] || cd -- "$dir"
-}
+# Let toast cdw change directory (bash: toast shell-init bash)
+eval "$(toast shell-init zsh)"
+alias c='toast cdw'     # Change to a workspace directory
 
 # Common Command Aliases
 alias m='toast am'      # Show AWS identity
