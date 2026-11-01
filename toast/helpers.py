@@ -78,7 +78,7 @@ class CustomHelpGroup(click.Group):
             ui.error(exc.format_message(), *hints)
             sys.exit(exc.exit_code)
         except click.ClickException as exc:
-            ui.error(exc.format_message())
+            ui.error(exc.format_message(), *getattr(exc, "hints", ()))
             sys.exit(exc.exit_code)
         except click.Abort:
             ui.cancelled()

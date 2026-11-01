@@ -223,7 +223,14 @@ mkdir -p ~/workspace/github.com/{org}/{project}
 **Benefits**:
 - Consistent project organization across all Git hosts
 - Automatic detection of the Git host from the workspace path
-- Git operations across hosts; dot/prompt currently use GitHub project paths
+- Git operations on any host, including nested groups
+
+`dot` and `prompt` also work on any host whose directory contains a dot, such as
+`github.com` or `gitlab.example.com`. They do not map nested groups: the project
+root is always the third directory below `~/workspace`. In
+`~/workspace/gitlab.clush.net/apps/cdp/be/ws`, the project root is
+`~/workspace/gitlab.clush.net/apps/cdp`, not the repository. Check the `Project`
+line that both commands print before they read or write anything.
 
 ## Configuration
 
@@ -254,6 +261,50 @@ Host myorg-github.com
 - Different SSH keys and accounts per organization
 - Automatic host detection based on workspace location
 - Seamless switching between GitHub accounts
+
+### Environment and prompt files
+
+`toast dot` manages `.env.local` and `toast prompt` manages `.prompt.md`. Both
+use the same steps. The examples use `toast dot`.
+
+1. **Configure the env-store.** Set the profile, bucket and region with the
+   variables or the config file in [Env-store (S3) Storage Paths](#env-store-s3-storage-paths).
+   The first run in a terminal offers to create the config file. Check that the
+   profile works: `aws sts get-caller-identity --profile {username}-admin`.
+2. **Check the target.** Change to the project root or one of its
+   subdirectories. Every command prints its target to stderr before it reads the
+   env-store:
+
+   ```
+   Command  toast dot diff
+   Project  /home/me/workspace/github.com/opspresso/toast-cli
+   Local    /home/me/workspace/github.com/opspresso/toast-cli/.env.local
+   Profile  me-admin
+   Region   ap-northeast-2
+   S3       s3://env-store-123456789012/local/opspresso/toast-cli/env-local
+   SSM      /toast/local/opspresso/toast-cli/env-local (legacy, read-only)
+   ```
+
+   Make sure that `Project` is the repository you expect. `Region` shows
+   `not set` when no region is configured; SSM reads then fail. `toast dot ls`
+   runs anywhere. It prints the bucket, profile, region and scope it reads, and
+   lists the stored projects on stdout.
+3. **Compare.** `toast dot diff` shows the differences and changes nothing.
+   It masks `.env.local` values; `toast prompt diff` shows Markdown as is. When
+   only one copy exists, it names the command that creates the other one.
+4. **Run one direction.** `toast dot up` replaces the S3 copy with the local
+   file. `toast dot down` replaces the local file with the newest env-store
+   copy. Each asks for confirmation before it overwrites an existing copy.
+
+`toast dot` without a command (sync) compares and then asks for the direction in
+a picker. The picker needs a terminal. Without one, sync fails, changes nothing
+and names the `up` or `down` command to run. When the copies are identical,
+sync succeeds without a terminal.
+
+When a command fails, the lines below the error give the cause and the next
+step: a directory outside a workspace project, a missing local or env-store
+copy, a missing bucket or region, or an AWS access error. A failed read changes
+nothing.
 
 ### Env-store (S3) Storage Paths
 
