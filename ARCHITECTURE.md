@@ -43,6 +43,7 @@ are unchanged. `toast/helpers.py` supplies the help layout, error reporting and 
 | `git` | Clone, branch, pull, push, mirror push, remove; Git and Python filesystem operations |
 | `clean` | Picker, prompt fallback, confirmation and removal; the catalog is in `clean_catalog.py` |
 | `completion` | Prints the Click completion script for bash, zsh or fish |
+| `shell-init` | Prints a bash/zsh `toast` function. The parent shell runs `cd` with the path from an interactive `toast cdw`; the program only prints it |
 | `region` | AWS EC2 region discovery and AWS CLI default configuration |
 | `ssm` | Direct get/put/diff/delete/list and interactive browsing through AWS CLI |
 | `version` | Installed package version |
