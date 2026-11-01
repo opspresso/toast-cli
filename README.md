@@ -220,6 +220,38 @@ You can then create your project directories:
 mkdir -p ~/workspace/github.com/{org}/{project}
 ```
 
+### Navigating the workspace
+
+`toast cdw [QUERY]` prints the absolute path of a namespace or repository directory
+below `~/workspace`. The `c` function in [Aliases](#aliases) changes to that path.
+
+```bash
+c                       # Pick from every namespace and repository
+c toast-cli             # The only directory named toast-cli: no picker
+c opspresso/toast-cli   # Trailing path components
+c github.com/acme/api   # The exact relative path, when two repositories share a name
+c toast cli             # Letters to filter by; every term must match
+```
+
+- The picker title shows the workspace root. Run inside a repository or namespace,
+  the picker starts on that directory and marks it `current`.
+- `QUERY` selects candidates in this order: the exact relative path, then directories
+  whose last path components equal `QUERY`, then the picker's letter filter.
+- One match prints its path without a picker. Several matches open the picker with
+  only those matches.
+- Without a terminal, several matches fail with exit status 1 and list their relative
+  paths. Run the command again with one of them, for example
+  `toast cdw github.com/acme/api`. Without `QUERY`, the command fails and asks for one.
+- A `QUERY` that matches nothing fails with exit status 1. Use fewer letters, or run
+  `toast cdw` to browse.
+- stderr shows the workspace root, the current directory and the target. stdout
+  receives only the path. A cancelled picker and the first-time setup print nothing
+  to stdout.
+- Candidates are directories below `~/workspace` only. The search skips hidden
+  directories and stops at a repository root, which has a `.git` directory or, in a
+  worktree or submodule, a `.git` file. Directories inside a repository are not
+  candidates.
+
 **Benefits**:
 - Consistent project organization across all Git hosts
 - Automatic detection of the Git host from the workspace path
@@ -354,8 +386,8 @@ alias t='toast'
 c() {
   local dir
   dir="$(toast cdw "$@")" || return
-  [ -n "$dir" ] && cd "$dir"
-}                          # Navigate only after a selection
+  [ -z "$dir" ] || cd -- "$dir"
+}                            # c [QUERY]: cd only when a path is printed
 alias m='toast am'           # AWS identity
 alias x='toast ctx'          # Kubernetes contexts
 alias d='toast dot'          # .env.local files
@@ -405,7 +437,7 @@ all match. Use `↑`/`↓` to move, `Enter` to select, `Ctrl-U` to clear the fil
 `Esc` to quit. `clean` uses `Space` to select several rows.
 
 A picker needs a terminal. In a script, name the value: `toast ctx prod`, `toast env
-prod` or `toast region ap-northeast-2`. `toast dot sync` has no such form, so use
+prod`, `toast region ap-northeast-2` or `toast cdw github.com/acme/api`. `toast dot sync` has no such form, so use
 `toast dot up` or `toast dot down`.
 
 `ssm put` and `ssm diff` take a value from stdin or a hidden prompt, which keeps it

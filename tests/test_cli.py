@@ -18,7 +18,7 @@ from rich.console import Console
 
 from toast import discover_and_load_plugins, ui
 from toast.helpers import CustomHelpCommand, CustomHelpGroup
-from toast.plugins import cdw_plugin, ctx_plugin, env_plugin
+from toast.plugins import ctx_plugin, env_plugin
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -113,28 +113,6 @@ class CliTests(unittest.TestCase):
             result = self.runner.invoke(self.cli, ["am"])
         self.assertEqual(result.exit_code, 1)
         self.assertIn("AccessDenied", result.output)
-
-    def test_cdw_returns_project_path_without_status_output(self):
-        with tempfile.TemporaryDirectory() as temp:
-            workspace = Path(temp) / "workspace"
-            repo = workspace / "gitlab.com" / "org" / "group" / "repo"
-            (repo / ".git" / "objects").mkdir(parents=True)
-            (repo / "node_modules").mkdir()
-            with mock.patch.object(cdw_plugin.os.path, "expanduser", return_value=str(workspace)), mock.patch(
-                "toast.ui.choose", return_value=str(repo)
-            ) as select:
-                result = self.runner.invoke(self.cli, ["cdw"])
-            self.assertEqual(result.stdout, str(repo) + "\n")
-            self.assertIn(str(repo), select.call_args.args[0])
-            self.assertNotIn(str(repo / "node_modules"), select.call_args.args[0])
-
-    def test_cdw_initial_setup_only_writes_stderr(self):
-        with tempfile.TemporaryDirectory() as temp, mock.patch.object(
-            cdw_plugin.os.path, "expanduser", return_value=str(Path(temp) / "workspace")
-        ):
-            result = separate_streams_runner().invoke(self.cli, ["cdw"])
-            self.assertEqual(result.exit_code, 0)
-            self.assertEqual(result.stdout, "")
 
     def test_invalid_profile_preserves_credentials(self):
         with tempfile.TemporaryDirectory() as temp:

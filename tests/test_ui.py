@@ -5,9 +5,11 @@ import io
 import os
 from pathlib import Path
 import pty
+import re
 import select
 import subprocess
 import sys
+import tempfile
 import termios
 import time
 import unittest
@@ -29,6 +31,15 @@ print("RESULT", None if chosen is None else [row.key for row in chosen])
 SINGLE = """
 from toast import ui
 print("RESULT", ui.choose(["alpha", "gamma"], "Pick"))
+"""
+
+
+CDW = """
+import os, sys
+os.chdir(sys.argv[1])
+sys.argv = ["toast", "cdw", *sys.argv[2:]]
+from toast import main
+main()
 """
 
 
@@ -154,11 +165,11 @@ class PickerTests(unittest.TestCase):
 
 
 class TerminalTests(unittest.TestCase):
-    def drive(self, keys, script=None):
+    def drive(self, keys, script=None, args=(), env=None, ready=b"Pick"):
         master, slave = pty.openpty()
-        environment = dict(os.environ, PYTHONPATH=str(ROOT), TERM="xterm-256color", COLUMNS="80", LINES="24")
+        environment = dict(os.environ, PYTHONPATH=str(ROOT), TERM="xterm-256color", COLUMNS="80", LINES="24", **(env or {}))
         process = subprocess.Popen(
-            [sys.executable, "-c", script or SCRIPT], stdin=slave, stdout=slave, stderr=slave, env=environment, close_fds=True,
+            [sys.executable, "-c", script or SCRIPT, *args], stdin=slave, stdout=slave, stderr=slave, env=environment, close_fds=True,
             start_new_session=True, preexec_fn=lambda: fcntl.ioctl(0, termios.TIOCSCTTY, 0),
         )
         os.close(slave)
@@ -175,7 +186,7 @@ class TerminalTests(unittest.TestCase):
                 if not chunk:
                     break
                 output += chunk
-            elif pending and b"Pick" in output:
+            elif pending and ready in output:
                 os.write(master, pending.pop(0))
             if process.poll() is not None and not select.select([master], [], [], 0)[0]:
                 break
@@ -198,3 +209,32 @@ class TerminalTests(unittest.TestCase):
     def test_ctrl_c_cancels(self):
         output = self.drive([b"\x03"])
         self.assertIn("RESULT None", output)
+
+    def drive_cdw(self, keys, *query):
+        """Run `toast cdw` from inside a repository of a temporary workspace."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        home = Path(temp.name).resolve()
+        workspace = home / "workspace"
+        for name in ("github.com/opspresso/toast-cli", "github.com/acme/api", "gitlab.com/b/api"):
+            (workspace / name / ".git").mkdir(parents=True)
+        inside = workspace / "github.com/opspresso/toast-cli/src"
+        inside.mkdir()
+        output = self.drive(keys, CDW, (str(inside), *query), {"HOME": str(home)}, b"Select a directory")
+        return re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", output), workspace
+
+    def test_cdw_starts_on_the_current_repository(self):
+        output, workspace = self.drive_cdw([b"\r"])
+        self.assertIn("github.com/opspresso/toast-cli  current", output)
+        self.assertIn(f"{workspace}/github.com/opspresso/toast-cli\r\n", output)
+
+    def test_cdw_search_opens_a_filtered_picker(self):
+        output, workspace = self.drive_cdw([b"\x1b[B", b"\r"], "api")
+        self.assertIn("Select a directory matching 'api'", output)
+        self.assertNotIn("toast-cli", output.split("Select a directory", 1)[1].split("Workspace", 1)[0])
+        self.assertIn(f"{workspace}/gitlab.com/b/api\r\n", output)
+
+    def test_cdw_escape_cancels_without_a_path(self):
+        output, workspace = self.drive_cdw([b"\x1b"])
+        self.assertIn("Cancelled", output)
+        self.assertNotIn(f"{workspace}/", output)
