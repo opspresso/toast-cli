@@ -146,8 +146,13 @@ toast dot up               # Upload .env.local to env-store (S3)
 toast dot down             # Download .env.local from env-store (alias: dn)
 toast dot diff             # Show local vs env-store diff without changing files
 toast dot ls               # List all .env.local files in env-store (S3 + SSM)
-# up/down show a masked diff and confirm when local and env-store differ;
-# down is a no-op when local matches the newest copy; up compares against S3.
+# up and sync's upload write S3: they compare local with the S3 copy, skip an
+# identical copy, and preview and confirm before replacing an existing S3 copy.
+# down and sync's download write the local file from the newest copy (S3 or SSM),
+# skip an identical file, and preview and confirm before replacing an existing
+# local file, even an empty one.
+# The confirmation names the S3 URI, or the absolute local path and the source,
+# and defaults to no. A new destination is written without a confirmation.
 # Secret values are masked, including multiline dotenv values (KEY=ab****yz).
 
 # Prompt Files (.prompt.md)
@@ -388,8 +393,12 @@ token="$(toast ssm get /app/token --reveal)"
 toast env prod | jq -r .Arn
 ```
 
-In a pipe, tables are tab-separated and never cut at the terminal width. Set
-`NO_COLOR` to turn off colors.
+`dot diff`, `prompt diff` and `ssm diff` write the diff to stdout as their result.
+`up`, `down` and `sync` of `dot` and `prompt` write the preview of a change to stderr,
+so their stdout stays empty.
+
+In a pipe, tables are tab-separated and never cut at the terminal width, and a diff
+is never shortened. Set `NO_COLOR` to turn off colors.
 
 | Exit status | Meaning |
 |-------------|---------|

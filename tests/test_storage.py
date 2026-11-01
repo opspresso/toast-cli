@@ -526,7 +526,7 @@ class CmdDownTests(unittest.TestCase):
         show_diff_mock.assert_called_once_with(
             "KEY=***\nNEW=***",
             "KEY=***",
-            local_name="ENV-STORE",
+            local_name="S3",
             remote_name="LOCAL",
         )
 
@@ -569,7 +569,7 @@ class CmdDiffTests(unittest.TestCase):
     def test_different_prints_diff(self):
         rr = self._read_result("xyz", "s3", "s3_only")
         diff_mock = self._run_diff("abc", rr)
-        diff_mock.assert_called_once_with("abc", "xyz", "env-local")
+        diff_mock.assert_called_once_with("xyz", "abc", "env-local", "ENV-STORE", "LOCAL", preview=False)
 
     def test_local_only_does_not_print_diff(self):
         rr = self._read_result(None, None, "none")
@@ -580,6 +580,120 @@ class CmdDiffTests(unittest.TestCase):
         rr = self._read_result("xyz", "ssm", "ssm_only")
         diff_mock = self._run_diff(None, rr)
         diff_mock.assert_not_called()
+
+
+class WritePreviewApprovalTests(unittest.TestCase):
+    """up/down/sync preview the real write target on stderr and confirm overwrites."""
+
+    S3_URI = "s3://bucket/local/o/p/env-local"
+    SECRETS = ("local-secret", "store-secret", "hidden-continuation")
+    LOCAL = 'TOKEN=local-secret\nMULTI="first\nhidden-continuation"\n'
+    REMOTE = "TOKEN=store-secret\n"
+
+    def run_handler(self, handler, local, s3, ssm=None, action=None, confirm=True, kind="env-local"):
+        """Run HANDLER and return (stdout, stderr, confirm mock, write mock, local file content)."""
+        newest = "ssm" if ssm is not None else ("s3" if s3 is not None else None)
+        status = {(True, True): "both", (True, False): "s3_only", (False, True): "ssm_only"}.get((s3 is not None, ssm is not None), "none")
+        result = storage.ReadResult(s3 if newest == "s3" else ssm, newest, s3, "ts", ssm, "ts", status, [])
+        out, err = io.StringIO(), io.StringIO()
+        confirm_mock = mock.Mock(side_effect=confirm) if isinstance(confirm, type) else mock.Mock(return_value=confirm)
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / ".env.local"
+            if local is not None:
+                path.write_bytes(local.encode())
+            with mock.patch.object(storage, "store_read", return_value=result), mock.patch.object(
+                storage, "store_write", return_value=(True, None)
+            ) as write, mock.patch.object(storage, "select_sync_action", return_value=action), mock.patch.object(
+                storage.click, "confirm", confirm_mock
+            ), mock.patch.object(storage.ui, "console", Console(file=out, width=200)), mock.patch.object(
+                storage.ui, "error_console", Console(file=err, width=200)
+            ):
+                try:
+                    handler(storage.StoreConfig("bucket", "profile", None, "eu-west-1"), "o", "p", kind, ".env.local", str(path))
+                except click.Abort:
+                    self.aborted = True
+                content = path.read_bytes().decode() if path.exists() else None
+                self.path = str(path)
+        return out.getvalue(), err.getvalue(), confirm_mock, write, content
+
+    def assert_masked(self, text):
+        for secret in self.SECRETS:
+            self.assertNotIn(secret, text)
+
+    def test_change_previews_go_to_stderr_masked_and_explicit_diff_to_stdout(self):
+        for handler, action in ((storage._cmd_up, None), (storage._cmd_down, None), (storage._cmd_sync, "upload"), (storage._cmd_sync, "download")):
+            with self.subTest(handler=handler.__name__, action=action):
+                out, err, confirm, _, _ = self.run_handler(handler, self.LOCAL, self.REMOTE, action=action, confirm=False)
+                self.assertEqual(out, "")
+                self.assertIn("TOKEN=", err)
+                self.assertIn("Cancelled", err)
+                self.assert_masked(err)
+                self.assertEqual(confirm.call_args.kwargs["default"], False)
+        out, err, _, _, _ = self.run_handler(storage._cmd_diff, self.LOCAL, self.REMOTE)
+        self.assertIn("+TOKEN=", out)
+        self.assert_masked(out + err)
+
+    def test_sync_confirms_existing_changed_destination_with_exact_target(self):
+        cases = (
+            ("upload", self.REMOTE, None, f"Overwrite {self.S3_URI}?"),
+            ("download", self.REMOTE, None, "with " + self.S3_URI),
+            ("download", self.REMOTE, "TOKEN=ssm\n", "with SSM /toast/local/o/p/env-local"),
+        )
+        for action, s3, ssm, target in cases:
+            for answer in (False, click.Abort):
+                with self.subTest(action=action, ssm=ssm, answer=answer):
+                    self.aborted = False
+                    _, _, confirm, write, content = self.run_handler(storage._cmd_sync, self.LOCAL, s3, ssm, action, answer)
+                    self.assertEqual(self.aborted, answer is click.Abort)
+                    message = confirm.call_args.args[0]
+                    self.assertIn(target, message)
+                    if action == "download":
+                        self.assertIn(f"Overwrite {os.path.abspath(self.path)} ", message)
+                    write.assert_not_called()
+                    self.assertEqual(content, self.LOCAL)
+
+    def test_sync_writes_new_destinations_without_confirm_and_skips_identical(self):
+        cases = (
+            # action, local, s3, ssm, expect a write
+            ("upload", "A=1\n", None, None, True),
+            ("upload", "A=1\n", None, "A=2\n", True),
+            ("download", None, "A=1\n", None, True),
+            ("upload", "A=1\n", "A=1\n", "A=2\n", False),
+        )
+        for action, local, s3, ssm, writes in cases:
+            with self.subTest(action=action, local=local, s3=s3, ssm=ssm):
+                _, err, confirm, write, content = self.run_handler(storage._cmd_sync, local, s3, ssm, action)
+                confirm.assert_not_called()
+                self.assertEqual(write.called, writes and action == "upload")
+                self.assertEqual(content, "A=1\n")
+                if not writes:
+                    self.assertIn("S3 already matches local", err)
+
+    def test_empty_copies_are_existing_destinations(self):
+        for handler, action, local, s3 in (
+            (storage._cmd_sync, "upload", "A=1\n", ""),
+            (storage._cmd_up, None, "A=1\n", ""),
+            (storage._cmd_sync, "download", "", "A=1\n"),
+            (storage._cmd_down, None, "", "A=1\n"),
+        ):
+            with self.subTest(handler=handler.__name__, action=action):
+                _, _, confirm, write, content = self.run_handler(handler, local, s3, action=action, confirm=False)
+                confirm.assert_called_once()
+                write.assert_not_called()
+                self.assertEqual(content, local)
+
+    def test_preview_compares_the_copy_that_is_replaced_or_written(self):
+        local, s3, ssm = "local text\n", "s3 text\n", "ssm text\n"
+        for handler, action in ((storage._cmd_up, None), (storage._cmd_sync, "upload")):
+            with self.subTest(handler=handler.__name__, action=action):
+                _, err, _, write, _ = self.run_handler(handler, local, s3, ssm, action, kind="prompt-md")
+                self.assertRegex(err, r"(?m)^-s3 text\n\+local text$")
+                self.assertEqual(write.call_args.args[-1], local)
+        _, err, confirm, _, content = self.run_handler(storage._cmd_down, local, s3, ssm, kind="prompt-md")
+        self.assertRegex(err, r"(?m)^-local text\n\+ssm text$")
+        self.assertNotIn("s3 text", err)
+        self.assertIn("SSM /toast/local/o/p/prompt-md", confirm.call_args.args[0])
+        self.assertEqual(content, ssm)
 
 
 class StoreListTests(unittest.TestCase):

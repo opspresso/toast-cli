@@ -114,6 +114,24 @@ class FileSyncIntegrationTests(unittest.TestCase):
         self.assertIn("needs a terminal", result.stderr)
         self.assertFalse((self.project / ".env.local").exists())
 
+    def test_overwrite_preview_and_prompt_keep_stdout_empty(self):
+        local, remote = self.project / ".env.local", self.remote / "env-local"
+        for command, answer, target, kept in (
+            ("up", "n\n", "s3://test-bucket/local/org/project/env-local", "KEY=local-secret\n"),
+            ("down", "y\n", str(local.resolve()), "KEY=remote-secret\n"),
+        ):
+            with self.subTest(command=command):
+                local.write_text("KEY=local-secret\n")
+                remote.write_text("KEY=remote-secret\n")
+                result = self.command("d", command, input=answer)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertIn(f"Overwrite {target}", result.stderr)
+                self.assertRegex(result.stderr, r"(?m)^-KEY=")
+                self.assertNotIn("-secret", result.stderr)
+                self.assertEqual(local.read_text(), kept)
+                self.assertEqual(remote.read_text(), "KEY=remote-secret\n")
+
     def test_denied_store_read_preserves_local_and_remote_through_alias(self):
         local = self.project / ".env.local"
         local.write_text("KEY=keep-local")
