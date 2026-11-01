@@ -126,6 +126,26 @@ class CloneTests(unittest.TestCase):
         self.assertEqual(shown["Source"], "https://***@gitlab.example.com/apps/ws.git")
         self.assertNotIn("s3cr3t-token", str(fields.call_args))
 
+    def test_clone_hides_query_tokens_but_passes_the_original_url(self):
+        cwd = "/home/user/workspace/git.example.com/org"
+        for url, source in (
+            (
+                "https://git.example.com/org/repo.git?access_token=q-tok3n",
+                "https://git.example.com/org/repo.git?access_token=***",
+            ),
+            (
+                "https://user:p4ss@git.example.com/org/repo.git?private_token=q-tok3n",
+                "https://***@git.example.com/org/repo.git?private_token=***",
+            ),
+        ):
+            with self.subTest(url=url), mock.patch.object(git_plugin.ui, "fields") as fields:
+                self.run_clone(url, cwd, url, expected_target="repo")
+                shown = dict(fields.call_args.args[0])
+                self.assertEqual(shown["Source"], source)
+                self.assertEqual(shown["Path"], os.path.join(cwd, "repo"))
+                self.assertNotIn("q-tok3n", str(fields.call_args))
+                self.assertNotIn("p4ss", str(fields.call_args))
+
 
 class RedactUrlTests(unittest.TestCase):
     def test_credentials_are_hidden(self):
@@ -133,6 +153,9 @@ class RedactUrlTests(unittest.TestCase):
             ("https://user:pass@host.com/org/repo.git", "https://***@host.com/org/repo.git"),
             ("https://ghp_token@github.com/org/repo.git", "https://***@github.com/org/repo.git"),
             ("ssh://git:pass@host.com:2222/org/repo.git", "ssh://git:***@host.com:2222/org/repo.git"),
+            ("https://host.com/org/repo.git?access_token=tok", "https://host.com/org/repo.git?access_token=***"),
+            ("https://u:p@host.com/org/repo.git?a=1&tok", "https://***@host.com/org/repo.git?a=***&***"),
+            ("https://host.com/org/repo.git#tok", "https://host.com/org/repo.git#***"),
         ):
             with self.subTest(url=url):
                 self.assertEqual(git_plugin.redact_url(url), shown)

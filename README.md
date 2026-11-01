@@ -197,7 +197,8 @@ The existing `GITHUB_HOST` configuration also overrides the host for name-based 
 Run `toast git` in a namespace directory, `~/workspace/{git-host}/{namespace}`.
 Before Git runs, the command shows the host, the namespace, the absolute checkout or
 clone path and the Git action on stderr. A clone also shows its source URL with any
-HTTP user name, token or password replaced by `***`. Git's stdout is the result and
+HTTP user name, token or password and every query or fragment value replaced by `***`.
+Git receives the original URL. Git's stdout is the result and
 goes to stdout. Git progress and diagnostics and the success line go to stderr. When
 Git fails, the command exits with status 1 and shows Git's error.
 

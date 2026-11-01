@@ -65,18 +65,25 @@ def redact_url(url):
     """Hide credentials in a Git URL before it is displayed.
 
     An HTTP user name is often a token, so it is hidden together with any password.
-    An SSH user name such as git stays visible. Git itself receives the original URL.
+    An SSH user name such as git stays visible. Query values and the fragment can
+    carry a token such as access_token, so their values are hidden too; query keys
+    stay visible. Git itself receives the original URL.
     """
     parsed = urlsplit(url)
-    if "@" not in parsed.netloc:
-        return url
-    userinfo, host = parsed.netloc.rsplit("@", 1)
-    user, has_password, _ = userinfo.partition(":")
-    if parsed.scheme in ("http", "https"):
-        user = "***"
-    elif has_password:
-        user += ":***"
-    return parsed._replace(netloc=f"{user}@{host}").geturl()
+    if "@" in parsed.netloc:
+        userinfo, host = parsed.netloc.rsplit("@", 1)
+        user, has_password, _ = userinfo.partition(":")
+        if parsed.scheme in ("http", "https"):
+            user = "***"
+        elif has_password:
+            user += ":***"
+        parsed = parsed._replace(netloc=f"{user}@{host}")
+    if parsed.query:
+        params = [part.partition("=") for part in parsed.query.split("&")]
+        parsed = parsed._replace(query="&".join(f"{key}=***" if sep else "***" for key, sep, _ in params))
+    if parsed.fragment:
+        parsed = parsed._replace(fragment="***")
+    return parsed.geturl()
 
 
 class GitPlugin(BasePlugin):
