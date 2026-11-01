@@ -13,6 +13,7 @@ import tempfile
 import termios
 import time
 import unittest
+from unittest import mock
 
 from rich.console import Console
 from rich.text import Text
@@ -162,6 +163,37 @@ class PickerTests(unittest.TestCase):
         self.assertEqual(ui.format_size(5 * 1024**3), "5.0 GiB")
         self.assertEqual(ui.format_size(512 * 1024**2), "512 MiB")
         self.assertEqual(ui.format_size(10), "< 1 MiB")
+
+    def test_diff_uses_the_chosen_stream_and_its_terminal_state(self):
+        lines = [f"+line {i}" for i in range(60)]
+        for stderr in (False, True):
+            for terminal in (False, True):
+                with self.subTest(stderr=stderr, terminal=terminal):
+                    out, err = io.StringIO(), io.StringIO()
+                    # The other stream has the opposite terminal state, so only the target decides.
+                    consoles = {
+                        "console": Console(file=out, force_terminal=terminal != stderr, no_color=False, width=80),
+                        "error_console": Console(file=err, force_terminal=terminal == stderr, no_color=False, width=80),
+                    }
+                    with mock.patch.multiple(ui, **consoles):
+                        ui.diff(lines, stderr=True) if stderr else ui.diff(lines)
+                    target, other = (err, out) if stderr else (out, err)
+                    self.assertNotIn("+line", other.getvalue())
+                    self.assertIn("+line 49", target.getvalue())
+                    self.assertEqual("+line 59" in target.getvalue(), not terminal)
+                    self.assertEqual("\x1b[" in target.getvalue(), terminal)
+                    self.assertEqual("10 more lines" in err.getvalue(), terminal)
+
+    def test_questions_leave_stdout_empty(self):
+        script = "from toast import ui\nprint(ui.confirm('Overwrite x?'), ui.prompt('Name'), file=__import__('sys').stderr)\n"
+        result = subprocess.run(
+            [sys.executable, "-c", script], cwd=ROOT, input="y\nvalue\n", text=True, capture_output=True,
+            env={**os.environ, "NO_COLOR": "1"},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("? Overwrite x? [y/N]", result.stderr)
+        self.assertIn("True value", result.stderr)
 
 
 class TerminalTests(unittest.TestCase):

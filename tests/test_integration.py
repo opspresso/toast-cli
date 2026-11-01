@@ -137,6 +137,93 @@ class FileSyncIntegrationTests(unittest.TestCase):
         self.assertNotIn("toast dot up", result.stderr)
         self.assertFalse((self.project / ".env.local").exists())
 
+    def test_overwrite_preview_and_prompt_keep_stdout_empty(self):
+        local, remote = self.project / ".env.local", self.remote / "env-local"
+        for command, answer, target, kept in (
+            ("up", "n\n", "s3://test-bucket/local/org/project/env-local", "KEY=local-secret\n"),
+            ("down", "y\n", str(local.resolve()), "KEY=remote-secret\n"),
+        ):
+            with self.subTest(command=command):
+                local.write_text("KEY=local-secret\n")
+                remote.write_text("KEY=remote-secret\n")
+                result = self.command("d", command, input=answer)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertIn(f"Overwrite {target}", result.stderr)
+                self.assertRegex(result.stderr, r"(?m)^-KEY=")
+                self.assertNotIn("-secret", result.stderr)
+                self.assertEqual(local.read_text(), kept)
+                self.assertEqual(remote.read_text(), "KEY=remote-secret\n")
+
+    def sync(self, alias, action, input=""):
+        """Run sync as if on a terminal that picks ACTION; answers come from INPUT."""
+        # The picker's key loop needs a PTY and has its own tests in test_ui.py.
+        self.executable("toast", textwrap.dedent('''\
+            import os
+            from toast import main, ui
+            ui.is_interactive = lambda: True
+            ui.choose = lambda options, title, **_: next(o for o in options if os.environ["TOAST_TEST_ACTION"] in o)
+            main()
+        '''))
+        self.env["TOAST_TEST_ACTION"] = action
+        log = self.root / "aws.log"
+        if log.exists():
+            log.unlink()
+        return self.command(alias, "sync", input=input)
+
+    def test_sync_confirms_before_replacing_a_changed_copy(self):
+        cases = (
+            ("d", ".env.local", "env-local", 'KEY=local-secret\nMULTI="first\nhidden-continuation"\n', "KEY=remote-secret\r\nNOTE=한글\r\n"),
+            ("p", ".prompt.md", "prompt-md", "# Local\n**local** [link](x)\n", "# Remote\r\n**remote** 한글\r\n"),
+        )
+        for alias, filename, kind, local_text, remote_text in cases:
+            local, remote = self.project / filename, self.remote / kind
+            s3 = f"s3://test-bucket/local/org/project/{kind}"
+            for action, question in (("Upload", f"Overwrite {s3}? [y/N]"), ("Download", f"Overwrite {local.resolve()} with {s3}? [y/N]")):
+                for answer, code in (("y\n", 0), ("n\n", 0), ("", 130)):
+                    with self.subTest(kind=kind, action=action, answer=answer):
+                        local.write_bytes(local_text.encode())
+                        local.chmod(0o644)
+                        remote.write_bytes(remote_text.encode())
+                        result = self.sync(alias, action, answer)
+                        self.assertEqual(result.returncode, code, result.stderr)
+                        self.assertEqual(result.stdout, "")
+                        self.assertIn(question, result.stderr)
+                        if alias == "d":
+                            for secret in ("local-secret", "remote-secret", "hidden-continuation"):
+                                self.assertNotIn(secret, result.stderr)
+                        else:
+                            self.assertIn("**local** [link](x)", result.stderr)
+                        approved = answer == "y\n"
+                        if not approved:
+                            self.assertIn("Cancelled", result.stderr)
+                        uploaded = approved and action == "Upload"
+                        downloaded = approved and action == "Download"
+                        self.assertEqual(remote.read_bytes(), (local_text if uploaded else remote_text).encode())
+                        self.assertEqual(local.read_bytes(), (remote_text if downloaded else local_text).encode())
+                        self.assertEqual(local.stat().st_mode & 0o777, 0o600 if downloaded else 0o644)
+                        # Sync reuses its single read of each backend.
+                        operations = sorted(call[1] for call in self.aws_calls())
+                        self.assertEqual(operations, sorted(["get-object", "get-parameter"] + ["put-object"] * uploaded))
+
+    def test_sync_creates_a_new_copy_without_a_question(self):
+        local, remote = self.project / ".prompt.md", self.remote / "prompt-md"
+        remote.write_bytes(b"# Remote\r\n")
+        result = self.sync("p", "Download")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertNotIn("Overwrite", result.stderr)
+        self.assertIn(f"Downloaded .prompt.md from s3://test-bucket/local/org/project/prompt-md to {local.resolve()}", result.stderr)
+        self.assertEqual(local.read_bytes(), b"# Remote\r\n")
+        self.assertEqual(local.stat().st_mode & 0o777, 0o600)
+
+        remote.unlink()
+        result = self.sync("p", "Upload")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertNotIn("Overwrite", result.stderr)
+        self.assertEqual(remote.read_bytes(), b"# Remote\r\n")
+
     def test_target_is_shown_on_stderr_from_a_subdirectory(self):
         for alias, program, filename, kind in (("d", "toast dot", ".env.local", "env-local"), ("p", "toast prompt", ".prompt.md", "prompt-md")):
             with self.subTest(kind=kind):

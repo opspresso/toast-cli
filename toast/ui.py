@@ -10,7 +10,7 @@ therefore receives only the result.
 import os
 import select
 import sys
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence
 
@@ -130,12 +130,15 @@ def table(headers, rows, min_widths=()):
     console.print(view)
 
 
-def diff(lines, limit=50):
-    """Print unified-diff lines, a result, with additions and removals colored.
+def diff(lines, limit=50, stderr=False):
+    """Print unified-diff lines with additions and removals colored.
 
-    A terminal shows the first LIMIT lines. A pipe receives the complete diff.
+    A diff is a result on stdout. Pass stderr=True for a preview that precedes a
+    change, so the command's stdout stays empty. A terminal shows the first LIMIT
+    lines; a pipe or file receives the complete diff.
     """
-    if not console.is_terminal:
+    out = error_console if stderr else console
+    if not out.is_terminal:
         limit = len(lines)
     for line in lines[:limit]:
         line = line.rstrip()
@@ -145,7 +148,7 @@ def diff(lines, limit=50):
             style = BAD
         else:
             style = MUTED
-        console.print(Text(line, style=style), soft_wrap=True)
+        out.print(Text(line, style=style), soft_wrap=True)
     if len(lines) > limit:
         muted(f"… {len(lines) - limit} more lines")
 
@@ -166,11 +169,14 @@ def paint(text, **style):
 
 
 def confirm(message, default=False):
-    return click.confirm(paint("? ", fg=ACCENT, bold=True) + message, default=default, err=True)
+    # Click before 8.4 writes the space after a prompt to stdout even with err=True.
+    with redirect_stdout(sys.stderr):
+        return click.confirm(paint("? ", fg=ACCENT, bold=True) + message, default=default, err=True)
 
 
 def prompt(message, **options):
-    return click.prompt(paint("? ", fg=ACCENT, bold=True) + message, err=True, **options)
+    with redirect_stdout(sys.stderr):
+        return click.prompt(paint("? ", fg=ACCENT, bold=True) + message, err=True, **options)
 
 
 def banner(version):

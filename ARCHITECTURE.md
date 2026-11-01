@@ -83,10 +83,23 @@ parallel. The newer timestamp wins; ties prefer S3. A failed read is never
 absence. Conflicting values require valid timestamps before either is called
 the newest copy. The CLI stops if a backend fails.
 
-Writes always target S3. `up` compares against the S3 copy for its no-op decision,
-so a matching SSM copy still migrates if S3 is missing or stale. Downloads compare
-against the newest copy. Existing destinations require confirmation; new
-destinations do not. Sync uses the user's selected upload/download action.
+Writes always target S3. An upload (`up`, or the sync upload action) compares
+local with the S3 copy for its no-op decision and preview, so a matching SSM copy
+still migrates if S3 is missing or stale. A download (`down`, or the sync download
+action) compares local with the newest copy and writes that copy. Sync uses the
+user's selected action and the values it already read; it does not read again.
+An existing destination that differs, including an empty one, is previewed in
+the write direction: its current content as removed lines and the incoming copy
+as added lines. It requires a
+confirmation that defaults to no and names the S3 URI or the absolute local path
+and its source. A new destination does not. A declined confirmation writes nothing
+and exits 0; end of input at the confirmation writes nothing and exits 130.
+
+The preview before a change goes to stderr, so `up`, `down` and `sync` leave stdout
+empty. The `diff` command prints its diff to stdout as the result. `ui.diff`
+shortens a diff only on a terminal of the stream it writes to. `ui.confirm` and
+`ui.prompt` keep the whole question on stderr, including the space that Click
+before 8.4 writes to stdout.
 
 Local downloads are atomic UTF-8 writes with mode 0600 and preserve line endings.
 Diff masking does not affect stored values or equality. Dotenv assignments,

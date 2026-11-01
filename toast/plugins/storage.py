@@ -658,23 +658,22 @@ def _mask_for_display(content, kind):
     return content
 
 
-def _print_masked_diff(local_content, remote_content, kind, incoming=False):
-    """Print a colored unified diff of local vs remote with secrets masked.
+def _print_masked_diff(before, after, kind, before_name, after_name, preview=True):
+    """Print a colored unified diff from BEFORE to AFTER with secrets masked.
 
     The identical/different decision is made by the caller on the real
-    content; only this display is masked.
-
-    The default direction is ENV-STORE -> LOCAL (upload: local overwrites the
-    store). Pass incoming=True for the download direction (LOCAL ->
-    ENV-STORE), so lines arriving from the env-store render as additions.
+    content; only this display is masked. A preview of a pending change goes
+    to stderr; the explicit `diff` command passes preview=False for a stdout
+    result.
     """
-    local_masked = _mask_for_display(local_content, kind)
-    remote_masked = _mask_for_display(remote_content, kind)
     ui.rule()
-    if incoming:
-        ui.diff(show_diff(remote_masked, local_masked, local_name="ENV-STORE", remote_name="LOCAL"))
-    else:
-        ui.diff(show_diff(local_masked, remote_masked, local_name="LOCAL", remote_name="ENV-STORE"))
+    ui.diff(
+        show_diff(
+            _mask_for_display(after, kind), _mask_for_display(before, kind),
+            local_name=after_name, remote_name=before_name,
+        ),
+        stderr=preview,
+    )
     ui.rule()
 
 
@@ -825,6 +824,54 @@ def _missing_everywhere_hints(local_path, program):
     )
 
 
+def _source_uri(config, org, project, kind, source):
+    if source == "s3":
+        return _s3_uri(config, org, project, kind)
+    return f"SSM {ssm_path(org, project, kind)}"
+
+
+def _upload(config, org, project, kind, filename, content, result, shown=None):
+    """Replace the S3 copy with local CONTENT; S3 is the only write target.
+
+    An existing S3 copy that differs is previewed against local and needs a
+    confirmation. SHOWN is a copy whose SHOWN -> local diff the caller already
+    printed; the preview is skipped only when that is this S3 -> local diff.
+    """
+    target = _s3_uri(config, org, project, kind)
+    if result.s3_value == content:
+        ui.success("S3 already matches local")
+        return
+    if result.s3_value is not None:
+        if result.s3_value != shown:
+            ui.info(f"The S3 copy differs from local {filename}.")
+            _print_masked_diff(result.s3_value, content, kind, "S3", "LOCAL")
+        if not ui.confirm(f"Overwrite {target}?"):
+            ui.cancelled()
+            return
+    _write_store(config, org, project, kind, content, filename, target)
+
+
+def _download(config, org, project, kind, filename, local_path, local_content, result):
+    """Replace the local file with the newest env-store copy.
+
+    An existing local file that differs is previewed as local -> newest copy,
+    the direction of the change, and needs a confirmation.
+    """
+    source = _source_uri(config, org, project, kind, result.source)
+    path = os.path.abspath(local_path)
+    if local_content == result.value:
+        ui.success("Local already matches the env-store")
+        return
+    if local_content is not None:
+        ui.info(f"Local {filename} differs from the env-store copy ({result.source.upper()}, newest).")
+        _print_masked_diff(local_content, result.value, kind, "LOCAL", result.source.upper())
+        if not ui.confirm(f"Overwrite {path} with {source}?"):
+            ui.cancelled()
+            return
+    write_private_file(local_path, result.value)
+    ui.success(f"Downloaded {filename} from {source} to {path}")
+
+
 def _cmd_up(config, org, project, kind, filename, local_path, program):
     content = read_local_file(local_path)
     if content is None:
@@ -834,36 +881,19 @@ def _cmd_up(config, org, project, kind, filename, local_path, program):
             f"To fetch the env-store copy instead, check it with `{program} diff`, then run `{program} down`",
         )
 
-    target = _s3_uri(config, org, project, kind)
     result = _read_store(config, org, project, kind)
-
-    # The upload target is S3, so the no-op decision is made against the S3 copy
-    # (not the newest copy): when the newest copy is a stale SSM parameter, an
-    # `up` still needs to migrate the content into the bucket.
-    if result.s3_value is not None and content == result.s3_value:
-        ui.success("S3 already matches local")
-        return
-
-    if result.value is not None:
-        if compare_contents(content, result.value) == "different":
-            ui.info(f"The env-store copy ({result.source.upper()}, newest) differs from local.")
-            _print_masked_diff(content, result.value, kind)
-        else:
-            # Local matches the newest copy (SSM) but S3 is stale/missing.
+    # The no-op decision and preview use S3, the copy the upload replaces. A
+    # newer SSM copy is reported so it is not mistaken for the target.
+    if result.source == "ssm" and result.s3_value != content:
+        if result.value == content:
             ui.info("Local matches SSM (newest). The upload moves it into S3.")
-
-    # Confirm only when the upload target (S3) already holds a copy; a brand-new
-    # destination is uploaded immediately without asking.
-    if result.s3_value is not None and not ui.confirm(f"Overwrite {target}?"):
-        ui.cancelled()
-        return
-
-    _write_store(config, org, project, kind, content, filename, target)
+        else:
+            ui.info("SSM has the newest copy and differs from local. The upload replaces S3 only.")
+    _upload(config, org, project, kind, filename, content, result)
 
 
 def _cmd_down(config, org, project, kind, filename, local_path, program):
     result = _read_store(config, org, project, kind)
-
     if result.value is None:
         if os.path.exists(local_path):
             hints = (
@@ -874,21 +904,7 @@ def _cmd_down(config, org, project, kind, filename, local_path, program):
             hints = _missing_everywhere_hints(local_path, program)
         raise ui.Failure(f"{filename} not found in the env-store (S3 or SSM)", *hints)
 
-    source = result.source.upper()
-    local_content = read_local_file(local_path)
-    if local_content is not None:
-        if compare_contents(local_content, result.value) == "identical":
-            ui.success("Local already matches the env-store")
-            return
-        ui.info(f"The local file differs from the env-store copy ({source}, newest).")
-        _print_masked_diff(local_content, result.value, kind, incoming=True)
-        # Confirm only when a local file exists; a new file is written without asking.
-        if not ui.confirm(f"Overwrite local {filename} with the {source} copy?"):
-            ui.cancelled()
-            return
-
-    write_private_file(local_path, result.value)
-    ui.success(f"Downloaded {filename} from {source} to {local_path}")
+    _download(config, org, project, kind, filename, local_path, read_local_file(local_path), result)
 
 
 def _warn_missing_everywhere(filename, local_path, program):
@@ -908,7 +924,7 @@ def _cmd_diff(config, org, project, kind, filename, local_path, program):
         ui.success("Local matches the env-store")
     elif status == "different":
         ui.info(f"Local {filename} differs from the env-store copy ({result.source.upper()}, newest).")
-        _print_masked_diff(local_content, result.value, kind)
+        _print_masked_diff(result.value, local_content, kind, "ENV-STORE", "LOCAL", preview=False)
         ui.muted(f"Run `{program} up` to keep local, or `{program} down` to keep the env-store copy.")
     else:
         _report_one_sided(status, result.source, program)
@@ -944,18 +960,19 @@ def _cmd_sync(config, org, project, kind, filename, local_path, program):
             ui.warning(f"This file exists only in SSM. Run `{program} up` to move it into the bucket.")
         return
 
+    shown = None
     if status == "different":
-        _print_masked_diff(local_content, result.value, kind)
+        _print_masked_diff(result.value, local_content, kind, result.source.upper(), "LOCAL")
+        shown = result.value
     else:
         _report_one_sided(status, result.source, program)
 
     action = select_sync_action(status, filename, program)
 
     if action == "upload":
-        _write_store(config, org, project, kind, local_content, filename, _s3_uri(config, org, project, kind))
+        _upload(config, org, project, kind, filename, local_content, result, shown)
     elif action == "download":
-        write_private_file(local_path, result.value)
-        ui.success(f"Downloaded {filename} from {result.source.upper()} to {local_path}")
+        _download(config, org, project, kind, filename, local_path, local_content, result)
     else:
         ui.cancelled()
 
