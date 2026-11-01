@@ -18,7 +18,7 @@ from rich.console import Console
 
 from toast import discover_and_load_plugins, ui
 from toast.helpers import CustomHelpCommand, CustomHelpGroup
-from toast.plugins import ctx_plugin, env_plugin
+from toast.plugins import ctx_plugin, env_plugin, git_plugin
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -141,6 +141,103 @@ class CliTests(unittest.TestCase):
             self.assertNotIn("aws_session_token", config["default"])
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             identity.assert_called_once_with(profile="default")
+
+
+class GitCliTests(unittest.TestCase):
+    """Drive `toast git REPO COMMAND` through Click with Git mocked."""
+
+    def setUp(self):
+        self.cli = make_cli()
+        self.runner = separate_streams_runner()
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.namespace = Path(temp.name) / "workspace" / "gitlab.com" / "org" / "group"
+        self.repo = self.namespace / "repo"
+        (self.repo / ".git").mkdir(parents=True)
+        cwd = mock.patch.object(git_plugin.os, "getcwd", return_value=str(self.namespace))
+        cwd.start()
+        self.addCleanup(cwd.stop)
+
+    def invoke(self, *arguments, stdout="", stderr="", **options):
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, stdout, stderr)) as run:
+            result = self.runner.invoke(self.cli, ["git", *arguments], **options)
+        return result, run
+
+    def test_git_output_goes_to_stdout_and_status_to_stderr(self):
+        cases = (
+            (["repo", "pull", "-r"], ["git", "pull", "--rebase"], self.repo),
+            (["repo", "p"], ["git", "pull"], self.repo),
+            (["repo", "push"], ["git", "push"], self.repo),
+            (["repo", "ps"], ["git", "push"], self.repo),
+            (["repo", "branch", "--branch", "feature"], ["git", "checkout", "-b", "feature"], self.repo),
+            (["repo", "b", "-b", "feature"], ["git", "checkout", "-b", "feature"], self.repo),
+            (["new", "clone"], ["git", "clone", "git@gitlab.com:org/group/new.git", str(self.namespace / "new")], self.namespace / "new"),
+            (["new", "cl", "--target", "other"], ["git", "clone", "git@gitlab.com:org/group/new.git", str(self.namespace / "other")], self.namespace / "other"),
+        )
+        for arguments, expected, path in cases:
+            with self.subTest(arguments=arguments):
+                result, run = self.invoke(*arguments, stdout="git result\n", stderr="git diagnostic\n")
+                self.assertEqual(result.exit_code, 0, result.stderr)
+                self.assertEqual(run.call_args.args[0], expected)
+                self.assertEqual(result.stdout, "git result\n")
+                for shown in ("gitlab.com", "org/group", str(path), "git diagnostic", "✓"):
+                    self.assertIn(shown, result.stderr)
+                self.assertIn(" ".join(expected[:2]), result.stderr)
+
+    def test_git_failure_exits_nonzero_without_success(self):
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 1, "", "rejected")):
+            result = self.runner.invoke(self.cli, ["git", "repo", "push"])
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("rejected", result.stderr)
+        self.assertNotIn("✓", result.stderr)
+        self.assertEqual(result.stdout, "")
+
+    def test_mirror_runs_only_after_approval_or_yes(self):
+        target = "git@gitlab.com:org/group/repo.git"
+        for arguments, answer, pushed in (
+            (["repo", "push", "--mirror"], "\n", False),
+            (["repo", "push", "-m"], "n\n", False),
+            (["repo", "ps", "--mirror"], "y\n", True),
+            (["repo", "push", "--mirror", "--yes"], None, True),
+            (["repo", "push", "-m", "-y"], None, True),
+        ):
+            with self.subTest(arguments=arguments, answer=answer):
+                result, run = self.invoke(*arguments, input=answer)
+                self.assertEqual(result.exit_code, 0, result.stderr)
+                self.assertIn(target, result.stderr)
+                self.assertEqual(run.called, pushed)
+                if pushed:
+                    self.assertEqual(run.call_args.args[0], ["git", "push", "--mirror", target])
+                else:
+                    self.assertIn("Cancelled", result.stderr)
+                if answer is None:
+                    self.assertNotIn("deletes remote refs", result.stderr)
+                else:
+                    self.assertIn("deletes remote refs", result.stderr)
+
+    def test_invalid_option_combinations_are_usage_errors(self):
+        for arguments in (
+            ["repo", "push", "--yes"],
+            ["repo", "pull", "-y"],
+            ["repo", "clone", "--yes"],
+            ["repo", "pull", "--mirror"],
+            ["repo", "push", "--rebase"],
+            ["repo", "pull", "--target", "x"],
+            ["repo", "push", "--branch", "x"],
+            ["repo", "fetch"],
+        ):
+            with self.subTest(arguments=arguments):
+                result, run = self.invoke(*arguments)
+                self.assertEqual(result.exit_code, 2, result.stderr)
+                run.assert_not_called()
+
+    def test_rm_yes_still_removes_without_a_confirmation(self):
+        with mock.patch("click.confirm") as confirm:
+            result, _ = self.invoke("repo", "rm", "--yes")
+        self.assertEqual(result.exit_code, 0, result.stderr)
+        confirm.assert_not_called()
+        self.assertFalse(self.repo.exists())
+        self.assertEqual(result.stdout, "")
 
 
 class InterfaceTests(unittest.TestCase):
