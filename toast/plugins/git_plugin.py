@@ -86,6 +86,72 @@ def redact_url(url):
     return parsed.geturl()
 
 
+# Git may rewrite a URL before printing it, for example by dropping the user name
+# or by appending a slash, and it prints a remote URL that is not in its arguments,
+# so the URLs are also found in the text. Git prints a malformed URL as given, so a
+# URL can contain quotes and whitespace. A quoted URL ends at the first matching
+# quote that is followed by whitespace or the end of the text, optionally after one
+# punctuation mark, as in "unable to access 'URL': reason", and never runs into the
+# next URL, so several URLs on one line are found separately. An unquoted URL ends
+# at whitespace, except where a secret can contain whitespace: user information runs
+# to the last "@" before the path on the line, and a query or fragment runs to the end
+# of the line. Hiding too much text is safer than showing part of a secret.
+_SCHEME = r"[A-Za-z][A-Za-z0-9+.-]*://"
+URL_IN_TEXT = re.compile(
+    rf"""(?P<quote>['"])(?P<quoted>{_SCHEME}(?:(?!['"]?{_SCHEME})[^\n])*?)(?P=quote)(?=\s|$|[:;,.)](?:\s|$))"""
+    rf"""|\b{_SCHEME}(?:[^/?#\n]*@)?[^\s?#]*(?:[?#][^\n]*)?"""
+)
+
+
+def _hide_url(url):
+    try:
+        return redact_url(url)
+    except ValueError:
+        # urlsplit rejects some malformed URLs; hide all of it but the scheme.
+        return url.split("://", 1)[0] + "://***"
+
+
+def _secret_parts(url):
+    """Pair each secret part of url with what redact_url shows instead.
+
+    Each part keeps its delimiter, such as "user:pass@" or "?query", so that a
+    match in the text is the part of this URL and not an unrelated word.
+    """
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        rest = url.split("://", 1)[1]
+        return [(rest, "***")] if rest else []
+    shown = urlsplit(_hide_url(url))
+    parts = []
+    if "@" in parsed.netloc:
+        parts.append((parsed.netloc.rsplit("@", 1)[0] + "@", shown.netloc.rsplit("@", 1)[0] + "@"))
+    if parsed.query:
+        parts.append(("?" + parsed.query, "?" + shown.query))
+    if parsed.fragment:
+        parts.append(("#" + parsed.fragment, "#***"))
+    return [(raw, masked) for raw, masked in parts if raw != masked]
+
+
+def redact_urls(text, known_urls=()):
+    """Hide credentials in every URL inside Git output, as redact_url does.
+
+    known_urls are the URLs Git was given. Their secret parts are hidden wherever
+    they appear, even where Git printed a URL whose ends cannot be found in the text.
+    """
+    for url in known_urls:
+        if "://" in url:
+            for raw, masked in _secret_parts(url):
+                text = text.replace(raw, masked)
+
+    def replace(match):
+        if match.group("quote"):
+            return match.group("quote") + _hide_url(match.group("quoted")) + match.group("quote")
+        return _hide_url(match.group(0))
+
+    return URL_IN_TEXT.sub(replace, text)
+
+
 class GitPlugin(BasePlugin):
     """Plugin for 'git' command - handles Git repository operations."""
 
@@ -152,13 +218,20 @@ class GitPlugin(BasePlugin):
 
     @staticmethod
     def _run_git(args, message, **kwargs):
-        """Run Git: its stdout is the result, its stderr is about the run."""
+        """Run Git: its stdout is the result, its stderr is about the run.
+
+        Git receives the original arguments. Git can print a remote URL that is not
+        in the arguments, so every displayed URL is redacted, on success and failure.
+        """
+        def hide(text):
+            return redact_urls(text, args)
+
         with ui.status(message):
-            result = run_command(args, **kwargs)
-        for line in result.stderr.strip().splitlines():
+            result = run_command(args, redact=hide, **kwargs)
+        for line in hide(result.stderr.strip()).splitlines():
             ui.muted(f"  {line}")
         if result.stdout.strip():
-            ui.result(result.stdout.rstrip("\n"))
+            ui.result(hide(result.stdout.rstrip("\n")))
 
     @classmethod
     def execute(
