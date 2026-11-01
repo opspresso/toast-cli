@@ -83,7 +83,9 @@ local with the S3 copy for its no-op decision and preview, so a matching SSM cop
 still migrates if S3 is missing or stale. A download (`down`, or the sync download
 action) compares local with the newest copy and writes that copy. Sync uses the
 user's selected action and the values it already read; it does not read again.
-An existing destination that differs, including an empty one, requires a
+An existing destination that differs, including an empty one, is previewed in
+the write direction: its current content as removed lines and the incoming copy
+as added lines. It requires a
 confirmation that defaults to no and names the S3 URI or the absolute local path
 and its source. A new destination does not. A declined confirmation writes nothing
 and exits 0.

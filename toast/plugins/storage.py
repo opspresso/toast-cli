@@ -763,8 +763,8 @@ def _upload(config, org, project, kind, filename, content, result, shown=None):
     """Replace the S3 copy with local CONTENT; S3 is the only write target.
 
     An existing S3 copy that differs is previewed against local and needs a
-    confirmation. SHOWN is a copy whose diff the caller already printed; it
-    skips a repeated preview.
+    confirmation. SHOWN is a copy whose SHOWN -> local diff the caller already
+    printed; the preview is skipped only when that is this S3 -> local diff.
     """
     target = _s3_uri(config, org, project, kind)
     if result.s3_value == content:
@@ -780,11 +780,11 @@ def _upload(config, org, project, kind, filename, content, result, shown=None):
     _write_store(config, org, project, kind, content, filename, target)
 
 
-def _download(config, org, project, kind, filename, local_path, local_content, result, shown=None):
+def _download(config, org, project, kind, filename, local_path, local_content, result):
     """Replace the local file with the newest env-store copy.
 
-    An existing local file that differs is previewed against the newest copy and
-    needs a confirmation. SHOWN works as in _upload.
+    An existing local file that differs is previewed as local -> newest copy,
+    the direction of the change, and needs a confirmation.
     """
     source = _source_uri(config, org, project, kind, result.source)
     path = os.path.abspath(local_path)
@@ -792,9 +792,8 @@ def _download(config, org, project, kind, filename, local_path, local_content, r
         ui.success("Local already matches the env-store")
         return
     if local_content is not None:
-        if result.value != shown:
-            ui.info(f"Local {filename} differs from the env-store copy ({result.source.upper()}, newest).")
-            _print_masked_diff(local_content, result.value, kind, "LOCAL", result.source.upper())
+        ui.info(f"Local {filename} differs from the env-store copy ({result.source.upper()}, newest).")
+        _print_masked_diff(local_content, result.value, kind, "LOCAL", result.source.upper())
         if not ui.confirm(f"Overwrite {path} with {source}?"):
             ui.cancelled()
             return
@@ -883,7 +882,7 @@ def _cmd_sync(config, org, project, kind, filename, local_path):
     if action == "upload":
         _upload(config, org, project, kind, filename, local_content, result, shown)
     elif action == "download":
-        _download(config, org, project, kind, filename, local_path, local_content, result, shown)
+        _download(config, org, project, kind, filename, local_path, local_content, result)
     else:
         ui.cancelled()
 

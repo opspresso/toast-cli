@@ -695,6 +695,17 @@ class WritePreviewApprovalTests(unittest.TestCase):
         self.assertIn("SSM /toast/local/o/p/prompt-md", confirm.call_args.args[0])
         self.assertEqual(content, ssm)
 
+    def test_sync_download_preview_matches_the_write_direction(self):
+        local = "local text\n"
+        for s3, ssm, newest in (("s3 text\n", None, "s3 text"), ("s3 text\n", "ssm text\n", "ssm text")):
+            with self.subTest(newest=newest):
+                _, err, confirm, _, content = self.run_handler(storage._cmd_sync, local, s3, ssm, "download", kind="prompt-md")
+                self.assertIn("differs from the env-store copy", err)
+                approval = err.rsplit("differs from the env-store copy", 1)[1]
+                self.assertRegex(approval, rf"(?m)^-local text\n\+{newest}$")
+                confirm.assert_called_once()
+                self.assertEqual(content, newest + "\n")
+
 
 class StoreListTests(unittest.TestCase):
     def _cfg(self):

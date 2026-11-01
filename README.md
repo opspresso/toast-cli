@@ -151,6 +151,8 @@ toast dot ls               # List all .env.local files in env-store (S3 + SSM)
 # down and sync's download write the local file from the newest copy (S3 or SSM),
 # skip an identical file, and preview and confirm before replacing an existing
 # local file, even an empty one.
+# The preview shows the destination's current content as - lines and the
+# incoming copy as + lines.
 # The confirmation names the S3 URI, or the absolute local path and the source,
 # and defaults to no. A new destination is written without a confirmation.
 # Secret values are masked, including multiline dotenv values (KEY=ab****yz).
