@@ -98,7 +98,7 @@ resolved region; there is no arbitrary-region fallback.
 Add a module with a `BasePlugin` subclass, unique `name`, `help`, and `execute()`.
 Use `get_arguments()` for Click parameters. No registry edit is required.
 
-See [CLAUDE.md](CLAUDE.md) for setup and validation commands. CI tests supported
-Python endpoints on Linux and macOS and builds both distribution formats before
-publication. Package build and release configuration is in
-[`.github/workflows/release.yml`](.github/workflows/release.yml).
+See [CLAUDE.md](CLAUDE.md) for setup and validation commands. CI tests the
+supported minimum and current Python versions on Linux and macOS. The release
+workflow, [`.github/workflows/release.yml`](.github/workflows/release.yml), runs
+CI and then builds both distribution formats before publication.
