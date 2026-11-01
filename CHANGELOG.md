@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > Note: a `vMAJOR.MINOR.PATCH` tag on `main` publishes a release. Versions up to
 > 4.1.16 were published per push, so not every patch version has a section here.
 
+## [Unreleased]
+
+### Added
+- `toast cdw QUERY` prints a directory without a picker when `QUERY` names one: an exact relative path, its last components such as a repository name, or letters to filter by. Several matches open a filtered picker; without a terminal the command lists them and fails
+- The `cdw` picker shows the workspace root and starts on the repository or namespace that holds the working directory; stderr shows the workspace, the current directory and the target
+
 ## [5.0.0] - 2026-10-31
 
 ### Changed

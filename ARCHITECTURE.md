@@ -36,7 +36,7 @@ are unchanged. `toast/helpers.py` supplies the help layout, error reporting and 
 | Command | Behavior and external tools |
 |---------|-----------------------------|
 | `am` | AWS STS identity, explicit JSON output |
-| `cdw` | Walk workspace namespaces until repository roots; filtering picker; only the selected path goes to stdout |
+| `cdw` | Walk workspace namespaces until repository roots; match `QUERY` by exact path, trailing components, then fuzzy filter; picker marks the directory that holds the working directory; only the selected path goes to stdout |
 | `ctx` | kubectl contexts; AWS EKS discovery and kubeconfig update |
 | `dot`, `prompt` | Shared env-store flow described below |
 | `env` | Copy a complete static profile to default in the AWS credentials file; atomic mode 0600 write; verify the default identity |

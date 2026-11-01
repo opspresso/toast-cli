@@ -88,7 +88,7 @@ alias t='toast'
 c() {
   local dir
   dir="$(toast cdw &quot;$@&quot;)" || return
-  [ -n "$dir" ] &amp;&amp; cd "$dir"
+  [ -z "$dir" ] || cd -- "$dir"
 }
 
 # Common Command Aliases
