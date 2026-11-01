@@ -30,4 +30,4 @@ class DotPlugin(BasePlugin):
 
     @classmethod
     def execute(cls, command=None, **kwargs):
-        run_file_sync("env-local", ".env.local", command)
+        run_file_sync("env-local", ".env.local", command, f"toast {cls.name}")

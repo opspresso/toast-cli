@@ -3,6 +3,7 @@
 """Unit tests for the env-store backend pure logic (no AWS access)."""
 
 import os
+import re
 import click
 import io
 import subprocess
@@ -418,7 +419,7 @@ class CmdUpTests(unittest.TestCase):
                 storage.click, "confirm", return_value=True
             ) as confirm_mock:
                 storage._cmd_up(
-                    self._cfg(), "o", "p", "env-local", ".env.local", local_path
+                    self._cfg(), "o", "p", "env-local", ".env.local", local_path, "toast dot"
                 )
             return write_mock, confirm_mock
 
@@ -483,7 +484,7 @@ class CmdDownTests(unittest.TestCase):
                 storage.click, "confirm", return_value=True
             ) as confirm_mock:
                 storage._cmd_down(
-                    self._cfg(), "o", "p", "env-local", ".env.local", local_path
+                    self._cfg(), "o", "p", "env-local", ".env.local", local_path, "toast dot"
                 )
             written = None
             if os.path.exists(local_path):
@@ -520,7 +521,7 @@ class CmdDownTests(unittest.TestCase):
                 storage, "show_diff", return_value=[]
             ) as show_diff_mock:
                 storage._cmd_down(
-                    self._cfg(), "o", "p", "env-local", ".env.local", local_path
+                    self._cfg(), "o", "p", "env-local", ".env.local", local_path, "toast dot"
                 )
         # The incoming entry is still an addition after value masking.
         show_diff_mock.assert_called_once_with(
@@ -557,7 +558,7 @@ class CmdDiffTests(unittest.TestCase):
                 storage, "store_read", return_value=read_result
             ), mock.patch.object(storage, "_print_masked_diff") as diff_mock:
                 storage._cmd_diff(
-                    self._cfg(), "o", "p", "env-local", ".env.local", local_path
+                    self._cfg(), "o", "p", "env-local", ".env.local", local_path, "toast dot"
                 )
             return diff_mock
 
@@ -639,7 +640,7 @@ class StorageSafetyTests(unittest.TestCase):
                 partial = storage.ReadResult("old", "ssm", None, None, "old", "ts", "ssm_only", [("s3", "AccessDenied")])
                 with mock.patch.object(storage, "store_read", return_value=partial), mock.patch.object(storage, "store_write") as write:
                     with self.assertRaisesRegex(click.ClickException, "AccessDenied"):
-                        handler(self.cfg, "o", "p", "env-local", ".env.local", str(local))
+                        handler(self.cfg, "o", "p", "env-local", ".env.local", str(local), "toast dot")
                 write.assert_not_called()
                 self.assertEqual(local.read_text(), "KEEP=original")
 
@@ -659,7 +660,7 @@ class StorageSafetyTests(unittest.TestCase):
                 content = "KEY=한글\r\nEMPTY=\r\n"
                 remote = storage.ReadResult(content, "s3", content, "ts", None, None, "s3_only", [])
                 with mock.patch.object(storage, "store_read", return_value=remote), mock.patch.object(storage, "select_sync_action", return_value="download"):
-                    handler(self.cfg, "o", "p", "env-local", ".env.local", str(local))
+                    handler(self.cfg, "o", "p", "env-local", ".env.local", str(local), "toast dot")
                 self.assertEqual(local.read_bytes(), content.encode())
                 self.assertEqual(local.stat().st_mode & 0o777, 0o600)
 
@@ -678,8 +679,8 @@ class StorageSafetyTests(unittest.TestCase):
         with mock.patch.object(storage.os, "getcwd", return_value=cwd), mock.patch.object(
             storage, "resolve_config", return_value=self.cfg
         ), mock.patch.object(storage, "_cmd_up") as up:
-            storage.run_file_sync("env-local", ".env.local", "up")
-        self.assertEqual(up.call_args.args[-1], "/tmp/workspace/github.com/org/project/.env.local")
+            storage.run_file_sync("env-local", ".env.local", "up", "toast dot")
+        self.assertEqual(up.call_args.args[5], "/tmp/workspace/github.com/org/project/.env.local")
 
     def test_cwd_host_selects_storage_namespace(self):
         cases = {
@@ -693,17 +694,54 @@ class StorageSafetyTests(unittest.TestCase):
             with self.subTest(cwd=cwd), mock.patch.object(storage.os, "getcwd", return_value=cwd), mock.patch.object(
                 storage, "resolve_config", return_value=self.cfg
             ), mock.patch.object(storage, "_cmd_up") as up:
-                storage.run_file_sync("env-local", ".env.local", "up")
+                storage.run_file_sync("env-local", ".env.local", "up", "toast dot")
             self.assertEqual(up.call_args.args[1:3], (namespace, "project"))
-            self.assertEqual(up.call_args.args[-1], f"{root}/.env.local")
+            self.assertEqual(up.call_args.args[5], f"{root}/.env.local")
+
+    def test_click_target_matches_the_storage_keys_on_stderr(self):
+        from click.testing import CliRunner
+        from toast.helpers import CustomHelpGroup
+        from toast.plugins.dot_plugin import DotPlugin
+        from toast.plugins.prompt_plugin import PromptPlugin
+
+        cli = CustomHelpGroup()
+        for plugin in (DotPlugin, PromptPlugin):
+            plugin.register(cli)
+        root = "/tmp/workspace/gitlab.example.com/group/project"
+        for name, filename, kind in (("dot", ".env.local", "env-local"), ("prompt", ".prompt.md", "prompt-md")):
+            with self.subTest(kind=kind):
+                remote = storage.ReadResult("KEY=remote-secret", "s3", "KEY=remote-secret", "ts", None, None, "s3_only", [])
+                with mock.patch.object(storage.os, "getcwd", return_value=f"{root}/src/deep"), mock.patch.object(
+                    storage, "resolve_config", return_value=self.cfg
+                ), mock.patch.object(storage, "store_read", return_value=remote) as read, mock.patch.object(
+                    storage, "read_local_file", return_value=None
+                ) as local:
+                    result = CliRunner().invoke(cli, [name, "diff"])
+                self.assertEqual(result.exit_code, 0, result.stderr)
+                self.assertEqual(result.stdout, "")
+                namespace = read.call_args.args[1:4]
+                self.assertEqual(namespace, ("gitlab.example.com/group", "project", kind))
+                local.assert_called_once_with(f"{root}/{filename}")
+                for label, value in (
+                    ("Command", f"toast {name} diff"),
+                    ("Project", root),
+                    ("Local", f"{root}/{filename}"),
+                    ("Profile", "profile"),
+                    ("Region", "eu-west-1"),
+                    ("S3", f"s3://bucket/{storage.s3_key(*namespace)}"),
+                    ("SSM", f"{storage.ssm_path(*namespace)} (legacy, read-only)"),
+                ):
+                    self.assertRegex(result.stderr, rf"(?m)^{label}\s+{re.escape(value)}$")
+                self.assertIn(f"Run `toast {name} down` to download it.", result.stderr)
+                self.assertNotIn("remote-secret", result.stderr)
 
     def test_invalid_command_and_workspace_fail_before_config_or_aws(self):
         with mock.patch.object(storage, "resolve_config") as config:
             with self.assertRaises(click.UsageError):
-                storage.run_file_sync("env-local", ".env.local", "typo")
+                storage.run_file_sync("env-local", ".env.local", "typo", "toast dot")
             with mock.patch.object(storage.os, "getcwd", return_value="/tmp/workspace/githubXcom/o/p"):
                 with self.assertRaises(click.ClickException):
-                    storage.run_file_sync("env-local", ".env.local", "up")
+                    storage.run_file_sync("env-local", ".env.local", "up", "toast dot")
         config.assert_not_called()
 
     def test_empty_file_is_displayed_as_present(self):
@@ -713,7 +751,7 @@ class StorageSafetyTests(unittest.TestCase):
             local.write_text("")
             output = io.StringIO()
             with mock.patch.object(storage, "store_read", return_value=remote), mock.patch.object(storage.ui, "error_console", Console(file=output, width=120)):
-                storage._cmd_sync(self.cfg, "o", "p", "env-local", ".env.local", str(local))
+                storage._cmd_sync(self.cfg, "o", "p", "env-local", ".env.local", str(local), "toast dot")
             self.assertRegex(output.getvalue(), r"Local\s+e3b0c44298fc")
             self.assertRegex(output.getvalue(), r"S3\s+e3b0c44298fc")
 
@@ -733,7 +771,7 @@ class StorageSafetyTests(unittest.TestCase):
         ):
             result = storage.store_read(self.cfg, "o", "p", "env-local")
         with self.assertRaisesRegex(click.ClickException, "timestamps"):
-            storage._require_complete_read(result)
+            storage._require_complete_read(result, self.cfg)
 
     def test_invalid_epoch_does_not_crash(self):
         for timestamp in (float("nan"), float("inf"), 1e100):

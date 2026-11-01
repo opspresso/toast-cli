@@ -678,8 +678,22 @@ def _print_masked_diff(local_content, remote_content, kind, incoming=False):
     ui.rule()
 
 
-def select_sync_action(status, filename):
-    """Return 'upload', 'download' or None for a cancel."""
+def select_sync_action(status, filename, program):
+    """Return 'upload', 'download' or None for a cancel.
+
+    Without a terminal no one can choose, so the error names the explicit
+    command for each direction that exists.
+    """
+    if not ui.is_interactive():
+        hints = {
+            "different": (
+                f"Run `{program} up` to replace the env-store copy, or `{program} down` to replace the local file",
+                "Both ask for confirmation before they overwrite an existing copy: answer in a terminal or pipe `y` on stdin",
+            ),
+            "local_only": (f"Run `{program} up` to upload it. The env-store has no copy to overwrite",),
+            "remote_only": (f"Run `{program} down` to download it. There is no local file to overwrite",),
+        }[status]
+        raise ui.Failure(f"Choosing a sync direction for {filename} needs a terminal", *hints)
     actions = {
         "⬆ Upload local to the env-store": "upload",
         "⬇ Download the env-store copy": "download",
@@ -691,12 +705,18 @@ def select_sync_action(status, filename):
     return actions.get(ui.choose(list(actions), f"Select an action for {filename}"))
 
 
-def run_file_sync(kind, filename, command):
+def _region_label(config):
+    # Show only the resolved value; filling in a region here would misreport the target.
+    return config.region or "not set (SSM reads need one)"
+
+
+def run_file_sync(kind, filename, command, program):
     """Shared entry point for the dot/prompt plugins.
 
     kind: store segment, e.g. 'env-local' or 'prompt-md'
     filename: local file name, e.g. '.env.local' or '.prompt.md'
     command: subcommand string or None (None defaults to 'sync')
+    program: the command a person types, e.g. 'toast dot', for next-step hints
     """
     handlers = {"up": _cmd_up, "down": _cmd_down, "dn": _cmd_down, "diff": _cmd_diff, "sync": _cmd_sync}
     command = command or "sync"
@@ -704,35 +724,81 @@ def run_file_sync(kind, filename, command):
         raise click.UsageError(f"Unknown command: {command}. Use sync, up, down, dn, diff, or ls")
 
     if command != "ls":
-        match = re.fullmatch(r"(.*?/workspace/([^/]+[.][^/]+)/([^/]+)/([^/]+))(?:/.*)?", os.getcwd())
+        cwd = os.getcwd()
+        match = re.fullmatch(r"(.*?/workspace/([^/]+[.][^/]+)/([^/]+)/([^/]+))(?:/.*)?", cwd)
         if not match:
-            raise click.ClickException("Current directory must be under workspace/{host}/{org}/{project}")
+            raise ui.Failure(
+                f"Not inside a workspace project: {cwd}",
+                f"Run `{program} {command}` in ~/workspace/{{host}}/{{org}}/{{project}} or one of its subdirectories",
+                "The host directory must contain a dot, such as github.com",
+                f"`{program} ls` runs anywhere and lists the stored projects",
+            )
         project_root, host, org, project_name = match.groups()
         org_name = workspace_namespace(host, org)
         local_path = os.path.join(project_root, filename)
 
     config = resolve_config()
     if not config.bucket:
-        raise click.ClickException(
-            "Could not determine the env-store bucket. Set TOAST_ENV_STORE_BUCKET "
-            f"or check the AWS profile/credentials ('{config.profile}')"
+        raise ui.Failure(
+            f"Could not determine the env-store bucket for profile '{config.profile}'",
+            f"Set TOAST_ENV_STORE_BUCKET, or ENV_STORE_BUCKET in {config_file_path()}",
+            f"Without a bucket setting, toast uses env-store-{{account-id}}. Check the profile: aws sts get-caller-identity --profile {config.profile}",
         )
+
     if command == "ls":
+        ui.fields([
+            ("Command", f"{program} ls"),
+            ("Scope", f"{filename} of all projects"),
+            ("Profile", config.profile),
+            ("Region", _region_label(config)),
+            ("S3", f"s3://{config.bucket}/local/"),
+            ("SSM", "/toast/local/ (legacy, read-only)"),
+        ])
         _cmd_ls(config, kind, filename)
-    else:
-        handlers[command](config, org_name, project_name, kind, filename, local_path)
+        return
+
+    ui.fields([
+        ("Command", f"{program} {command}"),
+        ("Project", project_root),
+        ("Local", local_path),
+        ("Profile", config.profile),
+        ("Region", _region_label(config)),
+        ("S3", _s3_uri(config, org_name, project_name, kind)),
+        ("SSM", f"{ssm_path(org_name, project_name, kind)} (legacy, read-only)"),
+    ])
+    handlers[command](config, org_name, project_name, kind, filename, local_path, program)
 
 
-def _require_complete_read(result):
+def _s3_uri(config, org, project, kind):
+    return f"s3://{config.bucket}/{s3_key(org, project, kind)}"
+
+
+def _store_failure(action, config, errors):
+    """A failed env-store read, with the original errors and what to fix."""
+    details = "; ".join(f"{source.upper()}: {message}" for source, message in errors)
+    hints = {}  # ordered and without repeats
+    for source, message in errors:
+        if source == "metadata":
+            hints["Compare the S3 object and the SSM parameter with the AWS CLI. Toast cannot choose the newest copy"] = None
+        elif source == "ssm" and not config.region:
+            hints[f"Set TOAST_ENV_STORE_REGION, or ENV_STORE_REGION in {config_file_path()}, to the region of the legacy SSM parameters"] = None
+        elif source == "s3" and aws_error_code(message) == "NoSuchBucket":
+            hints[f"Check that bucket {config.bucket} exists, or set TOAST_ENV_STORE_BUCKET"] = None
+        else:
+            hints[f"Check the credentials and permissions of profile {config.profile}: aws sts get-caller-identity --profile {config.profile}"] = None
+    hints["Nothing was changed. Fix the cause and run the command again"] = None
+    return ui.Failure(f"Cannot {action} env-store copies: {details}", *hints)
+
+
+def _require_complete_read(result, config):
     if result.errors:
-        details = "; ".join(f"{source.upper()}: {message}" for source, message in result.errors)
-        raise click.ClickException(f"Cannot compare env-store copies: {details}")
+        raise _store_failure("compare", config, result.errors)
     return result
 
 
 def _read_store(config, org, project, kind):
     with ui.status("Reading the env-store"):
-        return _require_complete_read(store_read(config, org, project, kind))
+        return _require_complete_read(store_read(config, org, project, kind), config)
 
 
 def _write_store(config, org, project, kind, content, filename, target):
@@ -743,19 +809,32 @@ def _write_store(config, org, project, kind, content, filename, target):
     ui.success(f"Uploaded {filename} to {target}")
 
 
-def _report_one_sided(status, source):
+def _report_one_sided(status, source, program):
     if status == "local_only":
         ui.info("Only the local file exists.")
+        ui.muted(f"Run `{program} up` to upload it.")
     elif status == "remote_only":
         ui.info(f"Only the env-store copy ({source.upper()}) exists.")
+        ui.muted(f"Run `{program} down` to download it.")
 
 
-def _cmd_up(config, org, project, kind, filename, local_path):
+def _missing_everywhere_hints(local_path, program):
+    return (
+        f"Create {local_path}, then run `{program} up` to store it",
+        f"If it was stored for another project path, `{program} ls` lists the stored projects",
+    )
+
+
+def _cmd_up(config, org, project, kind, filename, local_path, program):
     content = read_local_file(local_path)
     if content is None:
-        raise click.ClickException(f"{filename} not found in project root")
+        raise ui.Failure(
+            f"{filename} not found: {local_path}",
+            f"Create it, then run `{program} up` again",
+            f"To fetch the env-store copy instead, check it with `{program} diff`, then run `{program} down`",
+        )
 
-    target = f"s3://{config.bucket}/{s3_key(org, project, kind)}"
+    target = _s3_uri(config, org, project, kind)
     result = _read_store(config, org, project, kind)
 
     # The upload target is S3, so the no-op decision is made against the S3 copy
@@ -782,11 +861,18 @@ def _cmd_up(config, org, project, kind, filename, local_path):
     _write_store(config, org, project, kind, content, filename, target)
 
 
-def _cmd_down(config, org, project, kind, filename, local_path):
+def _cmd_down(config, org, project, kind, filename, local_path, program):
     result = _read_store(config, org, project, kind)
 
     if result.value is None:
-        raise click.ClickException(f"{filename} not found in env-store (S3 or SSM)")
+        if os.path.exists(local_path):
+            hints = (
+                f"Run `{program} up` to upload {local_path}",
+                f"If it was stored for another project path, `{program} ls` lists the stored projects",
+            )
+        else:
+            hints = _missing_everywhere_hints(local_path, program)
+        raise ui.Failure(f"{filename} not found in the env-store (S3 or SSM)", *hints)
 
     source = result.source.upper()
     local_content = read_local_file(local_path)
@@ -805,23 +891,30 @@ def _cmd_down(config, org, project, kind, filename, local_path):
     ui.success(f"Downloaded {filename} from {source} to {local_path}")
 
 
-def _cmd_diff(config, org, project, kind, filename, local_path):
+def _warn_missing_everywhere(filename, local_path, program):
+    ui.warning(f"Neither local nor the env-store has {filename}")
+    for hint in _missing_everywhere_hints(local_path, program):
+        ui.muted(f"  {hint}")
+
+
+def _cmd_diff(config, org, project, kind, filename, local_path, program):
     local_content = read_local_file(local_path)
     result = _read_store(config, org, project, kind)
     status = compare_contents(local_content, result.value)
 
     if status == "both_missing":
-        ui.warning(f"Neither local nor the env-store has {filename}")
+        _warn_missing_everywhere(filename, local_path, program)
     elif status == "identical":
         ui.success("Local matches the env-store")
     elif status == "different":
         ui.info(f"Local {filename} differs from the env-store copy ({result.source.upper()}, newest).")
         _print_masked_diff(local_content, result.value, kind)
+        ui.muted(f"Run `{program} up` to keep local, or `{program} down` to keep the env-store copy.")
     else:
-        _report_one_sided(status, result.source)
+        _report_one_sided(status, result.source, program)
 
 
-def _cmd_sync(config, org, project, kind, filename, local_path):
+def _cmd_sync(config, org, project, kind, filename, local_path, program):
     local_content = read_local_file(local_path)
     result = _read_store(config, org, project, kind)
 
@@ -830,7 +923,7 @@ def _cmd_sync(config, org, project, kind, filename, local_path):
             return "not found"
         return f"{compute_hash(value)}  {modified}" if modified else compute_hash(value)
 
-    ui.info(f"{filename} · s3://{config.bucket}/{s3_key(org, project, kind)}")
+    ui.rule()
     ui.fields([
         ("Local", describe(local_content, None)),
         ("S3", describe(result.s3_value, result.s3_last)),
@@ -840,26 +933,26 @@ def _cmd_sync(config, org, project, kind, filename, local_path):
     status = compare_contents(local_content, result.value)
 
     if status == "both_missing":
-        ui.warning(f"Neither local nor the env-store has {filename}")
+        _warn_missing_everywhere(filename, local_path, program)
         return
 
     if status == "identical":
         ui.success("Local matches the env-store")
         if result.status == "both" and result.source == "ssm":
-            ui.warning("SSM is newer than S3. Run `up` to move it into the bucket.")
+            ui.warning(f"SSM is newer than S3. Run `{program} up` to move it into the bucket.")
         elif result.status == "ssm_only":
-            ui.warning("This file exists only in SSM. Run `up` to move it into the bucket.")
+            ui.warning(f"This file exists only in SSM. Run `{program} up` to move it into the bucket.")
         return
 
     if status == "different":
         _print_masked_diff(local_content, result.value, kind)
     else:
-        _report_one_sided(status, result.source)
+        _report_one_sided(status, result.source, program)
 
-    action = select_sync_action(status, filename)
+    action = select_sync_action(status, filename, program)
 
     if action == "upload":
-        _write_store(config, org, project, kind, local_content, filename, f"s3://{config.bucket}/{s3_key(org, project, kind)}")
+        _write_store(config, org, project, kind, local_content, filename, _s3_uri(config, org, project, kind))
     elif action == "download":
         write_private_file(local_path, result.value)
         ui.success(f"Downloaded {filename} from {result.source.upper()} to {local_path}")
@@ -871,8 +964,7 @@ def _cmd_ls(config, kind, filename):
     with ui.status(f"Listing {filename} entries"):
         rows, errors = store_list(config, kind)
     if errors:
-        details = "; ".join(f"{source.upper()}: {message}" for source, message in errors)
-        raise click.ClickException(f"Cannot list env-store copies: {details}")
+        raise _store_failure("list", config, errors)
 
     if not rows:
         ui.warning(f"No {filename} entries in the env-store")

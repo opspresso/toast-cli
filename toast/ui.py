@@ -64,6 +64,17 @@ def warning(message):
     _say(Text(f"! {message}", style=f"bold {WARN}"))
 
 
+class Failure(click.ClickException):
+    """An operational failure with the next steps a person can take.
+
+    The command boundary prints each hint below the error, muted.
+    """
+
+    def __init__(self, message, *hints):
+        super().__init__(message)
+        self.hints = hints
+
+
 def error(message, *hints):
     _say(Text(f"✗ {message}", style=f"bold {BAD}"))
     for hint in hints:

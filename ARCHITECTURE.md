@@ -69,7 +69,9 @@ root under `workspace/{host}/{org}/{project}`, including when invoked in a
 subdirectory. The storage namespace is `{org}` for `github.com` and
 `{host}/{org}` for other hosts. GitHub org names cannot contain dots, so a
 dotted first key segment identifies a host. Subgroups are not mapped.
-`ls` can run outside a workspace.
+`ls` can run outside a workspace. Before a backend read, each command prints
+its resolved target (project root, local path, profile, region, S3 URI and SSM
+path) to stderr; failures carry the next step as hints below the error.
 
 | Backend | Path | Operations |
 |---------|------|------------|

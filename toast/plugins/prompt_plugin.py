@@ -30,4 +30,4 @@ class PromptPlugin(BasePlugin):
 
     @classmethod
     def execute(cls, command=None, **kwargs):
-        run_file_sync("prompt-md", ".prompt.md", command)
+        run_file_sync("prompt-md", ".prompt.md", command, f"toast {cls.name}")
