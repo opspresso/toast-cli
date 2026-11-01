@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > Note: a `vMAJOR.MINOR.PATCH` tag on `main` publishes a release. Versions up to
 > 4.1.16 were published per push, so not every patch version has a section here.
 
+## [Unreleased]
+
+### Changed
+- **`toast git REPO push --mirror` now asks first.** It names the remote and warns that remote refs can be overwritten or deleted. Use `--yes` in scripts
+- `toast git` shows the host, namespace, absolute local path and Git action on stderr before it runs Git. Git stdout goes to stdout; Git stderr stays on stderr
+- `toast git` errors name the absolute path or config file and the next step
+
 ## [5.0.0] - 2026-10-31
 
 ### Changed

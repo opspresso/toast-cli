@@ -45,7 +45,10 @@ def get_github_host():
                         if line.startswith("GITHUB_HOST="):
                             host = line.split("=", 1)[1].strip()
                             if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", host):
-                                raise click.ClickException(f"Invalid GITHUB_HOST in {config_file}")
+                                raise click.ClickException(
+                                    f"Invalid GITHUB_HOST in {config_file}. Set it to a host name such as "
+                                    "github.com, or remove the line to use the workspace host"
+                                )
                             return host
             except OSError as e:
                 raise click.ClickException(f"Could not read {config_file}: {e}") from e
@@ -58,22 +61,49 @@ def sanitize_repo_name(repo_name):
     return re.sub(r"[^A-Za-z0-9_.-]", "", repo_name or "").strip(".-") or "repo"
 
 
+def redact_url(url):
+    """Hide credentials in a Git URL before it is displayed.
+
+    An HTTP user name is often a token, so it is hidden together with any password.
+    An SSH user name such as git stays visible. Git itself receives the original URL.
+    """
+    parsed = urlsplit(url)
+    if "@" not in parsed.netloc:
+        return url
+    userinfo, host = parsed.netloc.rsplit("@", 1)
+    user, has_password, _ = userinfo.partition(":")
+    if parsed.scheme in ("http", "https"):
+        user = "***"
+    elif has_password:
+        user += ":***"
+    return parsed._replace(netloc=f"{user}@{host}").geturl()
+
+
 class GitPlugin(BasePlugin):
     """Plugin for 'git' command - handles Git repository operations."""
 
     name = "git"
-    help = "Manage Git repositories"
+    help = (
+        "Manage Git repositories\n\n"
+        "Run it in ~/workspace/{git-host}/{namespace}. Before it runs Git, it shows the "
+        "host, namespace, absolute local path and action on stderr. Git output goes to "
+        "stdout; Git progress, diagnostics and status go to stderr.\n\n"
+        "push --mirror shows the remote and asks for a confirmation, because it overwrites "
+        "remote branches and tags and deletes those that do not exist locally. --yes skips "
+        "the confirmation of rm and push --mirror only."
+    )
     category = "Workspace"
     commands = (
         ("clone", "Clone into this namespace (alias: cl)"),
         ("pull", "Pull the current branch (alias: p)"),
-        ("push", "Push the current branch (alias: ps)"),
+        ("push", "Push the current branch (alias: ps); --mirror after a confirmation"),
         ("branch", "Create and switch to --branch (alias: b)"),
         ("rm", "Remove the checkout after a confirmation"),
     )
     examples = (
         ("toast git my-repo clone", "Clone into this namespace"),
         ("toast git my-repo pull -r", "Pull with rebase"),
+        ("toast git my-repo push -m", "Mirror push after a confirmation"),
         ("toast git my-repo rm", "Remove a checkout after a confirmation"),
     )
 
@@ -94,9 +124,11 @@ class GitPlugin(BasePlugin):
             "--mirror",
             "-m",
             is_flag=True,
-            help="Push with --mirror flag for repository migration",
+            help="Push all refs with --mirror for repository migration, after a confirmation",
         )(func)
-        func = click.option("--yes", "-y", is_flag=True, help="Remove without a confirmation")(func)
+        func = click.option(
+            "--yes", "-y", is_flag=True, help="Skip the confirmation of rm or push --mirror"
+        )(func)
         return func
 
     @staticmethod
@@ -110,6 +142,16 @@ class GitPlugin(BasePlugin):
         if lines and "ahead" in lines[0]:
             ui.warning(f"{repo_name} has commits that are not pushed")
         return ui.confirm(f"Remove {repo_path}? This cannot be undone.")
+
+    @staticmethod
+    def _run_git(args, message, **kwargs):
+        """Run Git: its stdout is the result, its stderr is about the run."""
+        with ui.status(message):
+            result = run_command(args, **kwargs)
+        for line in result.stderr.strip().splitlines():
+            ui.muted(f"  {line}")
+        if result.stdout.strip():
+            ui.result(result.stdout.rstrip("\n"))
 
     @classmethod
     def execute(
@@ -135,16 +177,19 @@ class GitPlugin(BasePlugin):
             raise click.UsageError("--rebase requires pull")
         if mirror and command != "push":
             raise click.UsageError("--mirror requires push")
-        if yes and command != "rm":
-            raise click.UsageError("--yes requires rm")
+        if yes and not (command == "rm" or mirror):
+            raise click.UsageError("--yes requires rm or push --mirror")
 
         current_path = os.getcwd()
         match = re.fullmatch(r".*/workspace/([^/]+)/(.+)", current_path)
         if not match:
             raise click.ClickException(
-                "Current directory must be in ~/workspace/{git-host}/{namespace}"
+                f"{current_path} is not a workspace namespace directory. "
+                "Change to ~/workspace/{git-host}/{namespace} first, for example "
+                "cd ~/workspace/github.com/my-org"
             )
-        namespace = match.group(2)
+        host, namespace = match.groups()
+        place = [("Host", host), ("Namespace", namespace)]
 
         if command == "clone":
             repo_url = None
@@ -152,7 +197,10 @@ class GitPlugin(BasePlugin):
                 repo_url = repo_name
                 parsed = urlsplit(repo_url)
                 if not parsed.hostname or not parsed.path.rstrip("/"):
-                    raise click.UsageError("Clone URL must include a host and repository path")
+                    raise click.UsageError(
+                        "Clone URL must include a host and repository path, "
+                        "for example https://github.com/my-org/my-repo.git"
+                    )
                 repo_name = parsed.path.rstrip("/").rsplit("/", 1)[-1]
             elif re.match(r"^[^/@:]+@[^/:]+:.+", repo_name):
                 repo_url = repo_name
@@ -162,48 +210,72 @@ class GitPlugin(BasePlugin):
             repo_name = sanitize_repo_name(repo_name)
             target_path = os.path.abspath(os.path.join(current_path, target or repo_name))
             if os.path.lexists(target_path):
-                raise click.ClickException(f"Target directory '{target or repo_name}' already exists")
+                raise click.ClickException(
+                    f"{target_path} already exists. Choose another directory with --target, "
+                    "or use the existing checkout"
+                )
             if repo_url is None:
                 repo_url = f"git@{get_github_host()}:{namespace}/{repo_name}.git"
-            with ui.status(f"Cloning {repo_name}"):
-                run_command(["git", "clone", repo_url, target_path])
+            ui.fields(place + [("Path", target_path), ("Source", redact_url(repo_url)), ("Action", "git clone")])
+            cls._run_git(["git", "clone", repo_url, target_path], f"Cloning {repo_name}")
             ui.success(f"Cloned {repo_name} to {target_path}")
             return
 
         # Never rewrite the name of an existing repository: it could select a
         # different directory, especially for destructive operations.
         if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", repo_name):
-            raise click.UsageError("Repository must be a directory name, without paths or special characters")
+            raise click.UsageError(
+                f"Repository must be the name of a directory in {current_path}, "
+                "without paths or special characters"
+            )
         repo_path = os.path.join(current_path, repo_name)
-        if not os.path.isdir(repo_path) or os.path.islink(repo_path):
-            raise click.ClickException(f"Repository directory '{repo_name}' does not exist or is a symlink")
+        if os.path.islink(repo_path):
+            raise click.ClickException(
+                f"{repo_path} is a symlink. Run toast git in the namespace directory that holds the checkout"
+            )
+        if not os.path.isdir(repo_path):
+            raise click.ClickException(
+                f"{repo_path} does not exist. Clone it with: toast git {repo_name} clone"
+            )
         is_worktree = os.path.exists(os.path.join(repo_path, ".git"))
         is_bare = all(os.path.exists(os.path.join(repo_path, part)) for part in ("HEAD", "objects", "refs"))
         if not (is_worktree or is_bare):
-            raise click.ClickException(f"'{repo_name}' is not a Git repository")
+            raise click.ClickException(
+                f"{repo_path} is not a Git repository. Check the repository name"
+            )
 
         if command == "rm":
+            ui.fields(place + [("Path", repo_path), ("Action", "remove the directory")])
             if not (yes or cls._confirm_remove(repo_name, repo_path)):
                 ui.cancelled()
                 return
             shutil.rmtree(repo_path)
             ui.success(f"Removed {repo_path}")
             return
+        details = [("Path", repo_path)]
         if command == "branch":
             if not branch:
                 raise click.UsageError("Branch name is required (--branch)")
             args = ["git", "checkout", "-b", branch]
+            action = " ".join(args)
         elif command == "pull":
             args = ["git", "pull"] + (["--rebase"] if rebase else [])
+            action = " ".join(args)
         elif mirror:
             # Push directly to the destination, preserving existing remotes.
             repo_url = f"git@{get_github_host()}:{namespace}/{repo_name}.git"
             args = ["git", "push", "--mirror", repo_url]
+            action = "git push --mirror"
+            details.append(("Remote", repo_url))
         else:
             args = ["git", "push"]
-        with ui.status(f"Running git {command} in {repo_name}"):
-            result = run_command(args, cwd=repo_path)
+            action = "git push"
+        ui.fields(place + details + [("Action", action)])
+        if mirror and not (yes or ui.confirm(
+            f"Mirror push to {repo_url}? This overwrites remote branches and tags "
+            "and deletes remote refs that do not exist locally."
+        )):
+            ui.cancelled()
+            return
+        cls._run_git(args, f"Running {action} in {repo_name}", cwd=repo_path)
         ui.success(f"Finished {command} in {repo_name}")
-        # Git writes the outcome to one stream or the other, depending on the command.
-        for line in (result.stdout + result.stderr).strip().splitlines():
-            ui.muted(f"  {line}")

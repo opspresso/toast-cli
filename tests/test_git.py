@@ -110,9 +110,41 @@ class CloneTests(unittest.TestCase):
         with mock.patch.object(git_plugin.os, "getcwd", return_value="/home/user/workspace/gitlab.clush.net/apps"), mock.patch.object(
             git_plugin.os.path, "lexists", return_value=True
         ), mock.patch("subprocess.run") as run:
-            with self.assertRaises(click.ClickException):
+            with self.assertRaises(click.ClickException) as raised:
                 git_plugin.GitPlugin.execute("clone", "https://gitlab.clush.net/apps/ws.git")
             run.assert_not_called()
+        self.assertIn("/home/user/workspace/gitlab.clush.net/apps/ws already exists", raised.exception.message)
+        self.assertIn("--target", raised.exception.message)
+
+    def test_clone_shows_the_target_without_url_credentials(self):
+        url = "https://user:s3cr3t-token@gitlab.example.com/apps/ws.git"
+        cwd = "/home/user/workspace/gitlab.example.com/apps"
+        with mock.patch.object(git_plugin.ui, "fields") as fields:
+            self.run_clone(url, cwd, url)
+        shown = dict(fields.call_args.args[0])
+        self.assertEqual(shown["Path"], os.path.join(cwd, "ws"))
+        self.assertEqual(shown["Source"], "https://***@gitlab.example.com/apps/ws.git")
+        self.assertNotIn("s3cr3t-token", str(fields.call_args))
+
+
+class RedactUrlTests(unittest.TestCase):
+    def test_credentials_are_hidden(self):
+        for url, shown in (
+            ("https://user:pass@host.com/org/repo.git", "https://***@host.com/org/repo.git"),
+            ("https://ghp_token@github.com/org/repo.git", "https://***@github.com/org/repo.git"),
+            ("ssh://git:pass@host.com:2222/org/repo.git", "ssh://git:***@host.com:2222/org/repo.git"),
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(git_plugin.redact_url(url), shown)
+
+    def test_urls_without_credentials_are_unchanged(self):
+        for url in (
+            "ssh://git@110.45.156.168:30022/apps/cdp/be/ws.git",
+            "https://gitlab.clush.net/apps/cdp/be/ws.git",
+            "git@gitlab.clush.net:apps/cdp/be/ws.git",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(git_plugin.redact_url(url), url)
 
 
 class RepositoryOperationsTests(unittest.TestCase):
@@ -147,12 +179,85 @@ class RepositoryOperationsTests(unittest.TestCase):
 
     def test_mirror_uses_nested_namespace_without_mutating_remotes(self):
         (self.repo / ".git").mkdir()
-        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run:
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run, mock.patch(
+            "click.confirm", return_value=True
+        ) as confirm:
             git_plugin.GitPlugin.execute("push", "repo", mirror=True)
         run.assert_called_once_with(
             ["git", "push", "--mirror", "git@gitlab.com:org/group/repo.git"],
             cwd=str(self.repo), capture_output=True, text=True,
         )
+        prompt = confirm.call_args.args[0]
+        self.assertIn("git@gitlab.com:org/group/repo.git", prompt)
+        self.assertIn("overwrites remote branches and tags", prompt)
+        self.assertIn("deletes remote refs", prompt)
+        self.assertIs(confirm.call_args.kwargs["default"], False)
+
+    def test_mirror_destination_follows_github_host(self):
+        (self.repo / ".git").mkdir()
+        (self.namespace.parent / ".toast-config").write_text("GITHUB_HOST=mirror-host.example\n")
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run, mock.patch(
+            "click.confirm", return_value=True
+        ) as confirm:
+            git_plugin.GitPlugin.execute("push", "repo", mirror=True)
+        self.assertEqual(run.call_args.args[0], ["git", "push", "--mirror", "git@mirror-host.example:org/group/repo.git"])
+        self.assertIn("git@mirror-host.example:org/group/repo.git", confirm.call_args.args[0])
+
+    def test_declined_mirror_does_not_push(self):
+        (self.repo / ".git").mkdir()
+        with mock.patch("subprocess.run") as run, mock.patch("click.confirm", return_value=False), mock.patch.object(
+            git_plugin.ui, "cancelled"
+        ) as cancelled:
+            git_plugin.GitPlugin.execute("push", "repo", mirror=True)
+        run.assert_not_called()
+        cancelled.assert_called_once()
+
+    def test_yes_skips_only_the_mirror_confirmation(self):
+        (self.repo / ".git").mkdir()
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run, mock.patch(
+            "click.confirm"
+        ) as confirm:
+            git_plugin.GitPlugin.execute("push", "repo", mirror=True, yes=True)
+            git_plugin.GitPlugin.execute("push", "repo")
+        confirm.assert_not_called()
+        self.assertEqual([call.args[0][:3] for call in run.call_args_list], [["git", "push", "--mirror"], ["git", "push"]])
+
+    def test_yes_is_rejected_outside_rm_and_mirror(self):
+        (self.repo / ".git").mkdir()
+        for command in ("push", "ps", "pull", "branch", "clone"):
+            with self.subTest(command=command), mock.patch("subprocess.run") as run:
+                with self.assertRaisesRegex(click.UsageError, "--yes requires rm or push --mirror"):
+                    git_plugin.GitPlugin.execute(command, "repo", yes=True)
+                run.assert_not_called()
+
+    def test_invalid_github_host_names_the_file_and_does_not_push(self):
+        (self.repo / ".git").mkdir()
+        config = self.namespace.parent / ".toast-config"
+        config.write_text("GITHUB_HOST=bad host\n")
+        with mock.patch("subprocess.run") as run, self.assertRaises(click.ClickException) as raised:
+            git_plugin.GitPlugin.execute("push", "repo", mirror=True, yes=True)
+        run.assert_not_called()
+        self.assertIn(str(config), raised.exception.message)
+        self.assertIn("remove the line", raised.exception.message)
+
+    def test_missing_repository_names_the_path_and_the_clone_command(self):
+        with self.assertRaises(click.ClickException) as raised:
+            git_plugin.GitPlugin.execute("pull", "absent")
+        self.assertIn(str(self.namespace / "absent"), raised.exception.message)
+        self.assertIn("toast git absent clone", raised.exception.message)
+
+    def test_non_repository_names_the_absolute_path(self):
+        with self.assertRaises(click.ClickException) as raised:
+            git_plugin.GitPlugin.execute("pull", "repo")
+        self.assertIn(f"{self.repo} is not a Git repository", raised.exception.message)
+
+    def test_outside_workspace_names_the_directory_and_where_to_go(self):
+        with mock.patch.object(git_plugin.os, "getcwd", return_value="/tmp/elsewhere"), mock.patch("subprocess.run") as run:
+            with self.assertRaises(click.ClickException) as raised:
+                git_plugin.GitPlugin.execute("pull", "repo")
+        run.assert_not_called()
+        self.assertIn("/tmp/elsewhere", raised.exception.message)
+        self.assertIn("cd ~/workspace/", raised.exception.message)
 
     def test_real_local_branch_pull_push_and_remove(self):
         def git(*args, cwd=None):

@@ -51,7 +51,9 @@ are unchanged. `toast/helpers.py` supplies the help layout, error reporting and 
 and ports. Name-based clone and mirror push derive the namespace from all path
 segments below `workspace/{git-host}`. `GITHUB_HOST` can override the host.
 Existing repository operations validate the exact directory name and reject
-symlinks. Mirror push uses a destination URL without modifying remotes.
+symlinks. Mirror push uses a destination URL without modifying remotes and
+asks for a confirmation unless `--yes` is given. Git stdout is the command
+result; Git stderr stays on stderr.
 
 `ssm` uses `toast ssm <command> [name] [value]`. A read error stops put/diff.
 Creation sends `Overwrite=false`; updating requires a successful comparison and
