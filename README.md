@@ -174,7 +174,8 @@ toast git repo-name branch -b branch-name    # Create branch (alias: b)
 toast git repo-name pull                     # Pull changes (alias: p)
 toast git repo-name pull -r                  # Pull with rebase
 toast git repo-name push                     # Push to remote (alias: ps)
-toast git repo-name push --mirror            # Mirror push for migration
+toast git repo-name push --mirror            # Mirror push for migration, after a confirmation
+toast git repo-name push --mirror --yes      # Mirror push without a confirmation (alias: -m -y)
 toast git repo-name rm                       # Remove local repository
 ```
 
@@ -192,6 +193,20 @@ With only a repository name, `toast git ws clone` in this directory uses
 `git@gitlab.clush.net:apps/cdp/be/ws.git`. All groups below the host directory
 form the namespace. Use an explicit URL when the SSH host or port differs.
 The existing `GITHUB_HOST` configuration also overrides the host for name-based clones.
+
+Run `toast git` in a namespace directory, `~/workspace/{git-host}/{namespace}`.
+Before Git runs, the command shows the host, the namespace, the absolute checkout or
+clone path and the Git action on stderr. A clone also shows its source URL with any
+HTTP user name, token or password and every query or fragment value replaced by `***`.
+Git receives the original URL. Git's stdout is the result and
+goes to stdout. Git progress and diagnostics and the success line go to stderr. When
+Git fails, the command exits with status 1 and shows Git's error.
+
+`push --mirror` pushes every local branch and tag to
+`git@{GITHUB_HOST}:{namespace}/{repo}.git` and does not change the existing remotes.
+It shows that destination and asks for a confirmation that defaults to no, because
+it overwrites remote branches and tags and deletes remote refs that do not exist
+locally. A plain `push` asks nothing.
 
 ## Workspace Structure
 
@@ -445,7 +460,9 @@ out of shell history: `pbpaste | toast ssm put /app/key`. A pipe cannot answer a
 confirmation, so add `--yes` to overwrite an existing parameter.
 
 `git REPO rm` asks for a confirmation and names uncommitted changes and unpushed
-commits. Use `--yes` in scripts.
+commits. `git REPO push --mirror` asks for a confirmation and names the remote whose
+refs it can replace or delete. Use `--yes` (`-y`) in scripts for these two commands
+only; any other `git` command rejects `--yes` with exit status 2.
 
 `env` manages static profiles in `AWS_SHARED_CREDENTIALS_FILE` (default
 `~/.aws/credentials`). It requires both access key fields before replacing the

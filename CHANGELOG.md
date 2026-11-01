@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `toast cdw QUERY` prints a directory without a picker when `QUERY` names one: an exact relative path, its last components such as a repository name, or letters to filter by. Several matches open a filtered picker; without a terminal the command lists them and fails
 - The `cdw` picker shows the workspace root and starts on the repository or namespace that holds the working directory; stderr shows the workspace, the current directory and the target
 
+### Changed
+- **`toast git REPO push --mirror` now asks first.** It names the remote and warns that remote refs can be overwritten or deleted. Use `--yes` in scripts
+- `toast git` shows the host, namespace, absolute local path and Git action on stderr before it runs Git. Git stdout goes to stdout; Git stderr stays on stderr
+- `toast git` errors name the absolute path or config file and the next step
+
 ## [5.0.0] - 2026-10-31
 
 ### Changed
