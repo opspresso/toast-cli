@@ -23,8 +23,15 @@ class FileSyncIntegrationTests(unittest.TestCase):
         self.bin.mkdir()
         self.remote = self.root / "remote"
         self.remote.mkdir()
+        # Ambient AWS and env-store settings would change how the CLI resolves
+        # its region and bucket, so the fixture sets every value it relies on.
+        inherited = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith(("AWS_", "TOAST_ENV_STORE_"))
+        }
         self.env = {
-            **os.environ,
+            **inherited,
             "PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
             "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
             "TOAST_ENV_STORE_BUCKET": "test-bucket",
