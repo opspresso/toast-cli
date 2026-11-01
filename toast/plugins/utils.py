@@ -20,12 +20,18 @@ def spawn(args, **kwargs):
         raise click.ClickException(f"{args[0]} is not installed") from exc
 
 
-def run_command(args, **kwargs):
-    """Run a command and report failures without including its arguments."""
+def run_command(args, *, redact=None, **kwargs):
+    """Run a command and report failures without including its arguments.
+
+    redact, when given, rewrites the stderr text shown in the failure message, for
+    example to hide credentials. The command and the returned result are unchanged.
+    """
     result = spawn(args, **kwargs)
     if result.returncode:
-        detail = result.stderr.strip() or f"exit status {result.returncode}"
-        raise click.ClickException(f"{args[0]} failed: {detail}")
+        detail = result.stderr.strip()
+        if detail and redact:
+            detail = redact(detail)
+        raise click.ClickException(f"{args[0]} failed: {detail or f'exit status {result.returncode}'}")
     return result
 
 
