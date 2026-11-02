@@ -166,9 +166,20 @@ class PickerTests(unittest.TestCase):
 
     def test_diff_uses_the_chosen_stream_and_its_terminal_state(self):
         lines = [f"+line {i}" for i in range(60)]
+        before = dict(os.environ)
+        # Rich reads TERM, NO_COLOR, FORCE_COLOR and similar variables when it creates
+        # a Console. Fix them, so a dumb or colorless test terminal cannot change the
+        # result and only the terminal state of each stream decides the colors.
+        color_environment = {
+            name: value for name, value in os.environ.items()
+            if name not in ("NO_COLOR", "FORCE_COLOR", "TTY_COMPATIBLE", "TTY_INTERACTIVE", "COLORTERM")
+        }
+        color_environment["TERM"] = "xterm-256color"
         for stderr in (False, True):
             for terminal in (False, True):
-                with self.subTest(stderr=stderr, terminal=terminal):
+                with self.subTest(stderr=stderr, terminal=terminal), mock.patch.dict(
+                    os.environ, color_environment, clear=True
+                ):
                     out, err = io.StringIO(), io.StringIO()
                     # The other stream has the opposite terminal state, so only the target decides.
                     consoles = {
@@ -183,6 +194,7 @@ class PickerTests(unittest.TestCase):
                     self.assertEqual("+line 59" in target.getvalue(), not terminal)
                     self.assertEqual("\x1b[" in target.getvalue(), terminal)
                     self.assertEqual("10 more lines" in err.getvalue(), terminal)
+        self.assertEqual(dict(os.environ), before)
 
     def test_questions_leave_stdout_empty(self):
         script = "from toast import ui\nprint(ui.confirm('Overwrite x?'), ui.prompt('Name'), file=__import__('sys').stderr)\n"

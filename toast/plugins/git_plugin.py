@@ -4,7 +4,7 @@ import click
 import os
 import shutil
 import re
-from urllib.parse import urlsplit
+from urllib.parse import quote, unquote, urlsplit
 from toast import ui
 from toast.plugins.base_plugin import BasePlugin
 from toast.plugins.utils import run_command, spawn
@@ -86,6 +86,112 @@ def redact_url(url):
     return parsed.geturl()
 
 
+# Git may rewrite a URL before printing it, for example by dropping the user name
+# or by appending a slash, and it prints a remote URL that is not in its arguments.
+# The URLs Git uses are therefore hidden first by their known secret parts, and any
+# other URL is then found in the text. Git prints a malformed URL as given, so a URL
+# can contain quotes and whitespace, and its end cannot always be told from the text.
+# A quoted URL runs to the last matching quote on the line that is followed by
+# whitespace or the end of the text, optionally after one punctuation mark, as in
+# "unable to access 'URL': reason". It never runs into the next URL, so several URLs
+# on one line are found separately. An unquoted URL ends at whitespace, except where
+# a secret can contain whitespace: user information runs to the last "@" before the
+# path on the line, and a query or fragment runs to the end of the line. Hiding too
+# much text is safer than showing part of a secret.
+_SCHEME = r"[A-Za-z][A-Za-z0-9+.-]*://"
+URL_IN_TEXT = re.compile(
+    rf"""(?P<quote>['"])(?P<quoted>{_SCHEME}(?:(?!['"]?{_SCHEME})[^\n])*)(?P=quote)(?=\s|$|[:;,.)](?:\s|$))"""
+    rf"""|\b{_SCHEME}(?:[^/?#\n]*@)?[^\s?#]*(?:[?#][^\n]*)?"""
+)
+
+# A secret value shorter than this is not hidden on its own, outside its URL, so a
+# value such as "1" does not hide every digit of the message.
+_MIN_BARE_SECRET = 4
+
+
+def _hide_url(url):
+    try:
+        return redact_url(url)
+    except ValueError:
+        # urlsplit rejects some malformed URLs; hide all of it but the scheme.
+        return url.split("://", 1)[0] + "://***"
+
+
+def _secret_parts(url):
+    """Pair each secret part of url with what is shown instead, longest first.
+
+    A part with its delimiter, such as "user:pass@" or "?query", is shown as
+    redact_url shows it. Each secret value is also hidden on its own, as given and
+    percent-encoded or decoded, and each word of a value with whitespace, because
+    Git can print it without the rest of the URL.
+    """
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        rest = url.split("://", 1)[1]
+        return [(rest, "***")] if rest else []
+    shown = urlsplit(_hide_url(url))
+    parts, values = [], []
+    if "@" in parsed.netloc:
+        userinfo = parsed.netloc.rsplit("@", 1)[0]
+        parts.append((userinfo + "@", shown.netloc.rsplit("@", 1)[0] + "@"))
+        user, _, password = userinfo.partition(":")
+        values += [password, user] if parsed.scheme in ("http", "https") else [password]
+    if parsed.query:
+        parts.append(("?" + parsed.query, "?" + shown.query))
+        values += [part.partition("=")[2] or part for part in parsed.query.split("&")]
+    if parsed.fragment:
+        parts.append(("#" + parsed.fragment, "#***"))
+        values.append(parsed.fragment)
+    # A malformed URL can hold a value with whitespace; Git may print a word of it.
+    values += [word for value in values for word in unquote(value).split() if word != value]
+    for value in values:
+        for form in {value, unquote(value), quote(value, safe=""), quote(unquote(value), safe="")}:
+            if len(form) >= _MIN_BARE_SECRET:
+                parts.append((form, "***"))
+    parts = [(raw, masked) for raw, masked in parts if raw != masked]
+    return sorted(parts, key=lambda part: len(part[0]), reverse=True)
+
+
+def redact_urls(text, known_urls=()):
+    """Hide credentials in every URL inside Git output, as redact_url does.
+
+    known_urls are the URLs Git uses, from its arguments or from the remotes of the
+    repository. Their secret parts are hidden wherever they appear, even where Git
+    printed a URL whose ends cannot be found in the text.
+    """
+    for url in known_urls:
+        if "://" in url:
+            for raw, masked in _secret_parts(url):
+                text = text.replace(raw, masked)
+
+    def replace(match):
+        if match.group("quote"):
+            return match.group("quote") + _hide_url(match.group("quoted")) + match.group("quote")
+        return _hide_url(match.group(0))
+
+    return URL_IN_TEXT.sub(replace, text)
+
+
+def remote_urls(repo_path):
+    """Return the fetch and push URLs of every remote of the repository.
+
+    Git prints these URLs, after any url.<base>.insteadOf rewrite, although a plain
+    pull or push does not name them. They stay in memory to hide their secrets. A
+    repository without remotes, or one Git cannot read, has none to hide.
+    """
+    listed = spawn(["git", "remote", "-v"], cwd=repo_path)
+    if listed.returncode:
+        return []
+    urls = []
+    for line in listed.stdout.splitlines():
+        _, tab, entry = line.partition("\t")
+        for suffix in (" (fetch)", " (push)"):
+            if tab and entry.endswith(suffix):
+                urls.append(entry[: -len(suffix)])
+    return urls
+
+
 class GitPlugin(BasePlugin):
     """Plugin for 'git' command - handles Git repository operations."""
 
@@ -151,14 +257,24 @@ class GitPlugin(BasePlugin):
         return ui.confirm(f"Remove {repo_path}? This cannot be undone.")
 
     @staticmethod
-    def _run_git(args, message, **kwargs):
-        """Run Git: its stdout is the result, its stderr is about the run."""
+    def _run_git(args, message, remotes=False, **kwargs):
+        """Run Git: its stdout is the result, its stderr is about the run.
+
+        Git receives the original arguments. Git can print a remote URL that is not
+        in the arguments, so every displayed URL is redacted, on success and failure.
+        With remotes, the URLs of the remotes in cwd are hidden like the arguments.
+        """
+        known = list(args) + (remote_urls(kwargs["cwd"]) if remotes else [])
+
+        def hide(text):
+            return redact_urls(text, known)
+
         with ui.status(message):
-            result = run_command(args, **kwargs)
-        for line in result.stderr.strip().splitlines():
+            result = run_command(args, redact=hide, **kwargs)
+        for line in hide(result.stderr.strip()).splitlines():
             ui.muted(f"  {line}")
         if result.stdout.strip():
-            ui.result(result.stdout.rstrip("\n"))
+            ui.result(hide(result.stdout.rstrip("\n")))
 
     @classmethod
     def execute(
@@ -284,5 +400,7 @@ class GitPlugin(BasePlugin):
         )):
             ui.cancelled()
             return
-        cls._run_git(args, f"Running {action} in {repo_name}", cwd=repo_path)
+        cls._run_git(
+            args, f"Running {action} in {repo_name}", remotes=command in ("pull", "push") and not mirror, cwd=repo_path
+        )
         ui.success(f"Finished {command} in {repo_name}")

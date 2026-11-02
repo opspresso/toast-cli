@@ -71,8 +71,7 @@ class CloneTests(unittest.TestCase):
     def run_clone(self, source, cwd, expected_url, expected_target="ws", command="clone", **kwargs):
         with mock.patch.object(git_plugin.os, "getcwd", return_value=cwd), mock.patch.object(
             git_plugin.os.path, "exists", return_value=False
-        ), mock.patch("subprocess.run") as run:
-            run.return_value.returncode = 0
+        ), mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run:
             git_plugin.GitPlugin.execute(command, source, **kwargs)
             run.assert_called_once_with(
                 ["git", "clone", expected_url, os.path.join(cwd, expected_target)],
@@ -146,6 +145,51 @@ class CloneTests(unittest.TestCase):
                 self.assertNotIn("q-tok3n", str(fields.call_args))
                 self.assertNotIn("p4ss", str(fields.call_args))
 
+    def test_failed_clone_error_hides_url_secrets_but_git_gets_the_original_url(self):
+        url = "https://u5er:p4ss@127.0.0.1:9/org/repo.git?access_token=q-tok3n#fr4g"
+        cwd = "/home/user/workspace/127.0.0.1/org"
+        # Git 2.39 drops the user name and appends a slash before it prints the URL.
+        stderr = (
+            "Cloning into 'repo'...\n"
+            "fatal: unable to access 'https://127.0.0.1:9/org/repo.git?access_token=q-tok3n#fr4g/': "
+            "Failed to connect to 127.0.0.1 port 9 after 0 ms: Couldn't connect to server\n"
+        )
+        failed = subprocess.CompletedProcess([], 128, "", stderr)
+        with mock.patch.object(git_plugin.os, "getcwd", return_value=cwd), mock.patch.object(
+            git_plugin.os.path, "lexists", return_value=False
+        ), mock.patch("subprocess.run", return_value=failed) as run, mock.patch.object(git_plugin.ui, "success") as success:
+            with self.assertRaises(click.ClickException) as raised:
+                git_plugin.GitPlugin.execute("clone", url)
+        run.assert_called_once_with(
+            ["git", "clone", url, os.path.join(cwd, "repo")], capture_output=True, text=True
+        )
+        success.assert_not_called()
+        message = raised.exception.format_message()
+        for secret in ("u5er", "p4ss", "q-tok3n", "fr4g"):
+            self.assertNotIn(secret, message)
+        self.assertIn("'https://127.0.0.1:9/org/repo.git?access_token=***#***'", message)
+        self.assertIn("Failed to connect to 127.0.0.1 port 9", message)
+
+
+    def test_successful_clone_diagnostics_hide_url_secrets_and_keep_the_result(self):
+        url = "https://u5er:p4ss@git.example.com/org/repo.git?access_token=q-tok3n#fr4g"
+        cwd = "/home/user/workspace/git.example.com/org"
+        done = subprocess.CompletedProcess(
+            [], 0, "result line\n", "Cloning into 'repo'...\nwarning: redirecting to https://git.example.com/org/repo.git/?access_token=q-tok3n\n"
+        )
+        with mock.patch.object(git_plugin.os, "getcwd", return_value=cwd), mock.patch.object(
+            git_plugin.os.path, "lexists", return_value=False
+        ), mock.patch("subprocess.run", return_value=done) as run, mock.patch.object(
+            git_plugin.ui, "muted"
+        ) as muted, mock.patch.object(git_plugin.ui, "result") as result, mock.patch.object(git_plugin.ui, "success") as success:
+            git_plugin.GitPlugin.execute("clone", url)
+        run.assert_called_once_with(["git", "clone", url, os.path.join(cwd, "repo")], capture_output=True, text=True)
+        shown = [call.args[0] for call in muted.call_args_list]
+        self.assertEqual(
+            shown, ["  Cloning into 'repo'...", "  warning: redirecting to https://git.example.com/org/repo.git/?access_token=***"]
+        )
+        result.assert_called_once_with("result line")
+        success.assert_called_once()
 
 class RedactUrlTests(unittest.TestCase):
     def test_credentials_are_hidden(self):
@@ -168,6 +212,221 @@ class RedactUrlTests(unittest.TestCase):
         ):
             with self.subTest(url=url):
                 self.assertEqual(git_plugin.redact_url(url), url)
+
+    def test_every_url_in_text_is_redacted(self):
+        text = (
+            "From https://ghp_t0k@git.example.com/org/repo?access_token=q-tok3n\n"
+            "To ssh://git:p4ss@git.example.com:2222/org/repo.git and "
+            "https://mirror.example.com/org/repo.git#fr4g\n"
+            "fatal: repository 'http://u:p@host.example.com/org/repo.git/' not found"
+        )
+        self.assertEqual(
+            git_plugin.redact_urls(text),
+            "From https://***@git.example.com/org/repo?access_token=***\n"
+            "To ssh://git:***@git.example.com:2222/org/repo.git and "
+            "https://mirror.example.com/org/repo.git#***\n"
+            "fatal: repository 'http://***@host.example.com/org/repo.git/' not found",
+        )
+
+    def test_a_quote_inside_a_url_does_not_end_it(self):
+        cases = (
+            (
+                "fatal: unable to access 'http://h.example/r.git?access_token=prefix'SYNTH_Q#SYNTH_F/': refused",
+                "fatal: unable to access 'http://h.example/r.git?access_token=***#***': refused",
+            ),
+            (
+                "fatal: repository 'https://us'er:pa'ss@h.example/o'rg/r.git' not found",
+                "fatal: repository 'https://***@h.example/o'rg/r.git' not found",
+            ),
+            (
+                'To "ssh://git:pa"ss@h.example:2222/r.git#fr"ag", next',
+                'To "ssh://git:***@h.example:2222/r.git#***", next',
+            ),
+            (
+                "From https://h.example/r?access_token=a'SYNTH_Q'b#fr'ag\n * branch main",
+                "From https://h.example/r?access_token=***#***\n * branch main",
+            ),
+            # A URL can contain a quote and a space, so a quoted URL runs to the last
+            # closing quote on the line; the text after it stays.
+            (
+                "error: 'https://h.example/r?t=a'SYNTH_Q' isn't valid, 'x'",
+                "error: 'https://h.example/r?t=***'",
+            ),
+            (
+                "fatal: unable to access 'http://127.0.0.1:9/org/repo.git?access_token=prefix' "
+                "SYNTH_QUERY#SYNTH_FRAGMENT/': URL using bad/illegal format",
+                "fatal: unable to access 'http://127.0.0.1:9/org/repo.git?access_token=***#***': "
+                "URL using bad/illegal format",
+            ),
+        )
+        for text, shown in cases:
+            with self.subTest(text=text):
+                self.assertEqual(git_plugin.redact_urls(text), shown)
+
+    def test_several_quoted_urls_on_one_line_are_redacted_separately(self):
+        cases = (
+            (
+                "warning: remote 'https://first.example/r' redirected to "
+                "'https://SYNTH_USER:SYNTH_PASS@second.example/r'",
+                "warning: remote 'https://first.example/r' redirected to "
+                "'https://***@second.example/r'",
+            ),
+            (
+                'redirect "https://u:SYNTH_A@a.example/r?t=SYNTH_B" -> '
+                '"ssh://git:SYNTH_C@b.example:2222/r.git#SYNTH_D".',
+                'redirect "https://***@a.example/r?t=***" -> '
+                '"ssh://git:***@b.example:2222/r.git#***".',
+            ),
+            (
+                "fatal: 'https://h.example/r?t=a'SYNTH_E' and "
+                "'https://us'er:SYNTH_F@i.example/o'rg/r.git': refused",
+                "fatal: 'https://h.example/r?t=***' and "
+                "'https://***@i.example/o'rg/r.git': refused",
+            ),
+            # An unmatched quote does not join the next quoted URL to the first one.
+            (
+                "'https://a.example/x'y 'https://u:SYNTH_G@b.example/r'",
+                "'https://a.example/x'y 'https://***@b.example/r'",
+            ),
+        )
+        for text, shown in cases:
+            with self.subTest(text=text):
+                redacted = git_plugin.redact_urls(text)
+                self.assertEqual(redacted, shown)
+                self.assertNotIn("SYNTH_", redacted)
+
+    def test_whitespace_inside_a_url_does_not_end_its_secrets(self):
+        # Git prints a malformed URL as given, whitespace included.
+        cases = (
+            (
+                "fatal: unable to access 'http://127.0.0.1:9/org/repo.git"
+                "?access_token=prefix SYNTH_Q#SYNTH_F/': URL using bad/illegal format",
+                "fatal: unable to access 'http://127.0.0.1:9/org/repo.git"
+                "?access_token=***#***': URL using bad/illegal format",
+            ),
+            (
+                "fatal: repository 'https://us er:SYNTH_P ass@h.example/r.git/' not found",
+                "fatal: repository 'https://***@h.example/r.git/' not found",
+            ),
+            (
+                "From https://SYNTH_U x:SYNTH_P@h.example/r\nTo ssh://git:SYNTH_P x@h.example:2222/r.git",
+                "From https://***@h.example/r\nTo ssh://git:***@h.example:2222/r.git",
+            ),
+            (
+                "From https://h.example/r?access_token=a SYNTH_Q#SYNTH_F\n * branch main",
+                "From https://h.example/r?access_token=***#***\n * branch main",
+            ),
+            (
+                "warning: redirecting to 'https://h.example/r?t=a SYNTH_A' from "
+                "'https://u:SYNTH_B@h.example/r#x SYNTH_C'",
+                "warning: redirecting to 'https://h.example/r?t=***' from "
+                "'https://***@h.example/r#***'",
+            ),
+        )
+        for text, shown in cases:
+            with self.subTest(text=text):
+                redacted = git_plugin.redact_urls(text)
+                self.assertEqual(redacted, shown)
+                self.assertNotIn("SYNTH_", redacted)
+
+    def test_secret_parts_of_known_urls_are_hidden_wherever_they_appear(self):
+        url = "https://SYNTH_U ser:SYNTH_P@h.example/r.git?access_token=a SYNTH_Q#SYNTH_F"
+        cases = (
+            (
+                f"From {url}\n",
+                "From https://***@h.example/r.git?access_token=***#***\n",
+            ),
+            (
+                "fatal: unable to access 'https://h.example/r.git?access_token=a SYNTH_Q#SYNTH_F/': refused",
+                "fatal: unable to access 'https://h.example/r.git?access_token=***#***': refused",
+            ),
+        )
+        for text, shown in cases:
+            with self.subTest(text=text):
+                redacted = git_plugin.redact_urls(text, ["git", "clone", url, "/tmp/r"])
+                self.assertEqual(redacted, shown)
+                self.assertNotIn("SYNTH_", redacted)
+
+    def test_known_arguments_without_url_secrets_change_nothing(self):
+        text = "Cloning into '/tmp/r'...\ngit@h.example:org/r.git ssh://git@h.example:2222/r.git"
+        arguments = ["git", "clone", "git@h.example:org/r.git", "ssh://git@h.example:2222/r.git", "/tmp/r"]
+        self.assertEqual(git_plugin.redact_urls(text, arguments), text)
+
+    def test_a_malformed_known_url_is_hidden_after_its_scheme(self):
+        url = "https://[SYNTH_T@bad/org/repo.git"
+        self.assertEqual(
+            git_plugin.redact_urls(f"fatal: bad URL {url}", [url]),
+            "fatal: bad URL https://***",
+        )
+
+    def test_a_known_url_with_a_quote_and_a_space_is_hidden_where_git_prints_it(self):
+        url = "http://127.0.0.1:9/org/repo.git?access_token=prefix' SYNTH_QUERY#SYNTH_FRAGMENT"
+        for text, shown in (
+            (
+                "fatal: unable to access 'http://127.0.0.1:9/org/repo.git?access_token=prefix' "
+                "SYNTH_QUERY#SYNTH_FRAGMENT/': Failed to connect to 127.0.0.1 port 9: refused",
+                "fatal: unable to access 'http://127.0.0.1:9/org/repo.git?access_token=***#***': "
+                "Failed to connect to 127.0.0.1 port 9: refused",
+            ),
+            # Several URLs on one line, one known and one not.
+            (
+                f"warning: redirecting from '{url}' to 'https://SYNTH_USER@other.example/r', 'x'",
+                "warning: redirecting from 'http://127.0.0.1:9/org/repo.git?access_token=***#***' "
+                "to 'https://***@other.example/r', 'x'",
+            ),
+        ):
+            with self.subTest(text=text):
+                redacted = git_plugin.redact_urls(text, [url])
+                self.assertEqual(redacted, shown)
+                self.assertNotIn("SYNTH_", redacted)
+
+    def test_known_secret_values_are_hidden_without_their_url(self):
+        url = "https://SYNTH_USER:SYNTH%20PASS@h.example/r.git?access_token=SYNTH_QUERY&ref=1#SYNTH_FRAGMENT"
+        text = (
+            "remote: token SYNTH_QUERY rejected for SYNTH_USER\n"
+            "fatal: Authentication failed for 'https://h.example/r.git/' (SYNTH PASS, SYNTH%20PASS)\n"
+            "hint: see SYNTH_FRAGMENT, ref 1"
+        )
+        redacted = git_plugin.redact_urls(text, ["git", "pull", url])
+        self.assertNotIn("SYNTH", redacted)
+        self.assertEqual(
+            redacted,
+            "remote: token *** rejected for ***\n"
+            "fatal: Authentication failed for 'https://h.example/r.git/' (***, ***)\n"
+            "hint: see ***, ref 1",
+        )
+
+    def test_remote_urls_lists_fetch_and_push_urls(self):
+        listed = (
+            "origin\thttp://127.0.0.1:9/r.git?access_token=prefix' SYNTH_QUERY#SYNTH_FRAGMENT (fetch)\n"
+            "origin\thttps://SYNTH_USER@127.0.0.1:9/p (push)\n"
+            "unrelated line\n"
+        )
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, listed, "")) as run:
+            urls = git_plugin.remote_urls("/repo")
+        run.assert_called_once_with(["git", "remote", "-v"], cwd="/repo", capture_output=True, text=True)
+        self.assertEqual(
+            urls,
+            ["http://127.0.0.1:9/r.git?access_token=prefix' SYNTH_QUERY#SYNTH_FRAGMENT", "https://SYNTH_USER@127.0.0.1:9/p"],
+        )
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 128, "", "fatal: not a git repository")):
+            self.assertEqual(git_plugin.remote_urls("/repo"), [])
+
+    def test_text_without_url_secrets_is_unchanged(self):
+        for text in (
+            "",
+            "Already up to date.",
+            "To git@github.com:org/repo.git\n   abc..def  main -> main",
+            "From https://github.com/org/repo\n * branch main -> FETCH_HEAD",
+            "ssh: connect to host 127.0.0.1 port 22: Connection refused",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(git_plugin.redact_urls(text), text)
+
+    def test_a_malformed_url_is_hidden_instead_of_raising(self):
+        text = "fatal: unable to access 'https://[t0ken@bad/org/repo.git': bad URL"
+        shown = git_plugin.redact_urls(text)
+        self.assertEqual(shown, "fatal: unable to access 'https://***': bad URL")
 
 
 class RepositoryOperationsTests(unittest.TestCase):
@@ -243,7 +502,11 @@ class RepositoryOperationsTests(unittest.TestCase):
             git_plugin.GitPlugin.execute("push", "repo", mirror=True, yes=True)
             git_plugin.GitPlugin.execute("push", "repo")
         confirm.assert_not_called()
-        self.assertEqual([call.args[0][:3] for call in run.call_args_list], [["git", "push", "--mirror"], ["git", "push"]])
+        # A plain push first lists the remotes, to hide their URLs in its output.
+        self.assertEqual(
+            [call.args[0][:3] for call in run.call_args_list],
+            [["git", "push", "--mirror"], ["git", "remote", "-v"], ["git", "push"]],
+        )
 
     def test_yes_is_rejected_outside_rm_and_mirror(self):
         (self.repo / ".git").mkdir()

@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -191,6 +192,325 @@ class GitCliTests(unittest.TestCase):
         self.assertIn("rejected", result.stderr)
         self.assertNotIn("✓", result.stderr)
         self.assertEqual(result.stdout, "")
+
+    SECRETS = ("u5er", "p4ss", "q-tok3n", "fr4g", "ghp_t0k")
+
+    def assert_hidden(self, result):
+        for secret in self.SECRETS:
+            self.assertNotIn(secret, result.stdout)
+            self.assertNotIn(secret, result.stderr)
+            self.assertNotIn(secret, str(result.exception or ""))
+
+    def test_git_failure_hides_url_secrets_and_exits_nonzero(self):
+        clone_url = "https://u5er:p4ss@127.0.0.1:9/org/repo.git?access_token=q-tok3n#fr4g"
+        # Git prints the remote URL even when it is not an argument, and rewrites it:
+        # it drops the user name and appends a slash.
+        refused = (
+            "fatal: unable to access 'https://127.0.0.1:9/org/repo.git?access_token=q-tok3n#fr4g/': "
+            "Failed to connect to 127.0.0.1 port 9 after 0 ms: Couldn't connect to server\n"
+        )
+        for arguments, expected in (
+            ([clone_url, "clone", "-t", "new"], ["git", "clone", clone_url, str(self.namespace / "new")]),
+            (["repo", "pull"], ["git", "pull"]),
+            (["repo", "push"], ["git", "push"]),
+        ):
+            with self.subTest(arguments=arguments), mock.patch(
+                "subprocess.run", return_value=subprocess.CompletedProcess([], 128, "", refused)
+            ) as run:
+                result = self.runner.invoke(self.cli, ["git", *arguments])
+                self.assertEqual(result.exit_code, 1, result.stderr)
+                self.assertEqual(run.call_args.args[0], expected)
+                self.assert_hidden(result)
+                self.assertEqual(result.stdout, "")
+                self.assertNotIn("✓", result.stderr)
+                self.assertIn("'https://127.0.0.1:9/org/repo.git?access_token=***#***'", result.stderr)
+                self.assertIn("Failed to connect to 127.0.0.1 port 9", result.stderr)
+
+    def test_successful_git_diagnostics_hide_url_secrets(self):
+        diagnostic = (
+            "From https://ghp_t0k@git.example.com/org/repo?access_token=q-tok3n\n"
+            "To ssh://git:p4ss@git.example.com:2222/org/repo.git, "
+            "https://u5er@mirror.example.com/org/repo.git#fr4g\n"
+        )
+        for arguments, expected in (
+            (["repo", "pull"], ["git", "pull"]),
+            (["repo", "push"], ["git", "push"]),
+        ):
+            with self.subTest(arguments=arguments):
+                result, run = self.invoke(*arguments, stdout="Already up to date.\n", stderr=diagnostic)
+                self.assertEqual(result.exit_code, 0, result.stderr)
+                self.assertEqual(run.call_args.args[0], expected)
+                self.assertEqual(result.stdout, "Already up to date.\n")
+                self.assert_hidden(result)
+                for shown in (
+                    "From https://***@git.example.com/org/repo?access_token=***",
+                    "ssh://git:***@git.example.com:2222/org/repo.git",
+                    "https://***@mirror.example.com/org/repo.git#***",
+                    "✓",
+                ):
+                    self.assertIn(shown, result.stderr)
+
+    def test_url_secrets_containing_quotes_stay_hidden(self):
+        # A quote inside a URL must not be taken for the quote Git puts around it.
+        secrets = ("qu0te-us'er", "us'er", "qu0te-pa'ss", "pa'ss", "qu0te-q", "qu0te-f", "fr'ag")
+        clone_url = (
+            "http://qu0te-us'er:qu0te-pa'ss@127.0.0.1:9/org/repo.git"
+            "?access_token=prefix'qu0te-q#qu0te-f'fr'ag"
+        )
+        refused = (
+            "fatal: unable to access 'http://127.0.0.1:9/org/repo.git"
+            "?access_token=prefix'qu0te-q#qu0te-f'fr'ag/': "
+            "Failed to connect to 127.0.0.1 port 9 after 0 ms: Couldn't connect to server\n"
+        )
+        with mock.patch(
+            "subprocess.run", return_value=subprocess.CompletedProcess([], 128, "", refused)
+        ) as run:
+            result = self.runner.invoke(self.cli, ["git", clone_url, "clone", "-t", "new"])
+        self.assertEqual(result.exit_code, 1, result.stderr)
+        self.assertEqual(run.call_args.args[0], ["git", "clone", clone_url, str(self.namespace / "new")])
+        self.assertEqual(result.stdout, "")
+        self.assertNotIn("✓", result.stderr)
+        self.assertIn("'http://127.0.0.1:9/org/repo.git?access_token=***#***': Failed to connect", result.stderr)
+        diagnostic = (
+            "From 'https://qu0te-us'er:qu0te-pa'ss@git.example.com/org/repo?access_token=a'qu0te-q'\n"
+            "To \"https://git.example.com/org/repo.git#qu0te-f'fr'ag\", "
+            "https://git.example.com/org/repo.git?access_token=a'qu0te-q#fr'ag\n"
+        )
+        success, _ = self.invoke("repo", "pull", stderr=diagnostic)
+        self.assertEqual(success.exit_code, 0, success.stderr)
+        for shown in (
+            "From 'https://***@git.example.com/org/repo?access_token=***'",
+            'To "https://git.example.com/org/repo.git#***", ',
+            "https://git.example.com/org/repo.git?access_token=***#***",
+        ):
+            self.assertIn(shown, success.stderr)
+        for output in (result, success):
+            for secret in secrets:
+                self.assertNotIn(secret, output.stdout)
+                self.assertNotIn(secret, output.stderr)
+                self.assertNotIn(secret, str(output.exception or ""))
+
+    def test_several_quoted_urls_on_one_line_stay_hidden(self):
+        # Git quotes each URL of a redirect with the same quote on one line.
+        diagnostic = (
+            "warning: remote 'https://first.example/org/repo' redirected to "
+            "'https://u5er:p4ss@second.example/org/repo?access_token=q-tok3n#fr4g'\n"
+        )
+        shown = (
+            "remote 'https://first.example/org/repo' redirected to "
+            "'https://***@second.example/org/repo?access_token=***#***'"
+        )
+        for arguments, expected in (
+            (["repo", "pull"], ["git", "pull"]),
+            (["repo", "push"], ["git", "push"]),
+        ):
+            with self.subTest(arguments=arguments):
+                success, run = self.invoke(*arguments, stdout="Already up to date.\n", stderr=diagnostic)
+                self.assertEqual(success.exit_code, 0, success.stderr)
+                self.assertEqual(run.call_args.args[0], expected)
+                self.assertEqual(success.stdout, "Already up to date.\n")
+                self.assertIn(shown, success.stderr)
+                self.assertIn("✓", success.stderr)
+                self.assert_hidden(success)
+                with mock.patch(
+                    "subprocess.run", return_value=subprocess.CompletedProcess([], 1, "", diagnostic)
+                ) as run:
+                    failure = self.runner.invoke(self.cli, ["git", *arguments])
+                self.assertEqual(failure.exit_code, 1, failure.stderr)
+                self.assertEqual(run.call_args.args[0], expected)
+                self.assertEqual(failure.stdout, "")
+                self.assertNotIn("✓", failure.stderr)
+                self.assertIn(shown, failure.stderr)
+                self.assertIsInstance(failure.exception, SystemExit)
+                self.assert_hidden(failure)
+
+    def test_url_secrets_containing_whitespace_stay_hidden(self):
+        secrets = ("SYNTH_QUERY", "SYNTH_FRAGMENT", "SYNTH_USER", "SYNTH_PASS")
+        clone_url = "http://127.0.0.1:9/org/repo.git?access_token=prefix SYNTH_QUERY#SYNTH_FRAGMENT"
+        # Git 2.39 prints the malformed URL as given and appends a slash.
+        bad = (
+            "Cloning into 'new'...\n"
+            "fatal: unable to access 'http://127.0.0.1:9/org/repo.git"
+            "?access_token=prefix SYNTH_QUERY#SYNTH_FRAGMENT/': URL using bad/illegal format or missing URL\n"
+        )
+        with mock.patch(
+            "subprocess.run", return_value=subprocess.CompletedProcess([], 128, "", bad)
+        ) as run:
+            failure = self.runner.invoke(self.cli, ["git", clone_url, "clone", "-t", "new"])
+        self.assertEqual(failure.exit_code, 1, failure.stderr)
+        self.assertEqual(run.call_args.args[0], ["git", "clone", clone_url, str(self.namespace / "new")])
+        self.assertEqual(failure.stdout, "")
+        self.assertNotIn("✓", failure.stderr)
+        self.assertIn(
+            "'http://127.0.0.1:9/org/repo.git?access_token=***#***': URL using bad/illegal format", failure.stderr
+        )
+        outputs = [failure]
+        # A remote URL that is not an argument, quoted and unquoted.
+        diagnostic = (
+            "From https://SYNTH_USER x:SYNTH_PASS@git.example.com/org/repo\n"
+            "warning: redirecting to 'https://git.example.com/org/repo?access_token=a SYNTH_QUERY' "
+            "from 'https://git.example.com/org/repo#b SYNTH_FRAGMENT'\n"
+            "To https://git.example.com/org/repo.git?access_token=a SYNTH_QUERY#b SYNTH_FRAGMENT\n"
+        )
+        for arguments, expected in (
+            (["repo", "pull"], ["git", "pull"]),
+            (["repo", "push"], ["git", "push"]),
+        ):
+            with self.subTest(arguments=arguments):
+                success, run = self.invoke(*arguments, stdout="Already up to date.\n", stderr=diagnostic)
+                self.assertEqual(success.exit_code, 0, success.stderr)
+                self.assertEqual(run.call_args.args[0], expected)
+                self.assertEqual(success.stdout, "Already up to date.\n")
+                for shown in (
+                    "From https://***@git.example.com/org/repo\n",
+                    "redirecting to 'https://git.example.com/org/repo?access_token=***' "
+                    "from 'https://git.example.com/org/repo#***'",
+                    "To https://git.example.com/org/repo.git?access_token=***#***",
+                    "✓",
+                ):
+                    self.assertIn(shown, success.stderr)
+                with mock.patch(
+                    "subprocess.run", return_value=subprocess.CompletedProcess([], 1, "", diagnostic)
+                ):
+                    failed = self.runner.invoke(self.cli, ["git", *arguments])
+                self.assertEqual(failed.exit_code, 1, failed.stderr)
+                self.assertEqual(failed.stdout, "")
+                self.assertNotIn("✓", failed.stderr)
+                outputs += [success, failed]
+        for output in outputs:
+            for secret in secrets:
+                self.assertNotIn(secret, output.stdout)
+                self.assertNotIn(secret, output.stderr)
+                self.assertNotIn(secret, str(output.exception or ""))
+
+    @unittest.skipUnless(shutil.which("git"), "git is not installed")
+    def test_real_git_failure_hides_url_secrets(self):
+        # Real Git with a temporary HOME, no system or global configuration, no
+        # credential prompt or proxy; port 9 on the loopback interface refuses.
+        home = self.namespace.parents[3] / "home"
+        home.mkdir()
+        environment = {
+            "HOME": str(home), "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "", "SSH_ASKPASS": "", "NO_PROXY": "*", "no_proxy": "*",
+        }
+        proxies = [name for name in os.environ if name.lower() in ("http_proxy", "https_proxy", "all_proxy")]
+        for target, url in (
+            ("spaced", "http://127.0.0.1:9/org/repo.git?access_token=prefix SYNTH_QUERY#SYNTH_FRAGMENT"),
+            ("refused", "http://SYNTH_USER:SYNTH_PASS@127.0.0.1:9/org/repo.git?access_token=SYNTH_QUERY#SYNTH_FRAGMENT"),
+        ):
+            with self.subTest(target=target), mock.patch.dict(os.environ, environment):
+                for name in proxies:
+                    os.environ.pop(name)
+                result = self.runner.invoke(self.cli, ["git", url, "clone", "-t", target])
+                self.assertEqual(result.exit_code, 1, result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertNotIn("✓", result.stderr)
+                self.assertIn("git failed:", result.stderr)
+                self.assertIn("127.0.0.1", result.stderr)
+                self.assertIn("access_token=***", result.stderr)
+                self.assertNotIn("SYNTH_", result.stdout + result.stderr + str(result.exception or ""))
+
+    REMOTE = "http://127.0.0.1:9/org/repo.git?access_token=prefix' SYNTH_QUERY#SYNTH_FRAGMENT"
+    PUSH_REMOTE = "https://SYNTH_USER:SYNTH_PASS@127.0.0.1:9/org/push.git#SYNTH_PUSHFRAG"
+
+    def fake_git(self, returncode, stderr):
+        """Answer `git remote -v` with the remotes, and any other Git command with stderr."""
+        listed = f"origin\t{self.REMOTE} (fetch)\norigin\t{self.PUSH_REMOTE} (push)\n"
+
+        def run(args, **kwargs):
+            if args[:3] == ["git", "remote", "-v"]:
+                return subprocess.CompletedProcess(args, 0, listed, "")
+            return subprocess.CompletedProcess(args, returncode, "Already up to date.\n" if not returncode else "", stderr)
+
+        return mock.patch("subprocess.run", side_effect=run)
+
+    def test_remote_url_secrets_not_in_the_arguments_stay_hidden(self):
+        # Git prints the URL of the remote it uses, changed: without the user name,
+        # with a slash appended, and next to another URL on the line.
+        diagnostic = (
+            "fatal: unable to access 'http://127.0.0.1:9/org/repo.git?access_token=prefix' "
+            "SYNTH_QUERY#SYNTH_FRAGMENT/': Failed to connect to 127.0.0.1 port 9 after 0 ms: Couldn't connect to server\n"
+            "warning: redirecting to https://127.0.0.1:9/org/push.git/#SYNTH_PUSHFRAG\n"
+            "To 'https://SYNTH_USER:SYNTH_PASS@127.0.0.1:9/org/push.git#SYNTH_PUSHFRAG', "
+            "'http://127.0.0.1:9/org/repo.git?access_token=prefix' SYNTH_QUERY#SYNTH_FRAGMENT'\n"
+            "hint: token SYNTH_QUERY was rejected\n"
+        )
+        for arguments, expected in (
+            (["repo", "pull"], ["git", "pull"]),
+            (["repo", "pull", "-r"], ["git", "pull", "--rebase"]),
+            (["repo", "push"], ["git", "push"]),
+        ):
+            for returncode in (0, 1):
+                with self.subTest(arguments=arguments, returncode=returncode), self.fake_git(returncode, diagnostic) as run:
+                    result = self.runner.invoke(self.cli, ["git", *arguments])
+                    commands = [call.args[0] for call in run.call_args_list]
+                    self.assertEqual(commands, [["git", "remote", "-v"], expected])
+                    self.assertEqual(run.call_args_list[-1].kwargs["cwd"], str(self.repo))
+                    output = result.stdout + result.stderr + str(result.exception or "")
+                    self.assertNotIn("SYNTH_", output)
+                    self.assertIn(
+                        "'http://127.0.0.1:9/org/repo.git?access_token=***#***': Failed to connect to 127.0.0.1 port 9",
+                        result.stderr,
+                    )
+                    self.assertIn("https://127.0.0.1:9/org/push.git/#***", result.stderr)
+                    self.assertIn(
+                        "To 'https://***@127.0.0.1:9/org/push.git#***', 'http://127.0.0.1:9/org/repo.git?access_token=***#***'",
+                        result.stderr,
+                    )
+                    self.assertIn("hint: token *** was rejected", result.stderr)
+                    if returncode:
+                        self.assertEqual(result.exit_code, 1, result.stderr)
+                        self.assertIsInstance(result.exception, SystemExit)
+                        self.assertEqual(result.stdout, "")
+                        self.assertIn("git failed:", result.stderr)
+                        self.assertNotIn("✓", result.stderr)
+                    else:
+                        self.assertEqual(result.exit_code, 0, result.stderr)
+                        self.assertEqual(result.stdout, "Already up to date.\n")
+                        self.assertIn("✓", result.stderr)
+
+    @unittest.skipUnless(shutil.which("git"), "git is not installed")
+    def test_real_git_pull_and_push_hide_remote_url_secrets(self):
+        # Real Git with a temporary HOME, no system or global configuration, no
+        # credential prompt or proxy; port 9 on the loopback interface refuses.
+        home = self.namespace.parents[3] / "home"
+        home.mkdir()
+        environment = {
+            "HOME": str(home), "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "", "SSH_ASKPASS": "", "NO_PROXY": "*", "no_proxy": "*",
+        }
+        proxies = [name for name in os.environ if name.lower() in ("http_proxy", "https_proxy", "all_proxy")]
+        shutil.rmtree(self.repo)
+        for remote in (
+            self.REMOTE,
+            "http://SYNTH_USER:SYNTH_PASS@127.0.0.1:9/org/repo.git?access_token=SYNTH_QUERY#SYNTH_FRAGMENT",
+        ):
+            with mock.patch.dict(os.environ, environment):
+                for name in proxies:
+                    os.environ.pop(name)
+                for args in (
+                    ["init", "-q", "--initial-branch=trunk", str(self.repo)],
+                    ["-C", str(self.repo), "-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "x"],
+                    ["-C", str(self.repo), "remote", "add", "origin", remote],
+                    ["-C", str(self.repo), "config", "branch.trunk.remote", "origin"],
+                    ["-C", str(self.repo), "config", "branch.trunk.merge", "refs/heads/trunk"],
+                ):
+                    subprocess.run(["git", *args], check=True, capture_output=True)
+                for command in ("pull", "push"):
+                    with self.subTest(remote=remote, command=command):
+                        result = self.runner.invoke(self.cli, ["git", "repo", command])
+                        self.assertEqual(result.exit_code, 1, result.stderr)
+                        self.assertEqual(result.stdout, "")
+                        self.assertNotIn("✓", result.stderr)
+                        self.assertIn("git failed: fatal: unable to access 'http://127.0.0.1:9/org/repo.git", result.stderr)
+                        self.assertIn("access_token=***#***", result.stderr)
+                        self.assertNotIn("SYNTH_", result.stdout + result.stderr + str(result.exception or ""))
+                # Git keeps the original URL.
+                configured = subprocess.run(
+                    ["git", "-C", str(self.repo), "remote", "get-url", "origin"], capture_output=True, text=True, check=True
+                )
+                self.assertEqual(configured.stdout.rstrip("\n"), remote)
+            shutil.rmtree(self.repo)
 
     def test_mirror_runs_only_after_approval_or_yes(self):
         target = "git@gitlab.com:org/group/repo.git"
