@@ -15,7 +15,10 @@ class FileSyncIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # The CLI reports paths from os.getcwd(), which is the physical path. On
+        # macOS the temporary directory is under /var, a symlink to /private/var,
+        # so derive every path and expectation from the resolved root.
+        self.root = Path(self.temp.name).resolve()
         self.project = self.root / "workspace" / "github.com" / "org" / "project"
         self.cwd = self.project / "src"
         self.cwd.mkdir(parents=True)
